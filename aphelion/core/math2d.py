@@ -88,6 +88,55 @@ def bisect(f: Callable[[float], float], lo: float, hi: float,
     return 0.5 * (lo + hi)
 
 
+def brent(f: Callable[[float], float], a: float, b: float,
+          tol: float, max_iter: int = 100) -> float:
+    """Brent's method on a bracketing interval [a, b]; f(a), f(b) must differ
+    in sign. Used by the SOI crossing predictor (13 §3.8: refine to ±1 s)."""
+    fa, fb = f(a), f(b)
+    if fa == 0.0:
+        return a
+    if fb == 0.0:
+        return b
+    if (fa < 0.0) == (fb < 0.0):
+        raise ValueError("brent: root not bracketed")
+    if abs(fa) < abs(fb):
+        a, b, fa, fb = b, a, fb, fa
+    c, fc = a, fa
+    d = e = b - a
+    for _ in range(max_iter):
+        if (fb < 0.0) == (fc < 0.0):
+            c, fc = a, fa
+            d = e = b - a
+        if abs(fc) < abs(fb):
+            a, b, c = b, c, b
+            fa, fb, fc = fb, fc, fb
+        tol1 = 2.0 * 1e-16 * abs(b) + 0.5 * tol
+        xm = 0.5 * (c - b)
+        if abs(xm) <= tol1 or fb == 0.0:
+            return b
+        if abs(e) >= tol1 and abs(fa) > abs(fb):
+            s = fb / fa
+            if a == c:
+                p, q = 2.0 * xm * s, 1.0 - s
+            else:
+                q, r = fa / fc, fb / fc
+                p = s * (2.0 * xm * q * (q - r) - (b - a) * (r - 1.0))
+                q = (q - 1.0) * (r - 1.0) * (s - 1.0)
+            if p > 0.0:
+                q = -q
+            p = abs(p)
+            if 2.0 * p < min(3.0 * xm * q - abs(tol1 * q), abs(e * q)):
+                e, d = d, p / q
+            else:
+                d = e = xm
+        else:
+            d = e = xm
+        a, fa = b, fb
+        b += d if abs(d) > tol1 else math.copysign(tol1, xm)
+        fb = f(b)
+    return b
+
+
 def rk4_step(f: Callable[[float, np.ndarray], np.ndarray],
              t: float, y: np.ndarray, dt: float) -> np.ndarray:
     k1 = f(t, y)
