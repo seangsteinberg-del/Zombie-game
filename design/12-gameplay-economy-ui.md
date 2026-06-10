@@ -400,6 +400,24 @@ Delivered-to-orbit price = buy + E-2 lift (destination-scaled). Propellant catal
 
 ## 5. Player Interaction & UI
 
+### 5.0 UI ancestry map (binding)
+
+**Rule: where a popular 2D sim has already taught millions of players an idiom, we copy it; inventing a novel interaction requires written justification in this section.** Every borrowed idiom is a tutorial we don't have to write. Per-surface ancestry:
+
+| Surface | Ancestor | What we copy verbatim |
+|---|---|---|
+| Pilot HUD (S-01) | **KSP flight scene** | navball orientation instrument; vertical staging stack with per-stage Δv; resource gauges; `M` to map. A KSP player must feel at home in <60 s |
+| Planner map (S-02…05) | **KSP map view** | focusable conics, draggable maneuver-node gizmo with prograde/radial handles, closest-approach markers; plus **Factorio map overlays** (toggleable data layers) |
+| Engineer/builder (S-06/07) | **KSP VAB/SPH + Factorio blueprints** | part palette left, stats readout (Δv/TWR per stage) docked right; symmetry/snap toggles; blueprint copy-paste-mirror of assemblies, blueprint library |
+| Base mode (S-08…12) | **Oxygen Not Included** | the overlay stack (power/thermal/fluids/radiation as full-screen tinted lenses), pause-and-plan construction ghosts, per-task priority digits 1–9; plus **Factorio machine tooltips** (live in/out rates on hover) and production/consumption graphs |
+| Time controls | **RimWorld** | pause/1×/3×/warp cluster, bottom-right; space = pause; interrupts drop warp exactly like RimWorld events do |
+| Alert strip | **RimWorld + Factorio** | stacking right-edge alert chips, color-coded by severity, click-to-jump-to-cause; Factorio-style distinct audio cue per alert class (15) |
+| Program HQ ledgers (S-13) | **Factorio production stats** | time-bucketed production/consumption graphs per resource with drill-down |
+| Chronicle | **Dwarf Fortress legends mode** | the generated-history browser as a first-class screen |
+| Art language | **Mindustry / Shapez** | committed vector-schematic aesthetic as a deliberate style (90-14 owns rendering) |
+
+Divergences (justified): the Altimeter Rule (5.1) overrides ancestor layouts where survival-critical numbers compete for size; KSP's right-click part menus are replaced by the context panel (5.1) because pygame has no nested popup tradition worth copying.
+
 ### 5.1 Global layout grammar
 
 Every mode shares: (top) **status bar** — date/warp widget, cash or mass-ledger headline, Prestige, Next-Events rail; (right) **context panel** — properties of current selection; (bottom) **alert strip** — active toasts + Master Alarm; (left) mode-specific palette. One window, no modal stacking deeper than 2. UI render budget ≤ 4 ms/frame at 1080p (13 contract); all chrome is vector-drawn, numerals monospace.
