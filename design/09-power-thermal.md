@@ -182,19 +182,20 @@ with absorptance α = 0.90, panel emissivity ε_p = 0.85. At 1 AU: T_p ≈ 303 K
 
 Floor at 0.55; panels are replaceable (MachineParts + Silicon per 05 recipes).
 
-**Mars dust (P-8):** dust factor `f_dust` on surface panels only:
+**Mars dust soiling (P-8):** deposition factor `f_dust` on surface panels only (this is `03-solar-system.md` S-9's "panel soiling" multiplier — rates owned by S-9, applied here; distinct from the atmospheric `f_atm` of P-9):
 ```
-f_dust(t+1sol) = f_dust − 0.002·k_storm ;  k_storm = 1 nominal, 2.5 regional storm, 5 global storm
+f_dust(t+1sol) = f_dust − 0.002·k_storm ;  k_storm = 1 clear sky, 10 in a storm-flagged sector
+                                            (S-9 canon: −0.2%/sol clear, −2%/sol storm)
 ```
-`f_dust` initializes at **1.0** on deployment (and on wiper service) and clamps to **[0, 1]**. Natural cleaning events: per sol, probability 1/120 of a wind event restoring `f_dust → max(f_dust, 0.85)` (Spirit/Opportunity behavior). Parts mitigation: **Electrodynamic Dust Shield** add-on (T1, NASA KSC EDS anchor, flown on lunar landers): holds `f_dust ≥ 0.95` for 0.1 kWe per 100 m²; rover wiper service (a `10-vehicles.md` task) restores 1.0.
+`f_dust` initializes at **1.0** on deployment (and on wiper service) and clamps to **[0, 1]**. Natural cleaning events: per sol, probability 0.005 of a wind event (S-9) restoring `f_dust → max(f_dust, 0.85)` (Spirit/Opportunity behavior). Parts mitigation: **Electrodynamic Dust Shield** add-on (T2, NASA KSC EDS anchor, flown on the 2025 Blue Ghost lunar lander; tier matched to 11's PW-06 node and 07): holds `f_dust ≥ 0.95` for 0.1 kWe per 100 m²; rover wiper service (a `10-vehicles.md` task) restores 1.0.
 
-**Atmospheric attenuation (P-9):** `f_atm` = 1 in vacuum. Mars: `f_atm = exp(−0.35·τ)`; τ = 0.5 nominal (f≈0.84), 2–5 regional storm, 5–10 global storm (τ = 10 → f ≈ 0.03; Opportunity's end). Venus and Titan: special rules in §3.8.
+**Atmospheric attenuation (P-9):** `f_atm` = 1 in vacuum. Mars: `f_atm := f_dust(τ) = max(0.04, exp(−0.45·τ))` — `03-solar-system.md` S-9's canonical direct+diffuse panel fit (Appelbaum & Flood / Opportunity 2018), defined once in 03 and counted exactly once here (note the naming map: 03's "f_dust(τ)" is this *atmospheric* factor; 09's P-8 soiling multiplier is 03's separate "panel soiling" term). τ per sector from S-9: 0.3–0.5 seasonal baseline (f ≈ 0.87–0.80), 2.0–4.0 regional storm (f ≈ 0.41–0.165), 4–9 global storm (f ≈ 0.165 down to the 0.04 floor; the real 2018 storm hit τ ≈ 10.8 — Opportunity's end). Venus and Titan: special rules in §3.8.
 
 **Eclipse & night (P-10).** In our 2D planar world every orbit crosses the body's shadow once per revolution. Circular orbit of radius `r` about body of radius `R`:
 ```
 eclipse fraction  f_ecl = asin(R/r) / π
 ```
-LEO 400 km: f = 0.39 → 36 min of a 92.6 min orbit (matches reality). Elliptical orbits get exact entry/exit anomalies from the shadow-cylinder intersection (computed in `01-orbital-mechanics.md` geometry, scheduled as events). Surface night durations (solar day / 2): Moon **354.4 h**; Mars 12.33 h (sol = 24.66 h); Ceres 4.5 h; Mercury **2,112 h** (88 days — give up); Venus aerostat ~50 h (§3.8); Titan ~191 h (moot — no usable sun).
+LEO 400 km: f = 0.39 → 36 min of a 92.6 min orbit (matches reality). Elliptical orbits get exact entry/exit anomalies from the shadow-cylinder intersection (computed in `01-orbital-mechanics.md` geometry, scheduled as events). Surface night durations (solar day / 2): Moon **354.4 h**; Mars 12.33 h (sol = 24.66 h); Ceres 4.5 h; Mercury **2,112 h** (88 days — give up); Venus aerostat ≈72 h (super-rotation cycle, §3.8); Titan ~191 h (moot — no usable sun).
 
 **Solar concentrators for process heat (P-11):** mirror of area A delivers `0.85·S(d)·A` W (S in W/m², A in m²; ÷1000 for kWt) directly to a thermally-coupled process (no electric conversion), at up to 1,100 K (re-radiation limited at concentration ratio ~200). This is how the Sublimation Tent Miner's 80 kWt (04, RX catalog) is cheaply fed on the Moon: one 100 m² mirror at 1 AU = 116 kWt.
 
@@ -226,9 +227,9 @@ Kilopower-class (≤50 kWt) cores shed decay heat passively — no action needed
 
 **Shadow shielding (P-15).** Reactors irradiate a cone. The **dose-rate source term** is a power-system property and is emitted by this file: outside the shielded half-angle (default 15°),
 ```
-D(r) = 1,000 · P_t / r²      [mSv/h]   (P_t in kWt, r in m)
+D(r) = 17,000 · P_t / r²      [mSv/h]   (P_t in kWt, r in m)
 ```
-calibrated so an unshielded 100 kWt core gives ≈10 mSv/h at 100 m — a game-tuned order-of-magnitude figure, not a transport calculation. Inside the shielded cone the field is attenuated ×10⁻⁴. `08-life-support-crew.md` integrates this field against its crew dose model and limits; electronics additionally take an MTBF penalty ×0.2 within 50 m unshielded line-of-sight of a ≥100 kWt core. Shield mass rule:
+calibrated to `02-propulsion.md` §3.10's canonical unshielded-core anchor — 1×10⁴ Sv/h at 25 m for a 367 MWt core at full power (check: 17,000 × 367,000 / 25² ≈ 1.0×10⁷ mSv/h) — so an operating unshielded fission core produces the *same* field whether it drives a thruster (02) or a grid (09). An unshielded 100 kWt surface core gives ≈170 mSv/h at 100 m. This is 02's ~3%-prompt-n/γ-leakage derivation inherited as-is, not an independent transport calculation; per 02's rule, any gameplay softening must be bought as shield mass, never by editing the unshielded constant. Inside the shielded cone the field is attenuated ×10⁻⁴. `08-life-support-crew.md` integrates this field against its crew dose model and limits; electronics additionally take an MTBF penalty ×0.2 within 50 m unshielded line-of-sight of a ≥100 kWt core. Shield mass rule:
 ```
 m_shield = m_ref · (P_t / P_t,ref)^0.6 · k_class
   instrument-rated (25 m separation): m_ref = 150 kg at P_t,ref = 4.3 kWt   (Kilopower-1 anchor)
@@ -274,11 +275,11 @@ Energy required: 10 × 354.4 = **3,544 kWh**.
 
 This trade *is* Act 2's tech ladder: players land batteries, build RFC infrastructure from ISRU water, and research fission to escape the night entirely (§6).
 
-**Mars cross-check (canon with 04 §"Worked sizing example"):** 59 kWe continuous for the 100 t/500-day methalox plant via solar: continuous-equivalent surface solar yield ≈ 586 W/m² × η 0.30 × 0.5 day-fraction × ⟨cos⟩ 0.64 × f_atm 0.84 × f_dust 0.9 ≈ **42 We/m² continuous** → 1,400 m² of panel, ~0.4 ha of land at 50% packing with storm margin — matching 04's "~0.4 ha" — plus a 726 kWh (6.5 t Li-ion) night bank, *and the whole farm dies for months in a global storm*. The one-line alternative: a single 100 kWe fission unit (PW-FSP, 9 t). This is the intended Act-3 lesson.
+**Mars cross-check (canon with 04 §"Worked sizing example"):** 59 kWe continuous for the 100 t/500-day methalox plant via solar: continuous-equivalent surface solar yield ≈ 586 W/m² × η 0.30 × 0.5 day-fraction × ⟨cos⟩ 0.64 × f_atm 0.80 (τ 0.5 per P-9/03 S-9) × f_dust 0.9 ≈ **40 We/m² continuous** → ~1,460 m² of panel, ~0.4 ha of land at 50% packing with storm margin — matching 04's "~0.4 ha" — plus a 726 kWh (6.5 t Li-ion) night bank, *and the whole farm dies for months in a global storm*. The one-line alternative: a single 100 kWe fission unit (PW-FSP, 9 t). This is the intended Act-3 lesson.
 
 ### 3.5 THE RADIATOR DOCTRINE — the thermal network
 
-**Every watt is accounted (H-0, conservation rule):** electrical energy consumed by a device becomes, each tick: (a) chemical/potential energy in products (e.g., electrolysis stores 39.4/50 = 79% in bonds; ledgered per 04 recipe), (b) transmitted energy leaving the system (laser links, radio, thrust beam — EP plumes carry away **~70–75% of P_in for gridded ion strings (T1+)** and **~55–65% for Hall thrusters**, anchored on flown total efficiencies — NSTAR ~61%, NEXT ~71%, Hall ~55–60% — plus 5–8% PPU loss; the 25–45% balance splits between thruster-body heat, which radiates at high temperature, and PPU heat at low temperature, the real radiator driver; fractions canon-shared with 02), or (c) **heat in the device's thermal node — the default 100%**. Factories: `heat_fraction` 0.95 per `05-industry-logistics.md` canon. Crew add 100 Wt each (08). There is no fourth option.
+**Every watt is accounted (H-0, conservation rule):** electrical energy consumed by a device becomes, each tick: (a) chemical/potential energy in products (e.g., electrolysis stores 39.4/50 = 79% in bonds; ledgered per 04 recipe), (b) transmitted energy leaving the system (laser links, radio, thrust beam — EP jet power is `η_total·P_in`, anchored on flown total efficiencies: NSTAR ~61%, NEXT ~71%, Hall ~55–60%; of the non-jet balance, only the fraction deposited in the PPU and thruster body is a ship radiator load — **10% of P_in for gridded ion and Hall strings, 15% for VASIMR, 30% for MPD** (anode-fall losses land in the thruster body), per `02-propulsion.md` §3.9, which owns these fractions — the rest of the non-jet power leaves in the plume as divergence/ionization losses; PPU heat rejects at low temperature, the real radiator driver, thruster-body heat at high temperature), or (c) **heat in the device's thermal node — the default 100%**. Factories: `heat_fraction` 0.95 per `05-industry-logistics.md` canon. Crew add 100 Wt each (08). There is no fourth option.
 
 **Radiation (H-1):** a radiator surface rejects
 ```
@@ -356,7 +357,7 @@ dt_sub ≤ 0.25 · C_i / (Σ_j G_ij + h A_c + 4 ε σ A_r N_s T_i³)     for the
 
 ### 3.6 Heat as a resource
 
-Process-heat consumers in 04 (ovens at 900–1300 K, Sabatier exotherm at 600 K, habitat warmth) may take heat directly from: solar concentrators (P-11), reactor coolant taps (up to 30% of `Q_rej` at `T_rej`), RTG `Q_t`, fuel-cell discharge heat, or thermal stores — saving electric heating watt-for-watt when temperature class suffices (heat at T can serve any process needing ≤ T − 50 K). The Sabatier reaction's gross exotherm is **2.86 kWh_t per kg CH4** (ΔH = −165 kJ/mol CH4, CO2 + 4H2 → CH4 + 2H2O(g)); net of non-recuperated feed-gas preheat to ~600 K (~0.8 kWh_t/kg debit) the plant dumps **~1.8–2.0 kWh_t per kg CH4** into the thermal network — a *load* like any other. (The gross-vs-net distinction is flagged to `04-resources-isru.md`, which owns the recipe; that file's "1.8" figure is the net value.)
+Process-heat consumers in 04 (ovens at 900–1300 K, Sabatier exotherm at 600 K, habitat warmth) may take heat directly from: solar concentrators (P-11), reactor coolant taps (up to 30% of `Q_rej` at `T_rej`), RTG `Q_t`, fuel-cell discharge heat, or thermal stores — saving electric heating watt-for-watt when temperature class suffices (heat at T can serve any process needing ≤ T − 50 K). The Sabatier reaction's gross exotherm is **2.86 kWh_t per kg CH4** (ΔH = −165 kJ/mol CH4, CO2 + 4H2 → CH4 + 2H2O(g)); net of non-recuperated feed-gas preheat to ~600 K (~0.8 kWh_t/kg debit) the plant dumps **~1.8–2.0 kWh_t per kg CH4** into the thermal network — a *load* like any other. (`04-resources-isru.md` owns the recipe and publishes both figures in RX-03: gross exotherm 2.86 kWh_t/kg and **canonical net P_t = −1.8 kWh_t/kg CH4** — the H-0 ledger consumes the net value, never the gross.)
 
 ### 3.7 Beamed & relayed power
 
@@ -367,9 +368,9 @@ Process-heat consumers in 04 (ovens at 900–1300 K, Sabatier exotherm at 600 K,
 
 **Mercury.** S = 6.2–14.4 kW/m²; energy is free, survival is thermal. Standard panels auto-tilt per P-5's `S_abs ≤ 5,240 W/m²` condition (≈55° at mean distance, ≈69° at perihelion); OSR panels (T1) run flat. Dayside radiators see T_sink 590 K → industry runs on heat-pump lifts or at night (88 Earth days each). The intended colony pattern: **polar/PSR-rim sites** — perpetual low-angle sun on vertical panels, 40 K crater sinks next door (radiator paradise), water ice in the PSRs (04). Equatorial bases are a self-imposed hard mode.
 
-**Venus aerostat (52–56 km, HAVOC band).** T_atm 290–340 K, 50–100 kPa — Earthlike thermal engineering, convection available. Solar: above/within the upper cloud deck, game model `S_eff = 2,604 · k_alt` with k_alt = 0.7 at 56 km, 0.4 at 52 km (haze) [game values bracketing Landis/HAVOC analyses], **plus** up-facing flux on *down-facing* panels = `0.35 · S_eff` (cloud albedo bounce; Venus Bond albedo 0.75). Superrotating winds circumnavigate in ~4.4 days → day/night ≈ 50 h/50 h regardless of the 117-day solar day; batteries size to 50 h, not 1,400 h. Acid film: f_dust analog 0.1%/h on exposed panels, washed by station-keeping pitch maneuver (free, 1/day).
+**Venus aerostat (48–62 km cloud bands; V-HAVOC design band 50–52 km).** T_atm ≈ 263–366 K, ~17–135 kPa across the bands — Earthlike thermal engineering, convection available. Solar: per-band attenuation from `03-solar-system.md` §4.4.2's canonical f_atm column — **V-Cloud-Low (48–50 km) 0.30, V-HAVOC (50–52 km) 0.45, V-Temperate (52–56 km) 0.55, V-Cloud-Top (56–62 km) 0.70** — entering P-4 as `f_atm` against S = 2,604 W/m² top-of-atmosphere; **two-sided arrays add the canonical +0.15 below-cloud albedo bonus** (S-6a; the cloud deck below bounces flux onto down-facing cells — Venus Bond albedo 0.75 — so a two-sided array flies at `f_atm + 0.15`, e.g. 0.60 effective in V-HAVOC). Super-rotation (S-5b canon: w = 66 m/s, Vega balloon anchor) circumnavigates in ≈6 Earth days → day/night ≈ **3 days light / 3 days dark (≈72 h / 72 h)** regardless of the 116.8-day solar day; batteries/RFC size to ≈72 h of night, not ~1,400 h. Acid film: f_dust analog 0.1%/h on exposed panels, washed by station-keeping pitch maneuver (free, 1/day).
 
-**Mars.** Quirks already in P-8/P-9; plus: convection h 0.5–1.5 helps electronics but frosts radiators at night (no penalty modeled beyond T_sink). Battery heaters are a P0 load 16:00–10:00 local. **Storm generator (P-9a — owned by this file; 03 provides the dust-season calendar):** *regional* storms arrive Poisson with mean rate 2 per Mars year (any season); each lasts 5–30 sols (uniform) with τ drawn uniform 2–5 over the affected region. A *global* storm is rolled once per Mars year, during the southern-summer dust season window (Ls 180°–330°, from `03-solar-system.md`'s calendar), with probability 1/3; duration 30–90 sols with τ ramping piecewise-linearly 5 → 10 → 5 over the duration. Storms are pre-scheduled events at roll time — onset, peak, and clearing are warp-interrupting events per the §3.1/13 contract. Global storm = the campaign's signature power crisis: τ 5–10 for 30–90 sols, f_atm 0.03–0.17. Doctrine: fission baseload + solar surge.
+**Mars.** Quirks already in P-8/P-9; plus: convection h 0.5–1.5 helps electronics but frosts radiators at night (no penalty modeled beyond T_sink). Battery heaters are a P0 load 16:00–10:00 local. **Storm input (P-9a — a consumption rule, not a generator):** `03-solar-system.md` S-9 is the **single owner** of the Mars dust-storm generator and dust-season state machine; 09 consumes S-9's per-sector optical depth `τ(t)` and feeds it to P-9. For the reader's convenience, S-9's canonical parameters (any change happens in 03, never here): baseline τ 0.3 (Ls 0°–180°) / 0.5 (Ls 180°–360°); *regional* storms — within Ls 180°–330°, each sector rolls p = 0.004/sol to spawn, τ → 2.0–4.0 over 2 sols, duration U(5, 40) sols, spreading to adjacent sectors at p = 0.15/sol; *global* storm — rolled once per Mars year at Ls = 200°±30° with p = 0.33 (≈1 per 3 Mars years; 2001/2007/2018 anchor), all sectors τ → U(4, 9) over 10 sols, duration U(60, 100) sols, e-fold decay 25 sols. Storms are pre-scheduled events at roll time — onset, peak, and clearing are warp-interrupting events per the §3.1/13 contract. Global storm = the campaign's signature power crisis: τ 4–9 for 60–100 sols, f_atm 0.165 down to the 0.04 floor (P-9; solar never quite dies — diffuse skylight holds the floor — but solar-only bases do). Doctrine: fission baseload + solar surge.
 
 **Moon.** The 354 h night (§3.4 worked problem); lunar-noon sink trap (H-2); PSR mining powered by rim solar + GRD-HELIO or buried Kilopower; thermal wadis keep night rovers alive (§4.4).
 
@@ -390,13 +391,13 @@ All masses are launch-qualified hardware; ISRU-manufactured equivalents may be 2
 | ID | Name | Tier | Mass | Area | η_cell | P_e BOL @1 AU | W/kg @1 AU | Notes / anchor |
 |---|---|---|---|---|---|---|---|---|
 | SOL-RW (=PW-SA-R) | Rigid solar wing | T0 | 0.16 t | 12.5 m² | 0.295 | 5.0 kWe | 31 | ISS legacy class; 0.8 kWe stowed-safe |
-| SOL-RO (=PW-SA-RO) | Roll-out array | T0 | 0.25 t | 46 m² | 0.32 | 20 kWe | 80 | ROSA/iROSA; needs 0.02 kWe deploy motor |
+| SOL-RO (=PW-SA-RO) | Roll-out array | T1 | 0.25 t | 46 m² | 0.32 | 20 kWe | 80 | ROSA/iROSA; needs 0.02 kWe deploy motor; T1 per 11's PW-01 node (and η 0.32 is the T1 cell tier, §3.2) |
 | SOL-OSR | Mercury-rated wing | T1 | 0.20 t | 12.5 m² | 0.295 (on the 1/3 active-cell area) | 1.7 kWe | 8.5 | 2/3 OSR mirror area (only 1/3 cells), 575 K limit; the payoff: runs sun-normal at Mercury — ~11 kWe at mean distance before the P-6 temperature derate; MESSENGER |
 | SOL-BLK | Thin-film blanket | T2 | 0.10 t | 59 m² | 0.25 | 20 kWe | 200 | studied 200–300 W/kg class; fragile (½ MMOD tolerance) |
-| SOL-FARM | Surface farm unit, tracking | T1 | 1.2 t | 100 m² | 0.30 | 40.8 kWe noon @1 AU (≈16 kWe @Mars mean-distance noon: τ 0.5 → f_atm 0.84, f_temp 1.11, ex-dust — reproducible from P-4) | — | 12 kg/m² ground mount incl. tracker (0.1 kWe) |
+| SOL-FARM | Surface farm unit, tracking | T1 | 1.2 t | 100 m² | 0.30 | 40.8 kWe noon @1 AU (≈15.6 kWe @Mars mean-distance noon: τ 0.5 → f_atm 0.80 per P-9/03 S-9, f_temp 1.11, ex-dust — reproducible from P-4) | — | 12 kg/m² ground mount incl. tracker (0.1 kWe) |
 | SOL-FARM-F | Surface farm unit, fixed | T0 | 0.8 t | 100 m² | 0.30 | ⟨cos⟩=0.637 applies | — | the cheap hectare-filler |
 | SOL-CONC | Concentrator mirror | T1 | 0.15 t | 100 m² | — | **116 kWt** @1 AU (heat only) | — | P-11; feeds 04 thermal recipes, ≤1,100 K |
-| SOL-EDS | Electrodynamic dust shield add-on | T1 | +2 kg/100 m² | — | — | holds f_dust ≥ 0.95 @ 0.1 kWe/100 m² | — | NASA KSC EDS, flown |
+| SOL-EDS | Electrodynamic dust shield add-on | T2 | +2 kg/100 m² | — | — | holds f_dust ≥ 0.95 @ 0.1 kWe/100 m² | — | NASA KSC EDS, flown (Blue Ghost 2025); T2 per 11's PW-06 node and 07's EDS surfaces |
 
 Output everywhere = P-4 with the body's live `S(d)` and environment factors. Efficiency tier upgrades (T1 0.32, T2 0.36 cells) are research-gated retrofits (Silicon + Electronics per 05).
 
@@ -413,7 +414,7 @@ Output everywhere = P-4 with the body's live `S(d)` and environment factors. Eff
 
 | ID | Name | Tier | Mass (incl. shield+radiators as noted) | P_e | η_cv | Q_rej @ T_rej | Core (resource) | Life | Anchor |
 |---|---|---|---|---|---|---|---|---|---|
-| NUK-KP1 (=PW-KP1) | Kilopower-1 | T1 | 0.40 t (instr. shield, radiator incl.) | 1 kWe | 0.23 | 3.3 kWt @ 400 K | 30 kg Uranium | 12 FPY | Kilopower/KRUSTY (tested 2018) |
+| NUK-KP1 (=PW-KP1) | Kilopower-1 | T2 | 0.40 t (instr. shield, radiator incl.) | 1 kWe | 0.23 | 3.3 kWt @ 400 K | 30 kg Uranium | 12 FPY | Kilopower/KRUSTY (ground-tested 2018, never flown → T2 per tier doctrine; unlocked by 11's PW-04 node) |
 | NUK-KP10 (=PW-KP10) | Kilopower-10 | T2 | 1.5 t (instr. shield, 25 m² radiator incl.) | 10 kWe | 0.23 | 33 kWt @ 400 K | 45 kg Uranium | 12 FPY | Kilopower 10 kWe design (Gibson/Mason) |
 | NUK-FSP (=PW-FSP) | Surface fission unit | T2 | 9.0 t (crew shield + radiators incl.; −1.5 t if Regolith-buried instead) | 100 kWe | 0.30 | 233 kWt @ 450 K | 200 kg Uranium | 10 FPY | NASA/DOE FSP 40 kWe ref, scaled ~90 kg/kWe (conservative vs SP-100's 46) |
 | NUK-MSR | Thorium molten-salt plant | T3 | 28 t (surface only, building per 07) | 500 kWe | 0.35 | 0.93 MWt @ 500 K | Thorium feed 0.70 kg/MWt-FPY (≈1.0 kg/yr at full power; P-16) | online refuel | MSRE (ran 1965–69) + ORNL Th-cycle studies |
@@ -496,9 +497,9 @@ All reactors obey P-13–P-15 (load-following, decay heat, shields/burial).
 
 | Tier | Act | Power/thermal unlocks (research tree details in `11-research-tech.md`) |
 |---|---|---|
-| T0 | Act 1 (Earth+LEO) | SOL-RW, SOL-RO, SOL-FARM-F, STO-LI, PW-FC, NUK-RTG-M/G (Pu238 purchase-limited per 12), RAD-BM, TH-RAD, GRD-SB-S, GRD-CAB-LV, GRD-SHUNT. Lessons: eclipse cycling (P-10), the first Sankey, EP power-limited thrust. |
-| T1 | Act 1–2 (Moon) | NUK-KP1, NUK-RTG-S, STO-SS, STO-RFC, STO-FW, STO-WADI, SOL-OSR, SOL-CONC, SOL-EDS, RAD-HAB, RAD-SHADE, THX-PL, THX-HPMP, GRD-SB-M. **The lunar night arc (§3.4) is the Act-2 spine: batteries → RFC from ISRU water → first fission.** |
-| T2 | Act 2–4 (Mars, belt, Venus) | NUK-KP10, NUK-FSP, SOL-BLK, STO-LS, STO-TS, RAD-KP, RAD-CONV, GRD-SB-L, GRD-CAB-MV, GRD-HELIO, T2 cells (0.36), rad-hard build flag. Mars storm doctrine; Venus aerostat power; PSR mirror mining. |
+| T0 | Act 1 (Earth+LEO) | SOL-RW, SOL-FARM-F, STO-LI, PW-FC, NUK-RTG-M/G (Pu238 purchase-limited per 12), RAD-BM, TH-RAD, GRD-SB-S, GRD-CAB-LV, GRD-SHUNT. Lessons: eclipse cycling (P-10), the first Sankey, EP power-limited thrust. |
+| T1 | Act 1–2 (Moon) | SOL-RO (11's PW-01), NUK-RTG-S, STO-SS, STO-RFC, STO-FW, STO-WADI, SOL-OSR, SOL-CONC, RAD-HAB, RAD-SHADE, THX-PL, THX-HPMP, GRD-SB-M. **The lunar night arc (§3.4) is the Act-2 spine: batteries → RFC from ISRU water → first fission (the T2 Kilopower research finishing the act).** |
+| T2 | Act 2–4 (Mars, belt, Venus) | NUK-KP1 (11's PW-04), NUK-KP10, NUK-FSP, SOL-BLK, SOL-EDS (11's PW-06), STO-LS, STO-TS, RAD-KP, RAD-CONV, GRD-SB-L, GRD-CAB-MV, GRD-HELIO, T2 cells (0.36), rad-hard build flag. Mars storm doctrine; Venus aerostat power; PSR mirror mining. |
 | T3 | Act 4–5 (outer planets) | NUK-MSR (Thorium economy), NUK-NEP (2 MWe — enables MPD/VASIMR freighters in 02), RAD-HT, RAD-LDR, NaK loops, GRD-LASER, GRD-CAB-HV, Pu238 breeding line (04/05). Titan insulation engineering; Europa rad-tax management. |
 | T4 | Endgame | [SPECULATIVE] NUK-FUS; He3 logistics (03/04); fusion-powered megaprojects (mass drivers in 05, interstellar precursor in 12). Radiator Doctrine persists at 900 K. |
 
@@ -509,9 +510,9 @@ Milestone beats: first night survived (Act 1 tutorial, LEO eclipse); first lunar
 ## 7. Cross-System Interfaces
 
 **Consumes:**
-- `03-solar-system.md`: body ephemerides `d(t)` (AU), rotation/solar-day periods, atmosphere tables (P, T, density → h values H-3), surface temperatures and T_sink table (H-2), Jupiter radiation-zone map (Europa tax), PSR locations, and the Mars dust-season calendar (Ls windows) consumed by the §3.8 storm generator P-9a (the generator itself is owned here).
+- `03-solar-system.md`: body ephemerides `d(t)` (AU), rotation/solar-day periods, atmosphere tables (P, T, density → h values H-3), surface temperatures and T_sink table (H-2), Jupiter radiation-zone map (Europa tax), PSR locations, the Venus §4.4.2 per-band f_atm column and +0.15 albedo bonus (§3.8), and the complete Mars dust system S-9 — storm generator, per-sector τ(t), the f_dust attenuation fit `max(0.04, exp(−0.45·τ))`, and panel-soiling rates — **all owned by 03**; §3.8 P-9a and P-8/P-9 only consume it.
 - `01-orbital-mechanics.md`: shadow entry/exit anomalies for eclipse events (P-10), orbit geometry for sun-pointing/cosθ.
-- `02-propulsion.md`: EP electrical demands per string (6.9–250 kWe) and their waste-heat fractions (25–45% of P_in per the H-0 plume accounting — ~70–75% plume for gridded ion, ~55–65% for Hall — split thruster-body/PPU; canon shared with 02); ZBO cryocooler draws (0.75/2.0 kWe) and reject loads; bimodal NTR idle export (+25 kWe); DFD-5 1 MWe export; tank heaters 50 W/t.
+- `02-propulsion.md`: EP electrical demands per string (6.9–250 kWe) and their radiator-rejected waste-heat fractions (02 §3.9 canon: **gridded ion and Hall 10% of P_in, VASIMR 15%, MPD 30%** — PPU + thruster-body heat per the H-0 accounting; the rest of the non-jet power leaves in the plume); ZBO cryocooler draws (0.75/2.0 kWe) and reject loads; bimodal NTR idle export (+25 kWe); DFD-5 1 MWe export; tank heaters 50 W/t.
 - `04-resources-isru.md`: Uranium/Thorium/Pu238/He3 resource chains; recipe `P_e`/`P_t` demands and exotherms (the canonical kWh/kg cross-checks: Mars methalox 7.1 kWh/kg → 59 kWe example reproduced in §3.4); electrolysis 50 kWh/kg H2 (RFC charge leg).
 - `05-industry-logistics.md`: factory demand tables and `heat_fraction = 0.95`; manufacturing recipes for all §4 parts; in-situ mass derates for locally-built radiators/arrays.
 - `06-ships-stations.md`: part slotting, deployment states, MMOD penetration rolls against radiators/arrays; builder stubs PW-*/TH-RAD (stats canonical here).

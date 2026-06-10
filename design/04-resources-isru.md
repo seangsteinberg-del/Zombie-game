@@ -182,11 +182,11 @@ Canonical ambient densities (datum values; `03-solar-system.md` owns site/season
 
 | Location | P | T | ρ_atm | Composition (mass-relevant) | Intake energy (game) |
 |---|---|---|---|---|---|
-| Mars surface (datum) | 0.61 kPa | 210 K | 0.016 kg/m³ | CO2 96.0%, Ar 1.93%, N2 1.89% (MSL SAM, molar) **[SIMPLIFIED — molar fractions applied as mass fractions]** | 0.6 kWh/kg gas (Tier I), 0.4 (Tier II, cryo-freezer per Rapp) |
+| Mars surface (datum) | 0.61 kPa | 210 K | 0.016 kg/m³ | CO2 96.0%, Ar 1.93%, N2 1.89% (MSL SAM, molar) **[SIMPLIFIED — molar fractions applied as mass fractions]** | 0.6 kWh/kg gas (Intake I), 0.4 (Intake II) — both T2 cryo-freezers (Rapp; IS-06 unlock, `11-research-tech.md`) |
 | Venus aerostat, 52–56 km | ~50–100 kPa | 290–340 K | ~0.9–1.5 kg/m³ | CO2 96.5%, N2 3.5% **[SIMPLIFIED — molar fractions applied as mass fractions]** | 0.07 kWh/kg |
 | Titan surface | 146.7 kPa | 93.7 K | 5.3 kg/m³ | N2 ~94.5%, CH4 ~5% (near-surface, Huygens) | 0.01 kWh/kg (already cold & dense) |
 
-Delivery state depends on intake type: **Mars cryo-freezer intakes (T1/T2) deliver pure CO2 directly** (CO2 desublimes at 145 K; the other species don't) **plus a residual Ar/N2 mixed-gas stream (4% of throughput)** that requires a Fractionator to split; **Venus and Titan ram intakes deliver mixed gas** requiring fractionation. Separation of any mixed-gas stream into canonical resources requires a Fractionator (§4.5, RX-13) at 0.25 kWh/kg processed. Mars intakes consume 1 HEPA filter cartridge (MachineParts ledger, `05-industry-logistics.md`) per 100 t gas due to dust (MOXIE precedent).
+Delivery state depends on intake type: **Mars cryo-freezer intakes (I & II, both T2 — gated by IS-06 behind discovery DSC-04, `11-research-tech.md`) deliver pure CO2 directly** (CO2 desublimes at 145 K; the other species don't) **plus a residual Ar/N2 mixed-gas stream (4% of throughput)** that requires a Fractionator to split; **Venus and Titan ram intakes deliver mixed gas** requiring fractionation. Separation of any mixed-gas stream into canonical resources requires a Fractionator (§4.5, RX-13) at 0.25 kWh/kg processed. Mars intakes consume 1 HEPA filter cartridge (MachineParts ledger, `05-industry-logistics.md`) per 100 t gas due to dust (MOXIE precedent).
 
 **Liquid intake (Titan seas) (M-3f).** Sea Pump draws bulk liquid at fixed Q; composition (Ligeia-class): CH4 0.71, C2H6 0.12, N2 0.17 by mass **[SIMPLIFIED — molar estimates applied as mass fractions]**. Fractionation splits N2 out; ethane is **[LUMPED]** into Methane at 0.93 kg CH4-equivalent per kg C2H6 (similar C/H energy content; engines in `02-propulsion.md` see one "Methane" propellant). Kraken-class seas roll ethane-richer (CH4 0.45/C2H6 0.40/N2 0.15).
 
@@ -261,7 +261,7 @@ Worked sizing example (canon, quoted in 09 and 12): **fueling a 100 t methalox a
 
 `ṁ_tailings` (M-3b) accumulates as a **Tailings pile** entity at the site (or bagged mass in microgravity). Rules:
 
-- Tailings convert 1:1 to the canonical resource **Regolith** for downstream use: radiation shielding fill (`07-bases-habitats.md` wants 2–3 t/m² overhead), sintered roads/pads, basalt feed (RX-17), or mass-driver reaction pellets (`02-propulsion.md` T3 mass driver, `05-industry-logistics.md` pelletizer).
+- Tailings convert 1:1 to the canonical resource **Regolith** for downstream use: radiation shielding fill (`07-bases-habitats.md` wants 2–3 t/m² overhead), sintered roads/pads, basalt feed (RX-17), or mass-driver slugs (`05-industry-logistics.md` T3 mass driver §3.8 and its pelletizer §4.5 — 05 owns both).
 - Piles occupy site capacity: 1 pile slot per 10,000 t; a site has finite slots (per `07-bases-habitats.md` grid). Full slots stall extractors — the player must plan waste logistics like a real mine.
 - In microgravity, unbagged tailings jettison is allowed but triggers the debris rule (M-6.3). Bagged tailings are legitimate cargo (shielding mass for `06-ships-stations.md` crew vessels).
 - Sour-gas streams (ice cleanup contaminants, carbonyl purge) are flared (destroyed) unless a Fractionator captures them.
@@ -280,11 +280,11 @@ Canonical names only. "Form" = how the sim stores/moves it. Occurrence ties to `
 
 | Resource | Form / storage | Physical-chemical notes | Real occurrence (primary → secondary) |
 |---|---|---|---|
-| Water | liquid/ice tank | universal feedstock; 0.888 kg O2 + 0.112 kg H2 by electrolysis | Earth; Moon PSRs (LCROSS 5.6±2.9 wt%); Mars mid-latitude buried ice (SWIM, 30–90 vol% ≈ 0.17–0.81 by mass, see §4.2) & poles; C-type asteroids (5–20 wt% bound in phyllosilicates); Ceres crust; icy moons (Europa, Enceladus, Titan's bedrock IS water ice) |
+| Water | liquid/ice tank | universal feedstock; 0.888 kg O2 + 0.112 kg H2 by electrolysis | Earth; Moon PSRs (LCROSS 5.6±2.9 wt%); Mercury PSRs (MESSENGER radar-bright ice, purer than lunar — §4.2); Mars mid-latitude buried ice (SWIM, 30–90 vol% ≈ 0.17–0.81 by mass, see §4.2) & poles; C-type asteroids (5–20 wt% bound in phyllosilicates); Ceres crust; icy moons (Europa, Enceladus, Titan's bedrock IS water ice; Ganymede/Callisto dirty ice-rock crusts — §4.2 icy-crust class rows) |
 | Oxygen | LOX 90 K | 86% of hydrolox mass, 78% of methalox — the bulk prize | electrolyzed Water; Mars CO2 (MOXIE); 43–45 wt% of any silicate regolith (MRE/carbothermal) |
 | Hydrogen | LH2 20 K | hardest cryogen (20 K, ρ 70.8); leaks, embrittles | Water electrolysis; solar-wind H in regolith (~50–150 ppm, byproduct only); gas giants [T4] |
 | Methane | LCH4 112 K | space-storable-ish; Raptor-class fuel | Sabatier product (Mars); Titan atmosphere ~5% / seas ~70%; traces in comets/C-types |
-| Nitrogen | LN2 / GN2 | buffer gas (habitats need ~78 kPa-equivalent inventories), fertilizer | Earth; **Titan (94.5% of the 146.7 kPa (1.45 atm) atmosphere — the system's N reservoir)**; Venus 3.5% (huge absolute column); Mars 1.9%; NH3 ices/salts on Ceres & comets |
+| Nitrogen | LN2 / GN2 | buffer gas (habitats need ~78 kPa-equivalent inventories), fertilizer | Earth; **Titan (94.5% of the 146.7 kPa (1.45 atm) atmosphere — the system's N reservoir)**; Venus 3.5% (huge absolute column); Mars 1.9%; NH3 ices/salts on Ceres & comets; Triton N2 ice & Pluto's Sputnik Planitia glacier (endgame N2-ice reservoirs, §4.2) |
 | CO2 | liquid 220 K / gas | Mars & Venus atmospheres are infinite deposits | Mars 96%, Venus 96.5%; Ceres/comet ices; combustion/respiration loops (`08-life-support-crew.md`) |
 | Ammonia | liquid 300 K/1.2 MPa | N-carrier, fertilizer, coolant, NTR propellant option | Haber synthesis; Ceres ammoniated phyllosilicates (Dawn); comet/KBO ices; LCROSS plume trace |
 | Argon | liquid 87 K | Hall/MPD thruster propellant (cheaper than Xenon) | Mars atmosphere 1.93% (byproduct of CO2 acquisition); Titan trace |
@@ -300,7 +300,7 @@ Canonical names only. "Form" = how the sim stores/moves it. Occurrence ties to `
 | Thorium | oxide | breeder fuel (T3 molten-salt path, `09-power-thermal.md`) | lunar KREEP (up to ~12 ppm, Lunar Prospector); Earth |
 | Pu238 | RTG pellet | 0.57 W/g decay heat; made from Np-237 irradiation, not mined | Earth (Oak Ridge line, ~kg/yr scale); T3 player production in fission reactors |
 | Carbon | graphite/powder | Bosch product; reductant, electrodes, carbonyl makeup | C-type asteroids (2–5 wt% organic C); CO2 atmospheres; Titan hydrocarbons |
-| Polymers | pellets | PE-class **[LUMPED]** plastics from CH4 | synthesized (RX-15); Titan hydrocarbons feedstock paradise |
+| Polymers | pellets | PE-class **[LUMPED]** plastics from CH4 + O2 | synthesized in `05-industry-logistics.md` (`polymers_mto`, RX-15 alias — 04 supplies the Methane/Oxygen feedstocks); Titan hydrocarbons feedstock paradise |
 | BasaltFiber | spool | melt-spun regolith/basalt, 1400 °C; rebar/fabric (terrestrial industry anchor) | any basaltic regolith (mare, Mars plains) |
 | Glass | sheet/stock | sintered/melted silica-rich regolith; habitat glazing w/ metal frames | any silicate regolith |
 | Electronics | crate | NOT ISRU-producible until late game; see `05-industry-logistics.md` fab chain | Earth import → T3 fab (needs Silicon solar-grade, Copper, RareEarths, Polymers) |
@@ -314,6 +314,8 @@ Canonical names only. "Form" = how the sim stores/moves it. Occurrence ties to `
 
 Grades are mass fractions of the named resource in raw feed. lo/mode/hi for triangular roll. `r_core` for every row is rolled per M-1c (no per-row override); rows marked "bulk" are bulk-body deposits with uniform grade (no center, no `r_core`).
 
+**Coverage note (binds 03 §7's 1:1 mandate):** this table is the canonical world-gen input (M-1b); `03-solar-system.md` §4.4's per-body deposit-roll hooks MUST resolve 1:1 to rows here. Outer-system and Mercury assignments in 03's key-resource column resolve as follows: Mercury polar Water → the Mercury PSR row; Europa, Enceladus, Titania/Oberon/Miranda, Charon, and Pluto/Triton water-ice bedrock → the *clean icy-crust class* row; Ganymede and Callisto → the *dirty icy-crust class* row; Triton N2 ice and Pluto's Sputnik Planitia → their named N2-ice rows. Class rows roll one deposit set per body exactly as named-body rows do.
+
 | Body / region (03-solar-system.md) | Resource (raw form) | lo / mode / hi grade | Tonnage 10^(a..b) t | Depth | Anchor |
 |---|---|---|---|---|---|
 | Moon — PSR floors (Cabeus-class) | Water (ice-cemented regolith) | 0.01 / 0.055 / 0.10 | 4..7 | SHALLOW | LCROSS 5.6±2.9 wt% |
@@ -321,13 +323,17 @@ Grades are mass fractions of the named resource in raw feed. lo/mode/hi for tria
 | Moon — highlands | Anorthite→(Aluminum, Silicon, Oxygen) | 0.75 / 0.85 / 0.95 (plagioclase) | 7..9 | SURFACE | anorthositic crust |
 | Moon — KREEP (Procellarum fringe) | Thorium / Uranium ore | 6/9/12 ppm Th; U = 0.27×Th | 5..6 | SURFACE | Lunar Prospector GRS |
 | Moon — high-Ti mare | He3 [SPECULATIVE] | 4 / 10 / 20 **ppb** | 6..8 | SURFACE | Wittenberg/Kulcinski |
+| Mercury — PSR floors (Prokofiev/Kandinsky-class) | Water (radar-bright ice under thin organic lag) | 0.50 / 0.80 / 0.95 | 7..10 | SURFACE (lag ≤ 0.3 m) | MESSENGER radar-bright polar deposits, 10^10–10^12 t system total — purer than lunar PSR ice; grade roll quoted by `07-bases-habitats.md` §4.3.8 |
 | Mars — mid-latitude ice (SWIM zones) | Water (excess ice) | 0.17 / 0.45 / 0.81 | 5..8 | SHALLOW–DEEP | SWIM, SHARAD report 30–90 **vol%** excess ice; converted to mass fraction at ρ_ice 0.92 t/m³ in a ~1.7–2.0 t/m³ regolith matrix |
 | Mars — hydrated minerals (equatorial) | Water (gypsum/smectite) | 0.03 / 0.06 / 0.10 | 6..8 | SURFACE | CRISM |
 | Mars — hematite/magnetite plains | IronSteel ore (Fe-oxides) | 0.10 / 0.18 / 0.30 (as Fe) | 6..8 | SURFACE | Meridiani hematite |
 | Mars — rare hydrothermal sites | Copper ore | 0.002 / 0.005 / 0.02 | 4..5 | SHALLOW | Jezero-class paleo-hydrothermal (sparse by design) |
 | Mars/Venus/Titan atmospheres | CO2/N2/Ar; CO2/N2; N2/CH4 | fixed composition (M-3e) | ∞ | — | Viking/MSL, Venera, Huygens |
 | Titan — seas (Ligeia-class) | Methane (+[LUMPED] ethane) | fixed: CH4 .71/C2H6 .12/N2 .17 | ∞ | LIQUID | Cassini radar |
-| Titan — bedrock | Water (ice crust) | 0.85 / 0.95 / 1.0 | ∞-ish (8..10) | SURFACE | Titan bulk ice crust |
+| Icy-crust class, clean — Titan bedrock, Europa, Enceladus, Titania/Oberon/Miranda, Charon, Pluto/Triton water-ice bedrock | Water (ice crust) | 0.85 / 0.95 / 1.0 | ∞-ish (8..10) | SURFACE | bulk ice crusts (Cassini, Galileo, Voyager 2, New Horizons); the Enceladus surface-ice "grade 0.95+" quoted by `07-bases-habitats.md` §4.3.6 is this row |
+| Icy-crust class, dirty — Ganymede, Callisto | Water (ice-rock mixed crust) | 0.40 / 0.60 / 0.80 | ∞-ish (8..10) | SURFACE | Galileo bulk densities (~half ice, half rock); Callisto is the HOPE crew-staging site (07 §4.3.5) |
+| Triton — N2 ice plains & polar cap | Nitrogen (N2 ice; CH4/CO frost traces) | 0.70 / 0.85 / 0.95 | ∞-ish (9..12) | SURFACE | Voyager 2; 38 K cold-trap sublimation mining, product conditioned per M-5 cryo rules; the system's last big N reservoir after Earth/Titan/Ceres (03 §4.4.12) |
+| Pluto — Sputnik Planitia | Nitrogen (convecting N2-ice glacier; CH4/CO traces) | 0.85 / 0.93 / 0.98 | ∞ (infinite-class per 03 §4.4.13) | SURFACE | New Horizons; volatile handling at 38 K per M-5 — slow extraction by design (endgame logistics, not chemistry) |
 | NEA / belt — C-type | Water (phyllosilicate-bound) | 0.05 / 0.08 / 0.20 | 3..7 | bulk body | CI/CM chondrites; Ryugu/Bennu samples |
 | NEA / belt — C-type | Carbon (organics) | 0.02 / 0.03 / 0.05 | same body | bulk | CI chondrite C content |
 | NEA / belt — C-type | Nitrogen (NH3-salts/organics) | 0.001 / 0.003 / 0.005 | same body | bulk | Bennu ammonia-bearing samples |
@@ -364,8 +370,8 @@ Grades are mass fractions of the named resource in raw feed. lo/mode/hi for tria
 | Sublimation Tent Miner | T2 | 6 t | 80 kWt + 6 kWe | → 800 kg H2O/day @ g=5% | tented surface patch | Sowers/CSM thermal mining; kWt can come from solar concentrator (09) |
 | Ice Strip Miner | T3 | 30 t | 870 kWe | → 10 t H2O/day @ g=5% | excavate+oven integrated | scaled CSM concept; 870 kWe = M-3d (Tier III, g=5%, +0.1 cleanup) + digging 222 t feed/day × 3 kWh/t |
 | Mars Rodwell Rig | T2 | 2 t | 25 kWt + 2 kWe | → 1.2 t H2O/day | massive buried ice (g ≥ 0.5) only | Rodriguez well, Antarctic practice; needs Deep Core Rig survey. **M-3d exempt**: Rodwells melt rather than sublime (no vacuum exposure, ~0.13 kWh/kg theoretical) — use the catalog figure of 0.54 kWh/kg H2O, valid only at g ≥ 0.5 |
-| Atmospheric Intake (Mars) | T1 | 0.3 t | 5 kWe | 200 kg/day mixed gas | Mars atmo | cryo-freezer CO2 acquisition (Rapp); HEPA consumable |
-| Atmospheric Intake (Mars) II | T2 | 1.0 t | 18 kWe | 1,000 kg/day | Mars atmo | 0.4 kWh/kg + Ar/N2 byproduct via Fractionator |
+| Atmospheric Intake (Mars) I | T2 | 0.3 t | 5 kWe | 200 kg/day mixed gas | Mars atmo | cryo-freezer CO2 acquisition (Rapp), 0.6 kWh/kg small-unit penalty; HEPA consumable. T2 — unlocked alongside Intake II at `11-research-tech.md` IS-06 "Mars Atmosphere Processing" (DSC-04 discovery gate); no T1 Mars intake exists |
+| Atmospheric Intake (Mars) II | T2 | 1.0 t | 18 kWe | 1,000 kg/day | Mars atmo | 0.4 kWh/kg + Ar/N2 byproduct via Fractionator; same IS-06 unlock |
 | Aerostat Intake (Venus) | T3 | 0.5 t | 6 kWe | 2,000 kg/day | Venus 52–56 km | HAVOC platform mount (`07-bases-habitats.md` aerostat); + trace cloud-water harvester 2 kg H2O/day from H2SO4 aerosol (honestly tiny) |
 | Atmospheric Intake (Titan) | T3 | 0.3 t | 2 kWe | 5,000 kg/day | Titan atmo | dense cold gas; near-free liquefaction |
 | Sea Pump (Titan) | T3 | 0.8 t | 4 kWe | 20 t/day liquid | Titan sea (shore/sub, `10-vehicles.md`) | heated inlet vs icing (F-8) |
@@ -388,7 +394,7 @@ All mass balances conserve mass. `P_t < 0` means exothermic waste heat that `09-
 |---|---|---|---|---|---|---|
 | RX-01 | PEM Electrolyzer (T1) — 1.0 t, 58 kWe, 250 kg H2O/day | H2O → H2 + ½O2, ΔH 285.8 kJ/mol | 1 kg H2O → **0.112 kg H2** + 0.888 kg O2 | 5.6 kWh/kg H2O (79% HHV) | 350 K | ISS OGA / industrial PEM (~50 kWh/kg H2) |
 | RX-02 | SOEC Electrolyzer (T2) — 2.5 t, 200 kWe, 1,000 kg H2O/day | high-T steam electrolysis | same balance | 4.8 kWh/kg H2O | 1100 K | SOEC industry; co-electrolysis variant RX-05 |
-| RX-03 | Sabatier Reactor (T1) — 0.8 t, 0.8 kWe, 91 kg CH4/day | CO2 + 4H2 → CH4 + 2H2O, ΔH −165 kJ/mol | 2.75 kg CO2 + 0.50 kg H2 → **1 kg CH4** + 2.25 kg H2O | 0.2 kWh/kg e⁻; P_t = −2.86 kWh/kg CH4 (waste heat 11 kWt at full rate) | 600 K, Ni/Ru cat. | ISS Sabatier; Mars ISRU baseline |
+| RX-03 | Sabatier Reactor (T1) — 0.8 t, 0.8 kWe, 91 kg CH4/day | CO2 + 4H2 → CH4 + 2H2O, ΔH −165 kJ/mol | 2.75 kg CO2 + 0.50 kg H2 → **1 kg CH4** + 2.25 kg H2O | 0.2 kWh/kg e⁻. Thermal: gross exotherm 2.86 kWh_t/kg CH4 (ΔH −165 kJ/mol); net of non-recuperated feed-gas preheat to 600 K the radiator load is **P_t = −1.8 kWh_t/kg CH4 — the canonical value, and the one `09-power-thermal.md` §3.6's H-0 thermal ledger consumes** (honest band 1.8–2.0 as the recuperator wears; 09 quotes the same pair). Waste heat ≈ 6.8 kWt net at full rate (10.8 kWt gross) | 600 K, Ni/Ru cat. | ISS Sabatier; Mars ISRU baseline |
 | RX-04 | RWGS Reactor (T2) — 1.0 t, 6 kWe, 240 kg H2O/day | CO2 + H2 → CO + H2O, ΔH +41 kJ/mol | 2.44 kg CO2 + 0.111 kg H2 → 1.556 kg CO + **1 kg H2O** | 0.6 kWh/kg H2O (incl. 1070 K heat) | 1070 K | Mars ISRU studies |
 | RX-05 | SOXE CO2 Electrolyzer (T0 demo / T2 plant) — demo: 17 kg, 0.36 kWe, 0.29 kg O2/day; plant: 1.5 t, 35 kWe, 100 kg O2/day | 2CO2 → 2CO + O2, ΔH +283 kJ/mol CO2 | 2.75 kg CO2 → **1 kg O2** + 1.75 kg CO | demo 30 kWh/kg O2; plant 8 kWh/kg O2 (theoretical 4.9) | 1070 K | **MOXIE** (6–12 g/hr, 122 g total, 2021–23) |
 | RX-06 | Bosch Reactor (T2) — 0.5 t, 3 kWe, 50 kg C/day | CO2 + 2H2 → C(s) + 2H2O, ΔH ≈ −90 kJ/mol | 3.67 kg CO2 + 0.333 kg H2 → **1 kg Carbon** + 3.0 kg H2O | 1.5 kWh/kg C (reactor heat mgmt) | 800–1000 K | ISS CO2-reduction studies |
@@ -400,7 +406,7 @@ All mass balances conserve mass. `P_t < 0` means exothermic waste heat that `09-
 | RX-12 | H2-DRI Steel Plant (T2) — 3.5 t, 39 kWe, 250 kg Fe/day | Fe2O3 + 3H2 → 2Fe + 3H2O (1200 K), H2O re-electrolyzed | 1.43 kg Fe2O3 conc. → **1 kg IronSteel** + (0.48 kg H2O internal loop, 3% makeup H2) | 3.7 kWh/kg Fe | 1200 K | HYBRIT pilot (~3.5 MWh/t) |
 | RX-13 | Cryo Fractionator (T2) — 1.2 t, 21 kWe, 2,000 kg/day mixed fluid | staged cryogenic distillation | mixed gas/liquid → pure canonical streams per input composition | 0.25 kWh/kg processed | 80–250 K | air-separation industry |
 | RX-14 | Haber Ammonia Loop (T2) — 0.6 t, 2.1 kWe, 50 kg NH3/day | N2 + 3H2 → 2NH3, ΔH −46 kJ/mol NH3, 20 MPa Fe cat. | 0.824 kg N2 + 0.176 kg H2 → **1 kg Ammonia** | 1.0 kWh/kg NH3 (synthesis loop only; H2 priced upstream) | 700 K | Haber-Bosch |
-| RX-15 | Polymer Plant (T2) — 1.5 t, 17 kWe, 100 kg/day | CH4 → olefins → PE **[SIMPLIFIED]** | 1.143 kg CH4 → **1 kg Polymers** + 0.143 kg H2 | 4 kWh/kg | varies | gas-to-polymer industry |
+| RX-15 | Polymers — **canonical recipe lives in `05-industry-logistics.md`**: `polymers_mto` at the fab_chem_plant (05 §4.2; build tier T1 per 05, unlock node IS-09a per `11-research-tech.md`). RX-15 is retained as an alias ID only; 04 defines **no** competing recipe — 04 owns the upstream feedstock chemistry (Methane, Oxygen), 05 owns the conversion | CH4 partial oxidation → methanol → olefins → polyolefin (MTO) **[SIMPLIFIED]** | quoted verbatim from 05 (canonical there): 1.20 kg Methane + 1.20 kg Oxygen → **1 kg Polymers** + 1.22 kg Water + 0.16 kg CO2 + 0.02 kg Hydrogen | 1.5 kWh/kg (05 canon) | varies | methanol/MTO industrial route (95% carbon efficiency, 05 §4.2) |
 | RX-16 | Siemens Silicon Refiner (T3) — 5 t, 100 kWe, 20 kg/day | metallurgical Si → trichlorosilane → solar-grade | 1.4 kg Si (met.) → **1 kg Silicon (solar-grade)** + 0.4 kg recycle loss | 120 kWh/kg | 1400 K | Siemens process (order 10²) |
 | RX-17 | Basalt/Glass Furnace (T2) — 2 t, 31 kWe, 500 kg/day | melt 1650 K, spin or cast | 1.05 kg Regolith/tailings → **1 kg BasaltFiber or Glass** | 1.5 kWh/kg | 1650 K | terrestrial basalt-fiber industry |
 | RX-18 | FFC Titanium Cell (T3) — 3 t, 47 kWe, 25 kg/day | TiO2 electro-deoxidation in CaCl2 melt | 1.67 kg TiO2 slag → **1 kg Titanium** + 0.67 kg O2-bearing offgas | 45 kWh/kg Ti | 1200 K | FFC Cambridge (vs Kroll ~100 kWh/kg) |
@@ -432,7 +438,7 @@ All mass balances conserve mass. `P_t < 0` means exothermic waste heat that `09-
 | Mine buried ice (g≈0.6) | M-3d | net 2.21 kg H2O (4.46 needed − 2.25 returned by Sabatier) | 2.21 × 1.2 ≈ 2.7 kWh |
 | Acquire CO2 | Intake II | 2.75 kg CO2 (+Ar/N2 bonus) | 2.75 × 0.4 = 1.1 kWh |
 | Electrolyze | RX-01 | 4.46 kg H2O → 0.50 kg H2 + 3.96 kg O2 | 4.46 × 5.6 = 25.0 kWh |
-| Sabatier | RX-03 | → 1 kg CH4 + 2.25 kg H2O (recycled) | 0.2 kWh e⁻ (−2.9 kWh heat credit) |
+| Sabatier | RX-03 | → 1 kg CH4 + 2.25 kg H2O (recycled) | 0.2 kWh e⁻ (−1.8 kWh_t net heat credit per RX-03 canon; 2.86 gross) |
 | Liquefy | M-5 | 1 kg LCH4 + 3.96 kg LOX | 0.8 + 2.8 = 3.6 kWh |
 | **Total** | | **4.6 kg propellant** (1 kg LCH4 + 3.6 kg LOX at O/F 3.6) **+ 0.36 kg surplus O2** (life-support credit, excluded from the propellant basis) | **32.6 kWh → 7.1 kWh/kg propellant** (heat credit excluded) |
 
@@ -475,7 +481,7 @@ All mass balances conserve mass. `P_t < 0` means exothermic waste heat that `09-
 |---|---|---|
 | **T0 (Act 1, Earth+LEO)** | Orbital spectrometers; SOXE demo (MOXIE-scale, RX-05 demo); all resources Earth-purchased (12) | ISRU is a science demo; player learns the survey loop on the Moon from orbit while flying LEO ops |
 | **T1 (Act 1–2)** | Drum Excavator, Thermal Ice Corer, PEM Electrolyzer (RX-01), Sabatier (RX-03), Core Drill, Cryo Liquefaction Skid (LOX/LCH4/LH2, §4.4), vapor-return cryo transfer | First lunar polar water pilot plant; first locally-fueled hop; "Proven reserve" loans unlock (12) |
-| **T2 (Act 2–3)** | Bucket-Wheel, Sublimation Tent, Beneficiation, RX-02/04/05-plant/06/07/08/12/13/14/15/17, Mars Intakes, Rodwell, Capture Bag, Volatile Oven, Deep Core Rig | Industrial Moon (ilmenite O2 + Fe + Ti slag); Mars methalox chain closes (Chain A); first C-type NEA bagged; steel & polymers go local |
+| **T2 (Act 2–3)** | Bucket-Wheel, Sublimation Tent, Beneficiation, RX-02/04/05-plant/06/07/08/12/13/14/17, Mars Intakes I & II (both T2, IS-06 gate in `11-research-tech.md`), Rodwell, Capture Bag, Volatile Oven, Deep Core Rig | Industrial Moon (ilmenite O2 + Fe + Ti slag); Mars methalox chain closes (Chain A); first C-type NEA bagged; steel & polymers go local (Polymers via 05's `polymers_mto` chem plant — RX-15 alias, not an 04 recipe) |
 | **T3 (Act 3–5)** | Strip miners, MRE (RX-09), Mond (RX-10), Anorthite Al (RX-11), FFC Ti (RX-18), Siemens Si (RX-16), Pu238 line (RX-19), Optical Mining, Venus Aerostat Intake, Titan Sea Pump/Intake | Heavy industry anywhere; M-type metal economy with PGM (RareEarths) export to Earth (12); Venus/Titan volatiles; KREEP Th/U ends fuel imports |
 | **T4 (Endgame) [SPECULATIVE]** | He3 Volatile Kiln; gas-giant atmospheric scoop (with `02-propulsion.md` fusion tier) | He3 economy feeds fusion torch; kiln byproducts (H2/N2/C/H2O at g/t levels) finally make mare regolith a volatile source — closing the loop the hard way |
 
@@ -487,7 +493,7 @@ Research costs/prereq graph lives in `11-research-tech.md`; this table is the co
 
 **Consumes:**
 - `03-solar-system.md`: body/site lists, atmosphere composition & density profiles, PSR site tags, asteroid spectral classes & spin states, solar flux vs distance.
-- `09-power-thermal.md`: electric power (kWe) and process heat (kWt) supply; radiator capacity for exothermic recipes (Sabatier −2.86 kWh/kg CH4) and cryocooler heat rejection.
+- `09-power-thermal.md`: electric power (kWe) and process heat (kWt) supply; radiator capacity for exothermic recipes (Sabatier: canonical **net −1.8 kWh_t/kg CH4** to radiators per RX-03 — the figure 09 §3.6's H-0 ledger consumes; the 2.86 kWh_t/kg gross exotherm is the pre-preheat-debit value, never a radiator load) and cryocooler heat rejection.
 - `05-industry-logistics.md`: MachineParts (M-9 upkeep), machine construction, surface haulage of feed/tailings, HEPA consumables, pelletizer for mass-driver Regolith.
 - `10-vehicles.md`: rovers for K2 surveys, haulers, Titan submarine/shore platform for Sea Pump.
 - `06-ships-stations.md`: survey-instrument mounting, anchoring ops, debris-hazard damage model, depot tankage.
@@ -495,11 +501,11 @@ Research costs/prereq graph lives in `11-research-tech.md`; this table is the co
 - `12-gameplay-economy-ui.md`: Earth purchase prices (Xenon, Electronics, Uranium, Pu238 early game), reserve-collateral finance, alert/UI framework.
 
 **Provides:**
-- `02-propulsion.md`: propellant mass flows (LCH4/LOX/LH2/LN2/Argon/Xenon/Water/NH3), liquefaction-state handoff table (M-5), shared ZBO power rule (M-5a), transfer ullage losses, mass-driver reaction pellets.
+- `02-propulsion.md`: propellant mass flows (LCH4/LOX/LH2/LN2/Argon/Xenon/Water/NH3), liquefaction-state handoff table (M-5), shared ZBO power rule (M-5a), transfer ullage losses.
 - `09-power-thermal.md`: canonical load figures — 7.1 kWh/kg methalox, 12.6 kWh/kg hydrolox, 35.7 kWh/kg MRE LOX (all incl. liquefaction, §3.7), 59 kWe for the 100 t/500 d Mars plant; waste-heat credits.
 - `07-bases-habitats.md`: Regolith/tailings for shielding (2–3 t/m²), Glass/BasaltFiber/StructuralParts feedstocks, site-slot pressure from tailings piles (M-8).
 - `08-life-support-crew.md`: surplus O2 streams (Chains A/B), Water, N2 buffer gas, Ammonia fertilizer, CO2; contaminant warnings on PSR-derived water (cleanup step mandatory before potable use).
-- `05-industry-logistics.md`: refined metals (IronSteel/Aluminum/Titanium/Copper/Silicon/RareEarths), Carbon, Polymers, Glass, BasaltFiber as manufacturing inputs; recipe IDs RX-01..19 referenced by its factory UI.
+- `05-industry-logistics.md`: refined metals (IronSteel/Aluminum/Titanium/Copper/Silicon/RareEarths), Carbon, Glass, BasaltFiber as manufacturing inputs, plus the Polymers feedstocks Methane + Oxygen (the Polymers conversion itself is 05's `polymers_mto`, RX-15 alias); Regolith/tailings feed for its mass-driver pelletizer (M-8); recipe IDs RX-01..19 referenced by its factory UI.
 - `13-architecture.md`: linear-flow production model, predicted-event list (tank full/empty, deposit exhaustion, parts-out), deposit/knowledge data schema (M-1, M-2).
 
 ---

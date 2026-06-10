@@ -331,9 +331,9 @@ V-18a short-hop limit (d ≪ R_p):  v_launch → √(g·d) ;  Δv_hop ≈ 2.2·�
 
 #### 3.6.2 Propellant and the drive-vs-hop trade
 
-Propellant per hop from 02's rocket equation with the mounted engine (catalog: pressure-fed methalox Isp 355 s vac class, or storable MMH/NTO 320 s for PSR cold). Example: 5 t landed-mass cargo hopper, Moon, 200 km hop: Δv 1,219 m/s → 5·(e^(1219/3481) − 1) ≈ 2.1 t methalox one way.
+Propellant per hop from 02's rocket equation with the mounted engine. Engines are 02 catalog rows cited by ID — never local stats (02 §7 provides exactly this set to 10: ML-24, LND-71, and the RCS blocks): **ML-24 "Gopher"** pressure-fed methalox lander, **Isp 320 s vac → v_e = 3,138 m/s** — the catalog ceiling for a lander engine (even pump-fed Raptor 2 is only 347 s vac; no 350 s-class pressure-fed methalox exists to cite) — or storable NTO/MMH for PSR cold: **RCS-D400** Draco blocks at 300 s (OMS-27's 316 s is the storable Isp ceiling, but its fixed-throttle 26.7 kN is an orbit-insertion engine, not a hop-landing one). Example: 5 t landed-mass cargo hopper on ML-24, Moon, 200 km hop: Δv 1,219 m/s → 5·(e^(1219/3138) − 1) ≈ 2.4 t methalox one way.
 
-Energy honesty: that 2.1 t of ISRU methalox cost ≈ 7.1 kWh/kg (04 canon) ≈ **14,900 kWh**; driving the same 5 t *gross* 200 km on a road costs ≈ 14 kWh (§3.2.4; on a payload basis — 5 t of payload in a 0.55-payload-fraction hauler — ≈ 0.025 × 5 × 200 = 25 kWh). **Hopping is ~600–1,000× more energy-expensive than driving** — it buys *time* (200 km in 9 min vs 6 h) and *access*. Decision rules the planner surfaces:
+Energy honesty: that 2.4 t of ISRU methalox cost ≈ 7.1 kWh/kg (04 canon) ≈ **16,900 kWh**; driving the same 5 t *gross* 200 km on a road costs ≈ 14 kWh (§3.2.4; on a payload basis — 5 t of payload in a 0.55-payload-fraction hauler — ≈ 0.025 × 5 × 200 = 25 kWh). **Hopping is ~700–1,200× more energy-expensive than driving** — it buys *time* (200 km in 9 min vs 6 h) and *access*. Decision rules the planner surfaces:
 
 1. **Terrain**: route crosses CHAOS/impassable sectors or PSR crater walls → hop.
 2. **No road, low g**: g < 0.3 m/s² (wheels marginal, V-8) → hop by default (Ceres/Enceladus/comet ops; canon with 07).
@@ -508,12 +508,14 @@ V-1a worked checks (the numbers the §3.2.1 table quotes): the 1 t science rover
 
 | ID | Name | Tier (node) | Landed mass | Prop capacity (tank-full) | Engine (02) | Δv tank-full | Use | Anchor |
 |---|---|---|---|---|---|---|---|---|
-| HOP-S | Micro-hopper | T1 (VH-03) | 50 kg | 10.5 kg | storable biprop, Isp 320 s | 600 m/s (→ 45 km Moon hops) | PSR peeks, skylight survey (11 DSC-03) | IM Micro-Nova "Grace" (flown 2025) |
-| HOP-C5 | Cargo hopper | T2 | 5 t | 2.5 t | methalox PF, Isp 355 s | 1,400 m/s = 3,481·ln(7.5/5) (→ 270 km Moon) | time-critical freight, no-road sites | lunar-lander derivatives |
-| HOP-P | Crewed hopper | T2 | 12 t | 8 t | methalox, Isp 360 s | 1,800 m/s (→ 450 km Moon) | crew sorties beyond rover range; abort-to-base reserve mandatory 20% | Apollo LM heritage |
-| HOP-CERES | Low-g utility hopper | T2 | 2 t | 0.35 t biprop + cold-gas trim bottles | cold-gas/N2 + biprop, Isp 320 s | 500 m/s (→ 230 km Ceres) | g<0.3 default mobility | Hayabusa/MASCOT hop lineage (uncontrolled→controlled) |
+| HOP-S | Micro-hopper | T1 (VH-03) | 50 kg | 10.5 kg | RCS-D400 block (Draco, NTO/MMH, Isp 300 s) | 560 m/s = 2,942·ln(60.5/50) (→ 40 km Moon hops) | PSR peeks, skylight survey (11 DSC-03) | IM Micro-Nova "Grace" (flown 2025) |
+| HOP-C5 | Cargo hopper | T2 | 5 t | 2.5 t | ML-24 (PF methalox, Isp 320 s vac) | 1,272 m/s = 3,138·ln(7.5/5) (→ 220 km Moon) | time-critical freight, no-road sites | lunar-lander derivatives (Morpheus-class engine) |
+| HOP-P | Crewed hopper | T2 | 12 t | 8 t | ML-24 ×2 (PF methalox, Isp 320 s vac) | 1,600 m/s = 3,138·ln(20/12) (→ 360 km Moon) | crew sorties beyond rover range; abort-to-base reserve mandatory 20% | Apollo LM heritage |
+| HOP-CERES | Low-g utility hopper | T2 | 2 t | 0.35 t biprop + cold-gas trim bottles | RCS-D400 ×2 blocks (Isp 300 s) + RCS-N10 cold-gas trim (70 s) | 475 m/s on the biprop (→ 210 km Ceres) | g<0.3 default mobility | Hayabusa/MASCOT hop lineage (uncontrolled→controlled) |
 
-Propellant consumed per hop and hops-remaining follow from 02's rocket equation on the row's landed mass + remaining prop; the §3.6.2 worked example (5 t landed, 200 km Moon hop, Δv 1,219 m/s → ~2.1 t) is HOP-C5 at 82% tank.
+Propellant consumed per hop and hops-remaining follow from 02's rocket equation on the row's landed mass + remaining prop; the §3.6.2 worked example (5 t landed, 200 km Moon hop, Δv 1,219 m/s → ~2.4 t) is HOP-C5 at 95% tank.
+
+Thrust closure against the 02 rows (Moon g 1.62): HOP-C5's single ML-24 gives 24 kN vac vs 12.2 kN gross weight (T/W 2.0; x_min 0.25 → 6 kN, hover-capable under the 8.1 kN landed weight ✓). HOP-P mounts ML-24 ×2 = 48 kN vs 32.4 kN at 20 t gross (T/W 1.5; 12 kN at min throttle vs 19.4 kN landed weight ✓). HOP-S and HOP-CERES land on Draco-class pulse modulation (400 N per nozzle; RCS-D400 is ullage-capable per 02 §4.7). Isp discipline: 320 s vac (ML-24) is the hard ceiling for hopper performance in this doc — if later content needs the 450 km-class crewed sortie, the path is a new engine row in 02, not a local Isp (§9 Q10).
 
 ### 4.5 Atmospheric craft
 
@@ -591,7 +593,7 @@ Tech nodes are 11's VH ladder (this doc implements them; ED for SurfaceMobility/
 **Consumes:**
 - `03-solar-system.md`: per-body g, R, GM (V-18); atmosphere ρ(h)/T/P/composition (S-5a) for all flight and V-10; sector terrain_class/slope_sigma/rock_abundance (S-7) for Crr/μ/clearance; winds and storm events; Mercury terminator speed 3.6 km/h; sea locations; Venus 45–65 km safe-envelope clamp.
 - `09-power-thermal.md`: every power/storage item by ID (STO-*, NUK-*), battery-freeze and heater-P0 rules, RFC 2.0 kWh_e/kg, thermal wadi STO-WADI, H-5 endurance clocks (Venus/Mercury), H-8 operating bands, analytic event prediction for night-margin alarms.
-- `02-propulsion.md`: hopper engine rows (thrust, Isp, propellant), rocket equation conventions.
+- `02-propulsion.md`: hopper engine rows by catalog ID — ML-24 (PF methalox lander, 320 s vac), LND-71, RCS-D400/RCS-N10 blocks, per 02 §7's provides list — with their thrust, Isp, propellant, throttle, and ignition limits; rocket equation conventions. No engine stat is restated or extrapolated here (§3.6.2, §4.4).
 - `04-resources-isru.md`: tool-head stats mounted on UTL chassis (excavators, drills, intakes), e_dig 1 kWh/t, anchoring rules (M-6) for low-g tool reaction, propellant kWh/kg (7.1 methalox) for the hop-vs-drive energy honesty.
 - `05-industry-logistics.md`: autonomy ladder A0–A4, F-2 η_teleop with T_atom 60 s driving, condition/MTBF/spares system (adopted verbatim — closes 05's open question), route/exception queues, Earth teleoperator labor market, vehicle build recipes.
 - `06-ships-stations.md`: the part-grid editor, footprint/COM/attach math, blueprint format; CG-BAY cargo carriage of vehicles; comms antenna part stats.
@@ -643,3 +645,4 @@ Tech nodes are 11's VH ladder (this doc implements them; ED for SurfaceMobility/
 7. **Legged locomotion**: deliberately absent (no flown anchor beyond testbeds; tracked/wheeled covers v1 terrain). Revisit if CHAOS-sector content needs it; ATHLETE (JPL) would be the T3 anchor.
 8. **Shared-stat row with 05's bot_mule**: one vehicle defined in two docs (05 labor math, 10 chassis stats) — confirm at integration that both docs point at a single data row to avoid divergence (action: 05+10 joint review).
 9. **Terminator-chase automation**: is RVR-CRAWL's perpetual-twilight routing a standing A3 route (05's system) or a dedicated "pace the terminator" autopilot verb? UX call for 12.
+10. **Crewed-hopper range vs 02's lander-engine ceiling**: with 02's best lander engine at Isp 320 s vac (ML-24), HOP-P closes at 1,600 m/s tank-full (~360 km Moon) — short of a 450 km sortie class. Options: accept it (more pads, staged hops — arguably better infrastructure gameplay), or request that 02 add a pump-fed methalox *lander* row (Raptor-derived lander class, ~345 s vac plausible within 02's own pump-fed ceiling) and re-quote HOP-P against its ID. Joint owners 02 + 10; this doc will not carry an Isp that 02's catalog cannot source.

@@ -185,8 +185,11 @@ Orbital survey progress: C(t) += (w_swath · v_orb)/(4πR²) per s while alt < h
    (w_swath and h_scan per instrument, 04 §4.3; full map at C = 1 → typ. 5–30 orbits)
 Anomaly slots: each sector has 0–3; curated anomalies (real probes/wonders, fixed) fill listed slots; remaining
    slots roll procedural finds at world-gen: P(lava tube)=0.06, P(ice lens)=0.10, P(geode/ore vug)=0.08, P(empty)=rest.
-Rewards: SurveyData [GB] per anomaly class (§4.6) → research points via 11-research-tech.md; some yield salvage
-   (e.g. Pu238 from derelict RTGs — masses in §4.6, ledger in 04).
+Rewards: SurveyData [GB] per anomaly class (§4.6); anomaly investigation additionally awards Science at the
+   canonical 2 SCI/GB conversion (§4.6, co-signed 11 §3.5); some yield salvage
+   (e.g. Pu238 from derelict RTGs — masses in §4.5 table, ledger in 04).
+Science regions: the survey/sample region partition and per-region exoticism X consumed by 11 (§3.1, §3.5, §3.7)
+   are owned here and cataloged in §4.7 — sectors carry a region_id; 11 keys its Science pools to those IDs.
 ```
 
 ### 3.10 Small-body surface ops (S-11, S-12)
@@ -213,29 +216,29 @@ Mean radius R; g and v_esc at R; T_rot negative = retrograde spin; radiation = u
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | Sun | 695,700 | 1.32712×10^11 | 274 | 617.5 | 25.4 d | — | — | — | — | — | not landable |
 | Mercury | 2,439.7 | 22,032 | 3.70 | 4.25 | 58.646 d (solar day 176 d) | exosphere ~10^-12 kPa (~10^-14 bar) | 100–700 (PSR ~50) | 1.8·f_cyc + 6.7× SPE | 1.12×10^5 | polar Water; Mg-silicate Regolith → Silicon, Oxygen, Glass; sulfide volatiles (S ~4 wt%); crustal Fe only 1.5–2 wt% (MESSENGER) | ≈ 3.2 km/s |
-| Venus | 6,051.8 | 324,859 | 8.87 | 10.36 | −243.02 d (solar day 116.8 d) | 9,200 kPa CO2 96.5/N2 3.5, H=15.9 km below 30 km / 5.5 km above (§4.1b; §4.4.2 band lookup overrides) | 737 surface (uniform); ~293–350 at 50–56 km | 0.03 (52 km) | 6.16×10^5 | CO2, N2 (atm); surface basalt | aerostat→orbit ≈ 9 km/s; surface ascent unsupported pre-T3 |
+| Venus | 6,051.8 | 324,859 | 8.87 | 10.36 | −243.02 d (solar day 116.8 d) | 9,200 kPa CO2 96.5/N2 3.5, H=15.9 km below 30 km / 5.5 km above (§4.1b; §4.4.2 band lookup overrides) | 737 surface (uniform); ~293–350 at 50–56 km | 0.03 (52 km) | 6.16×10^5 | CO2, N2 (atm); surface basalt | aerostat→orbit ≈ 8.3 km/s; surface ascent unsupported pre-T3 |
 | Earth | 6,371.0 | 398,600 | 9.81 | 11.19 | 23.934 h | 101.325 kPa N2 78.1/O2 20.9/Ar 0.9, H=8.5 km | 184–330 (mean 288) | 0.01 surf; belts S-8c | 9.24×10^5 | everything, at a price (12) | 9.4 km/s incl. losses (canon) |
 | Moon | 1,737.4 | 4,902.8 | 1.62 | 2.38 | 27.322 d sync (solar day 29.53 d) | none | 95–390 eq; PSR 25–40 | 1.37 | 66,200 (of Earth) | PSR Water, ilmenite O2/Ti/Fe, anorthite Al/Si, KREEP Th/U, He3 [SPECULATIVE] | ≈ 1.9 km/s |
-| Mars | 3,389.5 | 42,828 | 3.71 | 5.03 | 24.623 h (sol 88,775 s) | 0.61 kPa datum CO2 96.0/Ar 1.93/N2 1.89 (MSL SAM molar), H=11.1 km | 130–308 (mean 210) | 0.67 | 5.77×10^5 | atm CO2, mid-lat Water ice, Fe-oxides, hydrated minerals | ≈ 4.1 km/s up (EDL down ≈ 1 km/s propulsive after aero) |
+| Mars | 3,389.5 | 42,828 | 3.71 | 5.03 | 24.623 h (sol 88,775 s) | 0.61 kPa datum CO2 96.0/Ar 1.93/N2 1.89 (MSL SAM molar), H=11.1 km | 130–308 (mean 210) | 0.67 | 5.77×10^5 | atm CO2, mid-lat Water ice, Fe-oxides, hydrated minerals | ≈ 4.0 km/s up (EDL down ≈ 1 km/s propulsive after aero) |
 | Phobos | 11.1 (27×22×18) | 7.11×10^-4 | 0.0057 | 0.011 | 7.66 h sync | none | 130–300 | 0.7 (Mars shadowing) | ≈7.3 — BELOW the 11.1 km mean radius: no orbits exist, dock mode only | Regolith; Water 0–5 wt% (unresolved — survey!) | dock; ≈ 5 m/s touch/go |
 | Deimos | 6.2 | 9.8×10^-5 | 0.003 | 0.0056 | 30.3 h sync | none | 130–290 | 0.9 | ~9 | as Phobos | dock |
 | Ceres | 469.7 | 62.6 | 0.28 | 0.51 | 9.07 h | transient H2O exosphere ~0 | 110–235 | 1.8·f_cyc | 77,000 | Water ice 20–45 wt% crust, ammoniated clays, carbonates | ≈ 0.37 km/s |
-| Vesta | 262.7 | 17.3 | 0.25 | 0.36 | 5.342 h | none | 85–270 | 1.8·f_cyc | ~40,000 | basaltic crust: Silicon, Aluminum, IronSteel | ≈ 0.30 km/s |
+| Vesta | 262.7 | 17.3 | 0.25 | 0.36 | 5.342 h | none | 85–270 | 1.8·f_cyc | ~40,000 | basaltic crust: Silicon, Aluminum, IronSteel | ≈ 0.27 km/s |
 | Psyche | 111 (mean D 222) | 1.53 | 0.12 | 0.16 | 4.196 h | none | 80–280 | 1.8·f_cyc | ≈18,400 | metal-rich mixed body, ~30–60 vol% metal (bulk density 3,980 kg/m³ rules out solid NiFe; orbiter survey resolves grade): IronSteel, RareEarths (PGM residue) | ≈ 0.14 km/s |
 | Hygiea | 217 | 5.83 | 0.124 | 0.232 | 13.83 h | none | 100–250 | 1.8·f_cyc | ≈33,800 | C-type outer belt: Water-bearing clays, Carbon | ≈ 0.18 km/s |
 | Jupiter | 69,911 | 1.26687×10^8 | 24.8 | 59.5 | 9.925 h | gas giant, H2 89/He 11 (1-bar T = 165 K) | — | belt field S-8c | 4.82×10^7 | Hydrogen, He3 [SPECULATIVE T4 scoop] | class F — no surface |
-| Io | 1,821.6 | 5,959.9 | 1.80 | 2.56 | 1.769 d sync | SO2 traces ~10^-9 kPa | 90–130 bg; hotspots to 1,900 | ≈ 36,000 | 7,830 | sulfur, silicates [mostly a hazard showcase] | ≈ 2.0 km/s (v_orb 1.76 + margin, consistent with the other Galileans) |
-| Europa | 1,560.8 | 3,202.7 | 1.31 | 2.02 | 3.551 d sync | O2 trace ~10^-9 kPa | 50–110 | 5,400 | 9,720 | Water (ice shell 15–25 km over 60–150 km ocean) | ≈ 1.6 km/s |
+| Io | 1,821.6 | 5,959.9 | 1.80 | 2.56 | 1.769 d sync | SO2 traces ~10^-9 kPa | 90–130 bg; hotspots to 1,900 | ≈ 36,000 | 7,840 | sulfur, silicates [mostly a hazard showcase] | ≈ 2.0 km/s (v_orb 1.76 + margin, consistent with the other Galileans) |
+| Europa | 1,560.8 | 3,202.7 | 1.31 | 2.02 | 3.551 d sync | O2 trace ~10^-9 kPa | 50–110 | 5,400 | 9,730 | Water (ice shell 15–25 km over 60–150 km ocean) | ≈ 1.6 km/s |
 | Ganymede | 2,634.1 | 9,887.8 | 1.43 | 2.74 | 7.155 d sync | O2 trace | 70–152 | 80 (own B-field) | 24,350 | Water ice + rock; largest moon | ≈ 2.0 km/s |
 | Callisto | 2,410.3 | 7,179.3 | 1.24 | 2.44 | 16.689 d sync | CO2 trace | 80–165 (mean 134) | 0.14 + GCR | 37,700 | Water ice, rock; THE jovian base site (NASA HOPE) | ≈ 1.8 km/s |
-| Saturn | 58,232 | 3.79312×10^7 | 10.4 | 35.5 | 10.66 h (System III; interior fits ~10.56) | gas giant H2/He (1-bar T = 134 K) | — | 1.0 inside 8 R_S | 5.46×10^7 | Hydrogen, He3 [SPECULATIVE] | class F |
-| Titan | 2,574.7 | 8,978.1 | 1.35 | 2.64 | 15.945 d sync | 146.7 kPa (1.45 atm) N2 94.5/CH4 5 near-surface, H≈20 km | 90–94 (93.7 Huygens) | 0.01 (atm column ≈10,900 g/cm² — 10× Earth's 1,033) | ≈43,300 | Methane seas (+[LUMPED] ethane), N2 atm, Water bedrock | ≈ 2.6 km/s up (drag-heavy); chute descent ~free |
+| Saturn | 58,232 | 3.79312×10^7 | 10.4 | 35.5 | 10.66 h (System III; interior fits ~10.56) | gas giant H2/He (1-bar T = 134 K) | — | 1.0 inside 8 R_S | 5.48×10^7 | Hydrogen, He3 [SPECULATIVE] | class F |
+| Titan | 2,574.7 | 8,978.1 | 1.35 | 2.64 | 15.945 d sync | 146.7 kPa (1.45 atm) N2 94.5/CH4 5 near-surface, H≈20 km | 90–94 (93.7 Huygens) | 0.01 (atm column ≈10,900 g/cm² — 10× Earth's 1,033) | ≈43,300 | Methane seas (+[LUMPED] ethane), N2 atm, Water bedrock | ≈ 2.4 km/s up (drag-heavy); chute descent ~free |
 | Enceladus | 252.1 | 7.21 | 0.113 | 0.239 | 1.370 d sync | plume-fed vapor ~0 | 33–145 (stripes to ~197) | 1.0 | ≈490 | Water (plume + crust), south-polar vents | ≈ 0.18 km/s |
 | Uranus | 25,362 | 5.7939×10^6 | 8.87 | 21.3 | −17.24 h | ice giant H2/He/CH4 (1-bar T = 76 K) | — | mild belts 0.5 | 5.18×10^7 | Hydrogen, He3 [SPECULATIVE — lowest-v_esc giant, classic He3 target] | class F |
 | Titania | 788.9 | 228.3 | 0.37 | 0.76 | 8.706 d sync | none | 60–89 | 0.5 | ≈7,540 | Water ice, rock | ≈ 0.55 km/s |
 | Oberon | 761.4 | 192.4 | 0.33 | 0.71 | 13.46 d sync | none | 60–89 | 0.5 | ≈9,430 | Water ice, rock | ≈ 0.55 km/s |
 | Miranda | 235.8 | 4.4 | 0.079 | 0.193 | 1.413 d sync | none | 60–86 | 0.5 | ~500 | ice; Verona Rupes wonder | ≈ 0.15 km/s |
-| Neptune | 24,622 | 6.8365×10^6 | 11.15 | 23.5 | 16.11 h | ice giant (1-bar T = 72 K) | — | mild belts 0.5 | 8.68×10^7 | Hydrogen, He3 [SPECULATIVE] | class F |
+| Neptune | 24,622 | 6.8365×10^6 | 11.15 | 23.5 | 16.11 h | ice giant (1-bar T = 72 K) | — | mild belts 0.5 | 8.66×10^7 | Hydrogen, He3 [SPECULATIVE] | class F |
 | Triton | 1,353.4 | 1,428 | 0.78 | 1.46 | 5.877 d sync RETROGRADE | 0.0014–0.0019 kPa N2 | 38 | GCR 1.8·f_cyc | 12,000 | N2 ice, Water ice, CH4 frost; geysers | ≈ 1.0 km/s |
 | Pluto | 1,188.3 | 869.6 | 0.62 | 1.21 | 6.387 d sync w/ Charon | 0.0010–0.0013 kPa N2 | 33–55 (mean ~44) | GCR | 3.1×10^6 (heliocentric) | N2/CH4/CO ices, Water-ice bedrock | ≈ 0.85 km/s |
 | Charon | 606.0 | 105.9 | 0.288 | 0.59 | 6.387 d sync | none | 53 max | GCR | ≈8,440 | Water ice | ≈ 0.42 km/s |
@@ -357,7 +360,7 @@ All bands additionally take the +0.15 below-cloud-albedo bonus for two-sided arr
 
 - **Unique mechanics**: (1) Buoyancy station-keeping (`07` owns the balloon model; this file owns ρ(h)). (2) Super-rotation drift: aerostats circumnavigate every ≈6 Earth days (Vega balloon anchor, w ≈ 66 m/s) — day/night power cycle is 3 days light / 3 days dark regardless of the 116.8-day solar day; batteries or H2 fuel cells required (`09`). (3) Atmospheric ISRU: infinite CO2/N2 intake (`04` M-3e); acid-droplet water harvesting at ~5 g Water per t of processed cloud air [generous end of measured cloud mass loading: ~1–50 mg aerosol/m³ in ~1.4 kg/m³ air at 50–52 km, of which only ~15–25% is H2O in the H2SO4·xH2O droplets] — bulk Water therefore comes from cracking the ~30 ppm trace H2O vapor in processed CO2 throughput and from imported ice (`04` chain balanced accordingly). (4) Solar factor per band (f_atm column 0.30–0.70, table above) + 0.15 below-cloud albedo bonus for double-sided arrays (S-6a).
 - **Hazards**: H2SO4 aerosol — exposed Polymers/seals degrade 1%/day unless acid-rated (T2 coating, `05`); envelope tear → altitude loss; below 45 km T > 380 K kills standard electronics; the surface (737 K, 9.2 MPa) is a one-way trip before T3.
-- **Landing/ascent**: class E (surface) / D (cloud entry). Aerocapture into the cloud deck is gentle (dense atmosphere, generous corridor, `01`). Aerostat→orbit: rocket drop-launched from 52 km, Δv ≈ 9 km/s (Earth-class problem at altitude; the canonical "Venus is easy to visit, hard to leave" lesson). Surface sorties pre-T3: armored probe drops only, survival timer 2–8 h (Venera 13 anchor: 127 min).
+- **Landing/ascent**: class E (surface) / D (cloud entry). Aerocapture into the cloud deck is gentle (dense atmosphere, generous corridor, `01`). Aerostat→orbit: rocket drop-launched from 52 km, Δv ≈ 8.3 km/s (`01` V4 = ~8,300 m/s canon; a near-Earth-class problem at altitude — the canonical "Venus is easy to visit, hard to leave" lesson). Surface sorties pre-T3: armored probe drops only, survival timer 2–8 h (Venera 13 anchor: 127 min).
 - **Base sites**: aerostat clusters in V-HAVOC band; surface T3 refractory mining stations (basalt → BasaltFiber, `04`) at Maxwell Montes foothills and Beta Regio once high-temperature electronics (SiC, real NASA HOTTech line) unlock.
 - **Surface sectors (8)**: Maxwell Montes (11 km peak, wonder; radar-bright "metal frost" snowline anomaly) · Maat Mons (ACTIVE volcano — eruption events reuse S-11 Io logic at 1/(180 d); Herrick 2023 anchor) · Beta Regio (Venera 9/10 derelicts) · Phoebe Regio (Venera 13/14) · Baltis Vallis (6,800 km lava channel, longest in the solar system, wonder) · Lakshmi Planum (plateau) · Aphrodite Terra (tessera highlands — oldest crust, survey jackpot) · Lowland Plains (Vega 1/2 landers).
 - **Survey**: Venera 7–14 lander derelicts (first soft landings on another planet's surface), Vega balloon gondolas (still adrift? recovered as drifting anomalies in cloud bands), Pioneer Venus probe wreckage; tessera geology; Maat Mons live vent.
@@ -385,7 +388,7 @@ All bands additionally take the +0.15 below-cloud-albedo bonus for two-sided arr
 - **Identity**: Act 3 centerpiece. The only body where full ISRU closure (propellant + plastics + food + steel) is plausible with T2 tech: CO2 atmosphere + mid-latitude ice + iron oxides (Zubrin/Mars Direct + MOXIE anchors). Designed to host the player's first self-sustaining base.
 - **Unique mechanics**: (1) Dust season state machine (S-9) — the defining rhythm: stockpile power before Ls 180. (2) Sabatier economy: intake CO2 + ice Water → Methane/Oxygen (`04` chains, MOXIE/Mars Direct anchors). (3) EDL minigame: aerocapture corridor → chute (only slows to ~Mach 2) → mandatory retropropulsion ≈ 1 km/s (class C teeth; `01`). (4) Seasonal pressure swing ±15% (S-9) modulates intake mining and EDL margins. (5) Hellas depth bonus: P ≈ 1.16 kPa at −7.1 km — best aerobraking/chute margin, worst dust.
 - **Hazards**: global storms (60–100 sols of f_dust ≈ 0.04–0.17 for τ = 9–4 — solar-only bases die; the 2018-storm/Opportunity lesson is the tutorial text); dust soiling −0.2%/sol; perchlorates in regolith (greenhouse feedstock must be washed, `04`/`08` toxicity rule); 0.67 mSv/day chronic dose (bury habs, `07`).
-- **Landing/ascent**: class C; ascent ≈ 4.1 km/s incl. losses (anchor: MAV studies); descent mostly aero with ≈ 1 km/s propulsive.
+- **Landing/ascent**: class C; ascent ≈ 4.0 km/s incl. losses (`01` R4 = 4,000 m/s canon; anchor: MAV studies 4.0–4.3 km/s); descent mostly aero with ≈ 1 km/s propulsive.
 - **Base sites**: Arcadia/Deuteronilus mid-lat ice (SWIM: excess ice 30–90 wt% under <1 m overburden — water without PSR cryo pain); Jezero/Isidis (Perseverance sample cache salvage contract); Valles Marineris floor (pressure +20% vs datum, wind-sheltered, wonder); polar cap edge (seasonal CO2 frost cycle = free dry-ice cold sink, `09`).
 - **Sectors (18)**: Chryse (Viking 1, Pathfinder) · Utopia (Viking 2, Zhurong) · Elysium (InSight) · Gale (Curiosity) · Gusev (Spirit) · Meridiani (Opportunity, Schiaparelli crash, hematite Fe) · Jezero/Isidis (Perseverance + Ingenuity + sample depot, Beagle 2) · Arabia (hydrated minerals) · Tharsis Rise (young lava, geothermal residual-heat anomaly candidates) · Olympus Mons (21.9 km summit above most dust — PEL-like solar bonus f_dust exponent halved; wonder) · Valles Marineris (wonder, deep-canyon pressure bonus) · Hellas (−7.1 km, P 1.16 kPa) · Argyre · Arcadia mid-lat ice N (SWIM) · Deuteronilus ice N · Mid-lat ice S · Polar Cap N (layered H2O ice + seasonal CO2) · Medusae Fossae (fine ash — worst dust_index 1.0, BasaltFiber feed).
 - **Survey**: nine real derelict/active-heritage sites (by 2049 all are derelicts/museums), Mars 3 (first soft landing, 1971, Terra Sirenum), sample-cache retrieval, RSL brine-streak science sites, SHARAD-confirmed buried glaciers.
@@ -445,7 +448,7 @@ All bands additionally take the +0.15 below-cloud-albedo bonus for two-sided arr
 - **Identity**: Act 5 second half. Saturn's belts are mild (S-8c: 1.0 mSv/day inside 8 R_S) — the hazard here is *cold and distance* (flux 14.8 W/m², light lag ~80 min). Titan is the richest single body in the outer system; Enceladus is the easiest water tap; the rings are a T3+ ice quarry.
 - **Titan — the gas station with weather**:
   - Surface 146.7 kPa (1.45 atm), 93.7 K (Huygens HASI); N2 ~94.5%/CH4 ~5% near-surface. Atmosphere column P/g ≈ 109 t/m² ≈ 10,900 g/cm² — ten times Earth sea level's 1,033 g/cm² → radiation ≈ 0.01 mSv/day: Titan is the most radiation-safe surface in the game including Earth.
-  - **Unique mechanics**: (1) Flight paradise: ρ 5.3 kg/m³ + g 1.35 m/s² → human-powered/electric flight trivial; Dragonfly-class rotorcraft are the default vehicle (`10`). (2) Methane hydrology: Kraken Mare (≈400,000 km²), Ligeia Mare (≈126,000 km²) — Sea Pump intake per `04` M-3f; methane rain events (decadal storms, Cassini-observed) refill polar lakes — modeled as sector weather flag, optics obscured f = 0.5 for U(5,20) d. (3) Inverted combustion: O2 is the scarce/explosive commodity; Methane is ambient. Burn anything = bring oxygen (Water-ice bedrock electrolysis). (4) Chute-only landing (class D, Huygens anchor): descent is free; ascent ≈ 2.6 km/s with severe drag losses (`01`/`02` own the canon split).
+  - **Unique mechanics**: (1) Flight paradise: ρ 5.3 kg/m³ + g 1.35 m/s² → human-powered/electric flight trivial; Dragonfly-class rotorcraft are the default vehicle (`10`). (2) Methane hydrology: Kraken Mare (≈400,000 km²), Ligeia Mare (≈126,000 km²) — Sea Pump intake per `04` M-3f; methane rain events (decadal storms, Cassini-observed) refill polar lakes — modeled as sector weather flag, optics obscured f = 0.5 for U(5,20) d. (3) Inverted combustion: O2 is the scarce/explosive commodity; Methane is ambient. Burn anything = bring oxygen (Water-ice bedrock electrolysis). (4) Chute-only landing (class D, Huygens anchor): descent is free; ascent ≈ 2.4 km/s with severe drag losses (`01` S4 = 2,400 m/s canon; `01`/`02` own the split).
   - **Hazards**: 94 K cryo-embrittlement (all surface hardware needs T3 cryo rating, `05` maintenance ×1.5 otherwise); solar 1.5 W/m² noon (S-6a f_atm 0.10) — fission mandatory (`09`); CH4/O2 leak combinations (habitat explosion roll, `07`).
   - **Sectors (12)**: Kraken Mare (SEA, Ligeia-class roll alt: ethane-richer Kraken-class per `04`) · Ligeia Mare (SEA) · Punga Mare · Shangri-La dune field (organics: Carbon/Polymers feed) · Adiri (Huygens derelict — the most distant human artifact landing, prestige anomaly) · Selk crater (Dragonfly derelict/active heritage ~2034+, anomaly) · Xanadu (water-ice bedrock outcrop) · Sotra Patera (cryovolcano candidate, wonder) · 2× polar lake districts (seasonal) · equatorial plains ×2.
 - **Enceladus — the water fountain**: R 252 km, g 0.113 m/s²; south-polar tiger stripes (Damascus/Baghdad/Cairo/Alexandria sulci) vent ≈ 200 kg/s total (Cassini); stripe-adjacent T up to ~197 K vs 75 K mean. Mechanics: S-11 vent capture ≤ 5 kg/s/collector; lowest-Δv water export in the outer system (0.18 km/s ascent + Saturn-system transfers, `01`). E-ring transit = free hull "snow" accretion (cosmetic). Sectors (6): 4 tiger-stripe vents (each an anomaly wonder) · cratered north · sub-Saturn plains.
@@ -482,7 +485,7 @@ All bands additionally take the +0.15 below-cloud-albedo bonus for two-sided arr
 
 ### 4.5 Anomaly & discovery catalog (curated)
 
-Classes: DERELICT (real human hardware, fixed location), WONDER (real geological feature), COLDTRAP (PSR/ice lens), TUBE (lava tube/cave), EVENT (timed celestial). Procedural anomalies (S-10) reuse these classes. Rewards: SurveyData [GB] (→ `11` research conversion), salvage mass (→ `04`/`05` ledgers), Prestige (→ `12` reputation economy). No aliens anywhere; the emotional payload is real history and real geology.
+Classes: DERELICT (real human hardware, fixed location), WONDER (real geological feature), COLDTRAP (PSR/ice lens), TUBE (lava tube/cave), EVENT (timed celestial). Procedural anomalies (S-10) reuse these classes. Rewards: SurveyData [GB] (Science lump = 2 SCI per GB, the canonical §4.6 conversion co-signed with `11` §3.5), salvage mass (→ `04`/`05` ledgers), Prestige (→ `12` reputation economy). No aliens anywhere; the emotional payload is real history and real geology.
 
 | ID | Body/Sector | Class | What it really is | Reward |
 |---|---|---|---|---|
@@ -550,7 +553,45 @@ Procedural anomaly generator fills remaining slots: lava tubes (Moon/Mars: P = 0
 | WONDER | 25–60 (table) | geology |
 | Jackpots | 100–200 | Europa ocean, Halley 2061 |
 
-Conversion to research points and the "diminishing returns per repeated class" rule are owned by `11-research-tech.md`.
+**Canonical GB→SCI conversion (co-signed with `11` §3.5 — the ONLY SurveyData→Science bridge).** Investigating an anomaly on-site converts its SurveyData yield to Science at a flat **2 SCI per GB**, one-shot per anomaly. The curated §4.5 catalog therefore lumps **30–400 SCI** (floor: AN-23's 15 GB → 30 SCI; ceiling: AN-34's 200 GB Europa-ocean jackpot → 400 SCI). The GB themselves remain a tradeable data resource (registered in `12` §4.3; the E-12 planetary-data subscription pays $0.2M/GB) — selling the data does NOT forfeit the Science lump. Non-anomaly rows above (flyby first, L1 orbit survey, L2 sector prospect, the Halley EVENT excepted as an anomaly) carry **no implicit SCI**: Science for surveys and traverses comes from `11` §3.5's own one-shot awards (orbital survey per instrument class × region; ground survey 10·X per region over the §4.7 partition), so no double-counting path exists. Diminishing-returns pooling for repeated sampling is owned by `11` §3.1/§3.6, keyed to the §4.7 region IDs.
+
+### 4.7 Science-region partition & exoticism X (canonical per-region assignment, consumed by `11` §3.1/§3.5/§3.7)
+
+`11-research-tech.md`'s Science accrual — survey one-shots, sample pools `P = V_base·X`, milestone lumps `k·X` — is keyed to *science regions*, which this file owns. Partition rule (S-10 extension):
+
+- **Orbit regions**: every body with an SOI gets one `ORB` region (scope of orbital/remote one-shot surveys). Earth alone splits into `EAR-ORB-LEO` (≤ 2,000 km altitude) and `EAR-ORB-HIGH` (above, incl. cislunar) — the only orbit split in `11` §3.7's class table; no other body's orbital classes differ enough to justify one.
+- **Atmosphere regions**: class-F giants get one `ATM` probe-band region (so the k = 40 "first atmosphere probe" milestone always resolves to a single X); Venus's four CLOUD_BAND sectors form one `VEN-CLOUD` region.
+- **Surface regions**: S-7a sectors group into the named regions below; every sector record carries its `region_id`. IDs are stable across saves (`11` F-12 keys depletion pools to them; a rebalanced sector list keeps orphaned IDs' depleted state).
+- **Vertical special regions**: Europa's sub-ice ocean and Titan's sea floor are distinct regions reachable only via their megaproject content (AN-33/34 chain; `04` M-3f sea ops).
+
+Each region carries exactly ONE exoticism value X — never a range (`11` §3.7 requirement). Values follow `11` §3.7's class table verbatim; rows marked ⁺ are 03-assigned extensions of that ladder (bodies the representative table omits), placed on the same Act/hostility gradient and capped below the X = 14 ocean class.
+
+| Body | region_id : member sectors / span | X |
+|---|---|---|
+| Earth | EAR-ORB-LEO : ≤ 2,000 km · EAR-ORB-HIGH : high orbit + cislunar · EAR-SURF : all 12 sectors | 1 · 1.5 · 1 |
+| Moon | MOO-ORB : orbit · MOO-NEAR : Tranquillitatis, Procellarum, Imbrium, Taurus-Littrow, Aristarchus, Marius Hills, Highlands Near N/S, Tycho · MOO-FARPOLE : Shackleton, Cabeus PSR, N-Pole PSR, Far-side Highlands, SPA Basin | 2 · 2 · 4 |
+| Mercury⁺ | MER-ORB : orbit · MER-SURF : 7 non-PSR sectors · MER-PSR : Borealis-N, Kandinsky-N, South PSR | 6 · 7 · 8 |
+| Venus | VEN-ORB : orbit · VEN-CLOUD : 4 cloud bands · VEN-SURF : all 8 surface sectors | 6 · 6 · 8 |
+| Mars | MAR-ORB : orbit · MAR-SURF : all 18 sectors | 5 · 5 |
+| Phobos / Deimos | PHO-SURF : 3 sectors · DEI-SURF : 2 sectors (dock space included) | 5 · 5 |
+| NEAs (C/S-type) | one SURF region per body: Bennu, Ryugu, Itokawa, Eros, Apophis + procedural C/S rolls | 4 |
+| NEAs (M-type) | one SURF region per procedural M-type | 5 |
+| Main belt | CER-ORB · CER-SURF (8 sectors) · VES-SURF (6) · PSY-SURF (5) · HYG-SURF · one region per procedural belt body | 6 (all) |
+| Comets | one NUC region per nucleus: 67P, Halley, ~10 procedural | 7 |
+| Jupiter | JUP-ATM : probe band (k = 40 milestone key) | 9 |
+| Io / Europa | IO-SURF (8 sectors) · EUR-SURF (8); each moon's ORB inherits its X | 10 |
+| Europa ocean | EUR-OCEAN : sub-ice (melt-probe megaproject, AN-34) | 14 |
+| Ganymede / Callisto | GAN-SURF (10) · CAL-SURF (10); ORBs inherit | 8 |
+| Saturn | SAT-ATM : probe band · SAT-RINGS : ring zones A/B/C (§4.4.10) | 10 · 10 |
+| Titan | TIT-ORB · TIT-SURF : land sectors · TIT-SEAS : Kraken/Ligeia/Punga + 2 polar lake districts | 10 · 11 · 11 |
+| Titan sea floor | TIT-SEAFLOOR : beneath the SEA sectors (submersible content) | 14 |
+| Enceladus | ENC-SPT : 4 tiger-stripe sectors · ENC-NORTH : cratered north + sub-Saturn plains | 12 · 10 |
+| Uranus system⁺ | URA-ATM : probe band · MIR-SURF (4) · TIA-SURF (4) · OBE-SURF (3) | 11 · 12 · 12 · 12 |
+| Neptune system⁺ | NEP-ATM : probe band · TRI-SURF : 6 sectors | 12 · 13 |
+| Pluto system⁺ | PLU-SURF : 6 sectors · CHA-SURF : 4 sectors | 13 · 13 |
+| KBOs⁺ | one SURF region per body (Arrokoth, Eris, ~8 procedural) — the ×2 "pristine" multiplier (§4.4.13) applies to SurveyData GB, never to X | 13 |
+
+Totals cross-check against `11` §6's act income bands: Act 1 X = 1–1.5 (Earth), Act 2 X = 2–4 (Moon), Act 3 X = 4–5 (Mars/NEAs), Act 4 X = 6–8 (belt, Venus, Mercury⁺), Act 5 X = 8–14 (Jupiter→Saturn ladder, oceans at the 14 cap) — the ⁺ rows extend, but never reorder, that gradient.
 
 ## 5. Player Interaction & UI
 
@@ -587,7 +628,7 @@ Design rule: each Act's flagship body teaches the mechanic the next Act assumes 
 - `08-life-support-crew.md`: radiation field functions S-8a/b/c (ambient values; 08 owns shielding & biology), SPE warning timers, perchlorate toxicity flag (Mars).
 - `09-power-thermal.md`: I(t) insolation per S-6a — on Mars f_atm IS f_dust(τ), one attenuation path counted exactly once — plus f_ecl and PSR/PEL overrides per the S-6b single rule; panel soiling is a separate S-9 multiplier. Sky/sink temperatures (T_surf S-6c; deep-space 4 K; Venus surface 737 K radiator wall).
 - `10-vehicles.md`: terrain class/slope_sigma/rock_abundance per sector, atmosphere ρ for flight (Titan/Venus/Mars flyers), terminator-chase speed bound (Mercury 3.6 km/h).
-- `11-research-tech.md`: SurveyData yields (§4.6), anomaly unlock effects (§4.5), Europa-ocean and He3 gated content tags.
+- `11-research-tech.md`: science-region partition + per-region exoticism X (§4.7 — 11 §3.1/§3.7 consume; stable region_ids for its Science pools), the canonical anomaly GB→SCI conversion 2 SCI/GB (§4.6, co-signed 11 §3.5), SurveyData yields (§4.6), anomaly unlock effects (§4.5), Europa-ocean and He3 gated content tags.
 - `12-gameplay-economy-ui.md`: heritage-zone rules, Prestige rewards, contract seeds (sample return, Hubble boost, Venera recovery), map-UI content (§5).
 - `13-architecture.md`: entity schemas implied by S-1/S-7a records, anomaly persistence, event calendar serialization.
 

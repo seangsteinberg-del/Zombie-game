@@ -8,7 +8,7 @@ This document specifies how the player designs, validates, assembles, and operat
 - The **builder math**: total mass, wet/dry mass, center of mass (COM), 2D thrust-vector alignment, live Tsiolkovsky delta-v readout, per-stage TWR, and burn times. Every formula a programmer needs is in §3.
 - A **simplified structural-integrity model**: joint-graph axial load checks, g-limits, a max-Q rule, and a q-alpha rule for atmospheric ascent.
 - **Station mechanics**: spin-gravity sections with real comfort limits, pressurized volume per crew, docking topology, and station-keeping budgets.
-- A **catalog of 110 parts** (§4) with mass, cost, tier, and stats, including inflatable habitats (TransHab anchor) and ISRU-manufactured variants (BasaltFiber/IronSteel printed structure).
+- A **catalog of 113 parts** (§4) with mass, cost, tier, and stats, including inflatable habitats (TransHab anchor) and ISRU-manufactured variants (BasaltFiber/IronSteel printed structure). Engine, power and thermal entries are **builder stubs**: their performance stats are republished verbatim from the owning documents (02-propulsion.md, 09-power-thermal.md) and may not diverge.
 - **Four fully worked example builds** with complete mass budgets and computed delta-v (§4.11).
 - **Three construction flows**: Earth launch (pad and fairing constraints), orbital assembly, and ISRU manufacture (interfacing 05-industry-logistics.md).
 
@@ -20,20 +20,20 @@ Ownership boundaries: engine physics and propellant chemistry beyond catalog sta
 
 Every part and rule below names its anchor. Key anchors:
 
-- **Chemical engines**: SpaceX Merlin 1D (845 kN SL, Isp 282 s SL / 311 s vac, ~470 kg); Merlin Vacuum (981 kN, 348 s); SpaceX Raptor 2 (~2,256 kN SL, Isp ~327 s SL / ~350 s vac, ~1.6 t); Raptor Vacuum (Isp ~378 s); Aerojet RL10B-2 (110.1 kN, Isp 465.5 s, 277 kg); RS-25 (1,860 kN SL / 2,279 kN vac, Isp 366/452.3 s, 3,177 kg); AJ10-118K storable (43.4 kN, Isp ~320 s); Aerojet R-4D RCS (490 N, Isp ~312 s, 3.76 kg); Star 48B solid kick stage (2,141 kg gross / 2,010 kg propellant, Isp 292.1 s, 84.1 s burn → ~68 kN mean thrust); GEM 63 SRB (~49 t gross / ~44 t propellant, Isp ~279 s vac).
-- **Nuclear-thermal**: NERVA program (XE' ground-tested 1969 at ~246 kN; delivered Isp ~710 s — 841 s was the ideal vacuum Isp excluding turbine-bleed and cooling losses; ~900 s is the modern NTP design goal); NASA Mars Design Reference Architecture 5.0 (three 111 kN / 25 klbf NTR engines, Isp ~900 s, LH2 propellant); modern BWXT/NASA NTP studies target engine T/W ≈ 3-3.5.
-- **Electric propulsion**: NSTAR (2.3 kW, 92 mN, Isp 3,120 s — flew on Deep Space 1, Dawn); NEXT-C (6.9 kW, 236 mN, Isp 4,190 s — flew on DART); AEPS Hall thruster (12.5 kW, ~589 mN, Isp ~2,800 s — Gateway PPE); X3 nested Hall (5.4 N at 102 kW, lab-demonstrated 2017); VASIMR VX-200 (~5.7 N at 200 kW, Isp ~5,000 s, lab) [T3]; lithium MPD thrusters (100-500 kW lab demos, Princeton LiLFA / MAI; the MAI 500 kW Li-MPD produced ~12.5 N at ~45-60% efficiency) [T3].
+- **Chemical engines** (catalog stats canonical in 02-propulsion.md §4.2): SpaceX Merlin 1D (845 kN SL / 914 kN vac, Isp 282/311 s, 470 kg); Merlin Vacuum (981 kN, 348 s); SpaceX Raptor 2 (2,256 kN SL / 2,394 kN vac, Isp 327/347 s, 1.63 t); Raptor Vacuum (2,530 kN, 380 s [est]); Aerojet RL10C-1 (101.8 kN, Isp 449.7 s, 190 kg); RS-25 (1,860 kN SL / 2,279 kN vac, Isp 366/452 s, 3,177 kg); Shuttle OMS AJ10-190 (26.7 kN, Isp 316 s); Apollo SPS AJ10-137 (91 kN, Isp 314 s); SuperDraco (73 kN vac, 243 s [est]); SpaceX Draco RCS (400 N, Isp 300 s, 22 kg block); Star 48B solid kick stage (2,137 kg gross / 2,011 kg propellant, 87 s burn → 66 kN mean thrust; catalog Isp 286 s vac vs the published 292.1 — 02's conservative derate); GEM 63 SRB (≈49.3 t gross / 44.1 t propellant, Isp 245/275 s, 94 s burn, 1,265 kN average).
+- **Nuclear-thermal** (canonical in 02 §4.3): NERVA program (XE' ground-tested 1969 at ~246 kN; delivered Isp ~710 s — 841 s was the ideal vacuum Isp excluding turbine-bleed and cooling losses; 02's NTR-246 ships 247 kN / 850 s at 12.5 t with modern composite fuel); SNRE (Schnitzler/Borowski Small Nuclear Rocket Engine, ~73 kN / ~900 s, the DRACO-class baseline behind 02's NTR-73); modern BWXT/NASA NTP studies target engine T/W ≈ 3 (NTR-73 hits 3.1, NTR-246 an honest 2.0).
+- **Electric propulsion** (canonical in 02 §4.4): NSTAR (2.3 kW, 92 mN, Isp 3,120 s — flew on Deep Space 1, Dawn); SPT-100 Hall (1.35 kW, 83 mN, Isp 1,600 s — flown since 1994); NEXT-C (6.9 kW, 236 mN, Isp 4,190 s — flew on DART); AEPS Hall thruster (12.5 kW, 590 mN, Isp 2,800 s — Gateway PPE); X3 nested Hall (5.4 N at ~102 kW, lab-demonstrated 2017; catalog 100 kWe, Isp 2,000 s, η 0.52) [T3]; VASIMR VX-200 (~5.7 N at 200 kW, Isp 4,900 s, lab) [T3]; applied-field MPD thrusters (100-500 kW lab demos, NASA Lewis / Princeton LiLFA / MAI; catalog MPD-200 conservatively ships 4.6 N at 200 kWe on Argon, η 0.45) [T3].
 - **Habitats**: NASA TransHab (8.2 m inflated diameter, ~340 m³, ~13.2 t); Bigelow BEAM (1.4 t, 16 m³, flown on ISS); Bigelow B330 (~20 t, 330 m³, engineering-complete design); ISS Destiny lab (14.5 t, ~106 m³); Quest airlock (6.1 t); ISS Cupola (1.8 t).
 - **Habitable volume**: NASA long-duration habitability studies converge on ≈25 m³ net habitable volume per crewmember as the long-duration minimum; ISS provides ~64 m³/crew at 6 crew.
 - **Spin gravity comfort**: classic NASA-era criteria (Hill & Schnitzer 1962; 1970s Stanford/NASA Ames summer studies): spin rate ≤ 4 rpm for adapted crews (≤ 2 rpm without adaptation), head-to-foot gravity gradient ≤ 8%, rim speed ≥ 6 m/s to keep Coriolis effects tolerable. Later research (Globus & Hall, 2017) argues higher rates are trainable; we keep the conservative limits and hard-cap at 6 rpm.
 - **MMOD protection**: ISS Whipple shields — thin sacrificial aluminum bumper (≈2 mm = 5.4 kg/m²) at 10-30 cm standoff, vaporizing impactors before the pressure wall; "stuffed" Whipple adds Nextel ceramic-fabric/Kevlar layers (ISS US Lab shielding ≈ 20-30 kg/m² total). In-game BasaltFiber cloth is the ISRU analog of Nextel ceramic fabric.
 - **Docking**: International Docking System Standard / NASA Docking System (androgynous, 800 mm passage, ~330 kg); ISS Common Berthing Mechanism (1.27 m square hatch, ~0.2-0.3 t); Canadarm2 (17.6 m reach, ~1.8 t, handles up to 116 t).
 - **Ascent loads**: Space Shuttle throttled down to hold max-Q near ~33 kPa (~700 psf); modern launchers see 25-40 kPa. Typical structural q·α (dynamic pressure × angle of attack) envelopes are ~3,000-4,500 psf·deg ≈ 145-215 kPa·deg.
-- **Station keeping**: ISS at ~400 km expends roughly 5-25 m/s/yr of reboost delta-v depending on solar activity.
+- **Station keeping**: ISS at ~400 km expends roughly 5-25 m/s/yr of reboost delta-v depending on solar activity; 01-orbital-mechanics.md Table 4.8 charges the canonical fee of 20 m/s/yr at 400 km, inside that bracket.
 - **Tankage fractions**: Falcon 9 stages achieve propellant mass fractions ≈ 0.95+ (≈ 5-6% structure per unit propellant for kerolox/methalox); Centaur III (hydrolox) dry/propellant ≈ 0.11 including engines; dedicated LH2-only tanks with MLI and zero-boiloff cryocoolers run ~13-15% (NASA cryogenic fluid management studies). LH2 bulk density 70.85 kg/m³ is the driver. Dawn stored 425 kg Xenon in a 21.6 kg COPV (≈5%).
 - **Power hardware** (stats canonical in 09-power-thermal.md): Kilopower/KRUSTY fission (1 kWe ≈ 0.4 t; 10 kWe ≈ 1.5 t); MMRTG (110 We, 45 kg); ISS legacy rigid arrays ≈ 30-35 W/kg; Roll-Out Solar Array (ROSA, flight-demonstrated) ≈ 80-100+ W/kg; Shuttle PC17C fuel cell (12 kW peak / 7 kW continuous, ~118 kg).
 - **Venus aerostat**: NASA HAVOC study (Langley, 2014) — entry vehicle deploys a buoyant vehicle at ~50-55 km where Venus pressure and temperature are Earth-like; in 96.5% CO2 atmosphere (mean molecular weight ≈ 43.45 g/mol) even breathable air is a lifting gas (net lift ≈ 35% of H2's per m³; equivalently, ≈33% of the displaced CO2 mass).
-- **Speculative tier anchor**: NASA GRC "Discovery II" fusion-vehicle study (TM-2005-213559): spherical-torus fusion, thrust ≈ 18 kN, Isp ≈ 35,000 s. [SPECULATIVE], T4 only.
+- **Speculative tier anchor**: Princeton Direct Fusion Drive concept studies (PPPL/Princeton Satellite Systems): ~5 MW field-reversed-configuration fusion, thrust ≈ 20 N, Isp ≈ 10,500 s, ~1 MWe exported bus power. [SPECULATIVE], T4 only — republished from 02 §4.6 (DFD-5).
 
 Honest 2D simplifications, stated once here: the vessel cross-section grid abstracts the third dimension (parts carry real volumes/areas as scalar stats); propellant is assumed centered in its tank (no slosh, no COM shift within a tank as it drains — but COM *does* shift between tanks); plane-change maneuvers do not exist (see 01-orbital-mechanics.md).
 
@@ -69,7 +69,7 @@ Each engine i has thrust magnitude `F_i` (kN), mount position `(x_i, y_i)`, thru
   - GREEN (stable): `|τ_net| ≤ 0.5 · τ_ctl` evaluated at both wet COM and dry COM.
   - YELLOW (marginal): `0.5 · τ_ctl < |τ_net| ≤ 0.9 · τ_ctl`.
   - RED (uncontrollable): `|τ_net| > 0.9 · τ_ctl`.
-- Worked example (Build A): two EN-M0 engines at x = ±1 m, 800 kN each, symmetric → τ_net = 0. One engine out: τ = 800 kN × 1 m = 800 kN·m; remaining engine authority = 800 × sin 5° × 14 m = 976 kN·m → flyable, since 800 ≤ 976 — full stop. Note that both the disturbance torque and the gimbal authority scale linearly with throttle, so throttling alone never changes the verdict; what throttling buys is margin against the throttle-independent RCS term. The full engine-out check is `|τ_fail(throttle)| ≤ τ_ctl_remaining(throttle) + τ_rcs`, displayed as the "engine-out" badge.
+- Worked example (Build A): two EN-K1 engines at x = ±1 m, 845 kN each (SL), symmetric → τ_net = 0. One engine out: τ = 845 kN × 1 m = 845 kN·m; remaining engine authority = 845 × sin 5° × 14 m = 1,031 kN·m → flyable, since 845 ≤ 1,031 — full stop. Note that both the disturbance torque and the gimbal authority scale linearly with throttle, so throttling alone never changes the verdict; what throttling buys is margin against the throttle-independent RCS term. The full engine-out check is `|τ_fail(throttle)| ≤ τ_ctl_remaining(throttle) + τ_rcs`, displayed as the "engine-out" badge.
 - RCS pods add torque authority `τ_rcs = Σ F_rcs · L_rcs` independent of main-engine gimbal; CMGs add the values in §4.8.
 
 ### 3.4 Delta-v readout (Tsiolkovsky)
@@ -84,10 +84,10 @@ g0 = 9.80665 m/s² (exact constant, used everywhere)
 - `m0` = full mass of this stage *plus everything above it*; `m1` = m0 − propellant burned by this stage.
 - **Mixed engines in one stage** use the thrust-weighted effective Isp: `Isp_eff = Σ F_i / Σ (F_i / Isp_i)`.
 - **Ambient-pressure Isp** (drives both the sim and the editor's "SL / vac / trajectory-avg" toggle):
-  `Isp(p) = Isp_vac − (Isp_vac − Isp_SL) · (p / 101.325 kPa)` , clamped at p = 101.325 kPa. Example: EN-M0 (298 s SL / 348 s vac) at 50 kPa ambient → 323 s.
-- For first stages the editor also shows a **trajectory-averaged Isp** = `Isp_SL + 0.44 · (Isp_vac − Isp_SL)` (empirical fit to the ascent profile in 01-orbital-mechanics.md; for EN-M0 this gives 320 s). The worked builds in §4.11 use this average and also print the SL/vac bounds.
-- **Electric propulsion**: thrust is power-limited: `F = 2 · η · P_in / (Isp · g0)` (N, with P in W). Catalog η: gridded ion 0.70, Hall 0.65 (nested X3 cluster 0.69), MPD 0.55, VASIMR 0.70 (VX-200 measured thruster efficiency at Isp 5,000 s). **Catalog thrust is authoritative**: the sim back-derives each entry's η = F · Isp · g0 / (2 · P_rated) and holds it constant when power-scaling. If available electrical power (09-power-thermal.md, including 1/d² solar falloff) is below rated, thrust scales proportionally at constant Isp. The dv readout is unchanged (dv is power-independent); the *burn time* readout is what grows.
-- **Burn time**: `t_burn = m_prop / ṁ`, `ṁ = Σ F_i / (Isp_eff · g0)` (kg/s). **ṁ is a per-engine constant**, derived from any *consistent* catalog pair: `ṁ = F_vac / (Isp_vac · g0) = F_SL / (Isp_SL · g0)` (the paired thrust/Isp columns are consistent by construction). Thrust at ambient pressure then follows: **`F(p) = ṁ · g0 · Isp(p)`** — this is the formula the ascent sim and the TWR readout use between the SL and vac columns. Never mix one pressure condition's F with another's Isp (e.g. Build A's 128 s stage-1 burn is 70,000 kg / 547 kg/s with both numbers from the same engine constant; mixing trajectory-average Isp with SL thrust would wrongly give 137 s).
+  `Isp(p) = Isp_vac − (Isp_vac − Isp_SL) · (p / 101.325 kPa)` , clamped at p = 101.325 kPa. Example: EN-K1 (282 s SL / 311 s vac) at 50 kPa ambient → 297 s. (This is 02 §3.3's back-pressure model; Isp_SL entries marked † in 02's catalog are synthetic slopes for vacuum engines, not sea-level operating claims.)
+- For first stages the editor also shows a **trajectory-averaged Isp** = `Isp_SL + 0.44 · (Isp_vac − Isp_SL)` (empirical fit to the ascent profile in 01-orbital-mechanics.md; for EN-K1 this gives 295 s). The worked builds in §4.11 use this average and also print the SL/vac bounds.
+- **Electric propulsion**: thrust is power-limited: `F = 2 · η · P_in / (Isp · g0)` (N, with P in W). Catalog η (02 §4.4, republished): NSTAR 0.61, NEXT 0.70, SPT-100 0.48, AEPS 0.65, X3 0.52 (−0.06 on Argon), MPD 0.45 (Ammonia or Hydrogen −0.05), VASIMR 0.69 (VX-200 at Isp 4,900 s). **Catalog thrust is authoritative**: the sim back-derives each entry's η = F · Isp · g0 / (2 · P_rated) and holds it constant when power-scaling. If available electrical power (09-power-thermal.md, including 1/d² solar falloff) is below rated, thrust scales proportionally at constant Isp. The dv readout is unchanged (dv is power-independent); the *burn time* readout is what grows.
+- **Burn time**: `t_burn = m_prop / ṁ`, `ṁ = Σ F_i / (Isp_eff · g0)` (kg/s). **ṁ is a per-engine constant derived from the vacuum pair** (02 §3.3): `ṁ = F_vac / (Isp_vac · g0)` — e.g. EN-K1: 914,000 / (311 × 9.80665) = 299.7 kg/s. Thrust at ambient pressure then follows: **`F(p) = ṁ · g0 · Isp(p)`** — this is the formula the ascent sim and the TWR readout use between the SL and vac columns; small rounding versus a published SL thrust figure is accepted (02 §4.2 note). Never mix one pressure condition's F with another's Isp (e.g. Build A's 117 s stage-1 burn is 70,000 kg / 599.4 kg/s with both numbers from the same engine constant; mixing the listed SL thrust with the vacuum Isp would wrongly give 126 s).
 
 ### 3.5 Thrust-to-weight ratio
 
@@ -102,7 +102,7 @@ g0 = 9.80665 m/s² (exact constant, used everywhere)
 
 Earth's g_ref equals the g0 constant of §3.4 so the TWR and dv readouts share one constant (no third-decimal QA discrepancies); all other bodies use the surface-gravity values canonical in 03-solar-system.md.
 
-Rules of thumb surfaced in UI: surface launch requires TWR > 1.2 at ignition (warning below 1.3); upper stages ≥ 0.5 recommended; NTR/EP stages may be < 1 (the maneuver planner in 01-orbital-mechanics.md splits low-TWR burns into multiple periapsis passes when `t_burn > 0.1 · T_orbit`).
+Thresholds surfaced in UI (canonical in 02 §3.7 — one threshold set across both builder docs): atmospheric surface launch requires TWR > 1.0 at ignition (hard floor; builder warning W1 below 1.2; recommended 1.3-1.5 on Earth); airless-body liftoff TWR > 1.0 strictly, recommended ≥ 1.8 to limit gravity loss; powered landing requires TWR_local > 1.0 at the touchdown body; upper stages ≥ 0.5 recommended; NTR/EP stages may be < 1 (the maneuver planner in 01-orbital-mechanics.md warns and offers a one-click split into multiple periapsis passes when `t_burn > T_orbit/6` — threshold canonical in 01 §3.7).
 
 ### 3.6 Staging editor rules
 
@@ -111,16 +111,16 @@ KSP-style ordered stage list S0 (first to fire) … Sn, edited by dragging part 
 1. Stage events: `IGNITE(engine)`, `SEPARATE(decoupler)`, `JETTISON(fairing)`, `DEPLOY(chute/panel/radiator/inflatable)`.
 2. A decoupler's separation must split G into exactly two connected components; otherwise validation error E3 ("separation would not detach anything / would orphan parts").
 3. dv/TWR are computed bottom-up: stage k's `m0` includes all stages > k; jettisoned mass (fairings, spent boosters) leaves the ledger at its event.
-4. An engine may not fire if its exhaust column (the grid cells in a `w_engine`-wide column below its nozzle, out to 6 m, where `w_engine` = the engine part's footprint width w from its §4.3-4.5 Size column) intersects a same-vessel part that has not yet separated — error E5 "plume impingement". RCS quads are exempt (per-nozzle thrust < 1 kN; see §4.5). Exception: the **vented interstage** part (ST-IS-V, anchor: Starship hot-staging ring) permits firing through it.
+4. An engine may not fire if its exhaust column (the grid cells in a `w_engine`-wide column below its nozzle, out to 6 m, where `w_engine` = the engine part's footprint width w from its §4.3-4.5 Size column) intersects a same-vessel part that has not yet separated — error E5 "plume impingement". RCS quads are exempt (surface-mount attitude blocks, per-nozzle thrust ≤ 2 kN; see §4.5). Exception: the **vented interstage** part (ST-IS-V, anchor: Starship hot-staging ring) permits firing through it.
 5. Solid motors cannot throttle or shut down; once lit they burn to depletion (warning W4 if a solid is staged above a liquid stage that ignites later).
 6. **Acceleration limiter**: autopilot throttles to keep `a ≤ 4 g` with crew aboard, `a ≤ 6 g` uncrewed (player-overridable down to part limits, §3.8). The selected limiter is saved with the design, and the §3.8(a) joint check (validation E6) always evaluates at it. Solids ignore the limiter (their thrust curve is fixed).
 
 ### 3.7 Propellant flow and crossfeed
 
-- **Mixture ratio (O/F) is an engine property** (catalog column, §4.3): methalox 3.6:1 Oxygen:Methane (Raptor), kerolox 2.36:1 Oxygen:RP-1* (Merlin), hydrolox 6.0:1 Oxygen:Hydrogen (RL10). Bipropellant *tanks* (TK-ML-*) are merely a packaging convenience pre-loaded at the matching ratio; engines do not require them. (*RP-1 is represented as the canonical resource Carbon-derived `Polymers`? No — see Open Question Q2; v1 ships kerolox as a sealed "Kerolox" tank filled only at Earth, avoiding a new resource.)
+- **Mixture ratio (O/F) is an engine property** (catalog column, §4.3): methalox 3.6:1 Oxygen:Methane (Raptor), kerolox 2.36:1 Oxygen:RP1 (Merlin), hydrolox 6.0:1 Oxygen:Hydrogen (RL10), storables 1.65:1 NTO:MMH (AJ10/Draco). **RP1, NTO and MMH are canonical-resource extensions declared by 02 §4.1** (exact spellings; separate tracked resources, Earth-import at T0-T1; late ISRU synthesis routes are 04's open question; 12 must carry price rows for all three). Bipropellant *tanks* (TK-ML-*, TK-KL-*, TK-HYP-*) are merely a packaging convenience pre-loaded at the matching ratio; engines do not require them.
 - **Drain rule**: an engine draws each of its propellant resources — at its O/F mass split, for bipropellants — from **all tanks within its own stage holding that resource** that are graph-connected through structural joints, proportionally across those tanks (keeps COM drift gentle). A hydrolox engine fed by separate TK-LOX-M and TK-LH2-M tanks therefore draws 6 kg Oxygen per 1 kg Hydrogen from them, exactly as it would from one combined tank. If either resource of the pair exhausts first, the engine **flames out** (§8.16); the editor's dv readout counts only *burnable* propellant (limited by the scarcer resource at the engine's O/F).
-- **Crossfeed** between stages or across docking ports requires the **FD-1 fuel duct** (T1) or a fluid-transfer docking port (DK-L); this enables asparagus staging and depot refueling. Tanks connected through ducts/fluid berths form one **feed group**. Within a feed group, tanks drain in **descending stage number** — the soonest-separated stage's tanks empty first (this ordering is what makes asparagus staging work) — proportionally among tanks of the same stage. The editor exposes a per-tank **priority integer** that overrides the default order (higher priority drains first). Duct flow caps (FD-1: 1 t/min cryogenic, 5 t/min storable; 05-industry-logistics.md owns depot transfer rates) are enforced in flight: if connected engines demand more than the ducts can deliver, those engines throttle down to the deliverable flow — surfaced at design time as warning W9.
-- **Solid motors** (EN-SRB, EN-KICK) are sealed single-use parts: their propellant is internal part mass, not a tracked canonical resource. They cannot be refilled, drained, or crossfed, and cannot be ISRU-printed below the ENGINE-class tier (§3.13). (Kerolox is the other sealed case — Q2.)
+- **Crossfeed** between stages or across docking ports requires the **FD-1 fuel duct** (T1) or a fluid-transfer docking port (DK-L); this enables asparagus staging and depot refueling. Tanks connected through ducts/fluid berths form one **feed group**. Within a feed group, tanks drain in **descending stage number** — the soonest-separated stage's tanks empty first (this ordering is what makes asparagus staging work) — proportionally among tanks of the same stage. The editor exposes a per-tank **priority integer** that overrides the default order (higher priority drains first). Duct flow caps (FD-1: 1 t/min cryogenic, 5 t/min storable; depot/coupler transfer rates are owned by 02-propulsion.md §3.13 — PTC-200/300L — and adopted by 05-industry-logistics.md's ops model) are enforced in flight: if connected engines demand more than the ducts can deliver, those engines throttle down to the deliverable flow — surfaced at design time as warning W9.
+- **Solid motors** (EN-SRB, EN-KICK) are sealed single-use parts: their propellant is internal part mass, not a tracked canonical resource (02 §4.1: solid propellant is NOT a resource). They cannot be refilled, drained, or crossfed, and cannot be ISRU-printed below the ENGINE-class tier (§3.13).
 - **Cryogenic storage**: phase state is a property of the containing tank, not the resource — the canonical resource names are simply Hydrogen, Oxygen, Methane. Any of them stored in a tank flagged *cryogenic* boils off unless the tank has zero-boiloff (ZBO) hardware; boiloff rates and ZBO power draw (≈5 kWe per 60 t LH2 class tank) are owned by 02-propulsion.md / 09-power-thermal.md. Tanks flagged "ZBO" in the catalog include the cryocooler mass but need the power. High-pressure gas bottles (TK-N2, RCS feed gas) are not cryogenic: no boiloff, lower stored density.
 
 ### 3.8 Structural integrity (simplified, deterministic)
@@ -140,7 +140,7 @@ The editor evaluates L_j(t) across each stage's burn using the §3.7 propellant-
 
 `L_rated` = min of the two parts' axial ratings. Explicit catalog load ratings (`axial` stats in §4.1, port ratings in §3.11/§4.8, spin-arm and tether ratings in §4.8) override; every other part defaults **by material class (§3.13)**: STRUCT, TANK, HAB, and ENGINE stack nodes 1,200 kN; ELEC, SHIELD, MECH, and all deployables (arrays, radiators, dishes, chutes) 300 kN; radial joints 25% of the smaller part's rating. **Engine mounts**: an ENGINE-class part's stack node is rated `max(1,200 kN, 1.25 × rated vacuum thrust)`, and the engine-to-stack joint uses the *engine's* node rating (the thrust-takeout structure ships with the engine), so stack-mounted engines pass at any throttle by construction; radially-mounted engines get no such waiver (the 25% rule applies, and the editor flags them).
 
-Example (Build A — uncrewed, limiter deliberately set to 5 g; full walkthrough in §4.11a): m_above at the interstage = 21.61 t. Unclamped burnout acceleration would be 1,868 kN / 29.11 t = 6.5 g, so the limiter clamps a at 49.03 m/s² → L = 21.61 × 49.03 = 1,060 kN ≤ 1,200 kN, PASS (12% margin). At the 6 g uncrewed default the same joint would see 1,272 kN → E6: the limiter setting is part of the design, and E6 always evaluates at the selected limiter. On-pad: 21.61 × 9.80665 = 212 kN, PASS.
+Example (Build A — uncrewed, limiter deliberately set to 5 g; full walkthrough in §4.11a): m_above at the interstage = 19.31 t. Unclamped burnout acceleration would be 1,828 kN / 25.25 t = 72.4 m/s² (7.4 g), so the limiter clamps a at 49.03 m/s² → L = 19.31 × 49.03 = 947 kN ≤ 1,200 kN, PASS (21% margin). At the 6 g uncrewed default the same joint would see 19.31 × 58.84 = 1,136 kN — legal, but only a 5% margin; the limiter setting is part of the design, and E6 always evaluates at the selected limiter. On-pad: 19.31 × 9.80665 = 189 kN, PASS.
 
 **(b) Max-Q rule (atmospheric flight).** Dynamic pressure `q = ½ · ρ(h) · v²` (kPa; ρ from the atmosphere model in 03-solar-system.md). Every *exposed* part (not enclosed by an intact fairing or cargo bay) has a rating `q_max`:
 
@@ -214,7 +214,7 @@ Design consequence baked into the catalog: a 1 g ring needs r ≈ 56 m even at t
 **Mechanics:**
 - Spin sections attach through the **SP-HUB despun hub** (rotary coupling, anchor: ISS Solar Alpha Rotary Joint ≈ 1.16 t per joint, plus pressurized rotating seal). Docking to a spinning station is only allowed at despun hub ports; EVA is forbidden at ω > 2 rpm.
 - **Balance rule**: the rotating subassembly's COM must lie within `0.02 · r` of the hub axis, else wobble (warning W6; in flight: oscillating stress, −50% docking-port ratings, crew comfort penalty). Counterweights: any mass works — water tanks, cargo, regolith ballast (CG-RB).
-- **Spin-up propellant** (RCS at radius r_t): `m_prop = I · ω / (r_t · Isp · g0)`, with `I = Σ m_i · r_i²` about the hub. Worked example: 200 t of ring mass at r = 56 m → I = 6.27×10⁸ kg·m²; ω(4 rpm) = 0.419 rad/s; a pair of R-4D quads (980 N total) at the rim: torque 54.9 kN·m, spin-up time 4,790 s (1.3 h), propellant 1,533 kg Hypergols. The SP-HUB's electric counter-torque motor can instead spin up against a counter-rotating section or flywheel for zero propellant (slower: motor torque 10 kN·m).
+- **Spin-up propellant** (RCS at radius r_t): `m_prop = I · ω / (r_t · Isp · g0)`, with `I = Σ m_i · r_i²` about the hub. Worked example: 200 t of ring mass at r = 56 m → I = 6.27×10⁸ kg·m²; ω(4 rpm) = 0.419 rad/s; a pair of RCS-HYP quads (=RCS-D400 Draco, one tangential nozzle each, 800 N total) at the rim: torque 44.8 kN·m, spin-up time 5,864 s (1.6 h), propellant 1,595 kg of storables (993 kg NTO + 602 kg MMH at O/F 1.65, Isp 300 s). The SP-HUB's electric counter-torque motor can instead spin up against a counter-rotating section or flywheel for zero propellant (slower: motor torque 10 kN·m).
 
 ### 3.11 Pressurized volume, crew capacity, docking topology
 
@@ -225,33 +225,31 @@ Design consequence baked into the catalog: a 1 g ring needs r ≈ 56 m even at t
   - Exceeding the applicable limit is emergency-only and triggers the 08-life-support-crew.md morale-penalty tiers (heaviest below 10 m³/crew).
 - Stations/ships with crew additionally require (validation warnings, not errors): ≥ 1 airlock for EVA capability; ≥ 1 docking port per 4 crew for logistics; a radiation storm shelter beyond LEO (W3; 08 owns dose math). **Shelter rule (implementable W3 check)**: HB-STORM qualifies outright; any other module qualifies iff **every footprint edge cell is adjacent to (or covered by radial shield panels) parts whose summed areal densities reach ≥ 500 kg/m² across that edge**, where a part's areal density = part mass including contents / part hull area. Water counts. Worked example: a full TK-H2O is 2.1 t over hull area 2·(1+2) = 6 m² → 350 kg/m², so a single water-tank layer is *not* enough — two stacked layers (700 kg/m²) qualify.
 - **Docking topology**: docking edges join vessel graphs. Ports are androgynous within a size class (IDSS anchor); sizes must match: S (0.8 m passage), B (1.27 m), L (3.0 m structural berth). Closed loops are allowed only through L-class berths (rigidized into one physics body; 13-architecture.md merges bodies on dock).
-- **Port load ratings**: burns while docked check the §3.8(a) joint formula across the docking joint with `L_rated`: DK-S 60 kN, DK-B 150 kN, DK-L 800 kN. Example: Build B's NTR stage pushing its 30 t payload through a DK-L at burnout (a = 5.32 m/s²) → 160 kN ≤ 800 kN, PASS. Pushing the same payload through a DK-S would fail (160 > 60) — tugs must pull gently or berth structurally.
+- **Port load ratings**: burns while docked check the §3.8(a) joint formula across the docking joint with `L_rated`: DK-S 60 kN, DK-B 150 kN, DK-L 800 kN. Example: Build B's NTR stage pushing its 30 t payload through a DK-L at burnout (a = 3.42 m/s²) → 103 kN ≤ 800 kN, PASS. Pushing the same payload through a DK-S would fail (103 > 60) — tugs must pull gently or berth structurally.
 - **Docking capture limits** (else bounce-off): closing speed ≤ 0.1 m/s (S/B) or ≤ 0.05 m/s (L), lateral offset ≤ 0.1 m, approach angle ≤ 5°. Magnetic soft-capture (T1 port upgrade) doubles these.
 
 ### 3.12 Station keeping
 
-Drag makeup for stations in low orbits (atmosphere model from 03-solar-system.md):
+Above each body's atmosphere interface (01 §3.11), drag is **not** integrated: stations and other parked assets pay 01-orbital-mechanics.md's **station-keeping fee** (Table 4.8 — the single canonical curve; 01 owns it), auto-deducted as RCS delta-v by the Stationkeeping Manager program (01 §4.7):
 
-```
-a_drag = Cd · A_drag · ρ · v² / (2 m)      Cd = 2.2
-dv_year = a_drag · 3.156×10⁷ s
-```
+| Location | Fee (m/s per year, 01 Table 4.8) |
+|---|---|
+| LEO 200-300 km | 25 |
+| LEO 300-500 km | piecewise log-linear through (300 km: 25) · (400 km: 20 — ISS anchor) · (500 km: 2) |
+| LEO > 500 km, MEO, GEO | 2 (flat background fee) |
+| Sun-Earth L1/L2 slot | 4 |
+| L4/L5 slots | 0 |
+| Low orbits at Moon/asteroids | 5 (mascon / lumpy-gravity stand-in) |
 
-`A_drag` = Σ exposed-part frontal areas + deployed areas of arrays/radiators/dishes (catalog "deployed area" stats, §4.6/§4.9 — arrays dominate). **Frontal-area default**: `w × 1 m²` per exposed stack part (the 2D grid's unit depth convention), with catalog overrides where listed; Cd = 2.2 for everything (free-molecular, tumbling-average). The same per-part Cd·A table is exported to 01-orbital-mechanics.md for the ascent-drag integration (§7). Representative table for a 200 t station with A_drag = 1,000 m² at Earth (mean solar activity):
+The §2 ISS anchor (5-25 m/s/yr observed, solar-cycle dependent) brackets the canonical 20 m/s/yr at 400 km. There is deliberately **no separate ρ·v² station-keeping integration in this doc** — one owner, one curve; honest drag integration happens only below the interface (ascent, entry, aerobraking), where it uses this doc's per-part drag table:
 
-| Altitude | ρ (kg/m³) | dv/year |
-|---|---|---|
-| 300 km | 2×10⁻¹¹ | 204 m/s |
-| 350 km | 7×10⁻¹² | 72 m/s |
-| 400 km | 3×10⁻¹² | 31 m/s |
-| 450 km | 1.5×10⁻¹² | 15 m/s |
-| 500 km | 6×10⁻¹³ | 6 m/s |
+`A_drag` = Σ exposed-part frontal areas + deployed areas of arrays/radiators/dishes (catalog "deployed area" stats, §4.6/§4.9 — arrays dominate). **Frontal-area default**: `w × 1 m²` per exposed stack part (the 2D grid's unit depth convention), with catalog overrides where listed; Cd = 2.2 for everything (free-molecular, tumbling-average). The per-part Cd·A table is exported to 01-orbital-mechanics.md for its drag integration (§7). Deployed areas are therefore still design-relevant: they size the below-interface drag and the §3.9 MMOD exposure, and 01 may re-anchor Table 4.8 against them in a future pass.
 
-(Cross-check: ISS, 420 t and larger area, uses 5-25 m/s/yr — same order.) Above ~600 km Earth, drag is negligible at game timescales. Low lunar orbits are perturbed by mascons — 01-orbital-mechanics.md owns that budget (placeholder 5-30 m/s/yr depending on altitude; frozen orbits exempt). Reboost can come from any docked engine or station thrusters; the resupply burden is the real gameplay cost (05-industry-logistics.md).
+Reboost can come from any docked engine or station thrusters; the resupply burden is the real gameplay cost (05-industry-logistics.md). Fee propellant low → alarm (01 §4.7).
 
 ### 3.13 Construction flows
 
-**(1) Earth launch.** Vessels built at a pad must pass: liftoff TWR > 1.2, max-Q/q·α checks, and pad class limits:
+**(1) Earth launch.** Vessels built at a pad must pass: liftoff TWR > 1.0 (02 §3.7 hard floor; W1 warns below 1.2, recommended 1.3-1.5), max-Q/q·α checks, and pad class limits:
 
 | Pad | Max liftoff mass | Max stack height | Availability |
 |---|---|---|---|
@@ -283,12 +281,13 @@ Catalog prices are baseline 2049 hardware costs in $M; 12-gameplay-economy-ui.md
 
 ### 3.15 Atmospheric entry heating
 
-Entry/aerocapture trajectory integration and corridor planning are owned by 01-orbital-mechanics.md; this section owns what heating does to parts, and the catalog supplies the stats 01 needs (shield diameter, q̇_max, ablator mass, protected column — see §7 Provides).
+Entry/aerocapture trajectory integration, corridor planning, **the heating-model constants, and the TPS class table are owned by 01-orbital-mechanics.md** (§3.11 and Table 4.5, which 01 declares binding for this doc's part stats); this section owns what heating does to parts, and the catalog supplies the stats 01 needs (shield diameter, TPS class, ablator mass, protected column — see §7 Provides).
 
-- **Stagnation heat flux** (Sutton-Graves, SI units): `q̇ = k · sqrt(ρ / r_n) · v³` [W/m²], with `k = 1.7415×10⁻⁴` (kg^0.5/m), ρ(h) from 03-solar-system.md, v = speed relative to the rotating atmosphere, and `r_n` = effective nose radius = half the footprint width (w/2, m) of the foremost part along the velocity vector. Sanity anchor: LEO entry at 7,800 m/s, ρ = 3×10⁻⁴ kg/m³, r_n = 1.85 m → q̇ ≈ 1.0 MW/m².
-- **Per-part rating `q̇_max`**: default **0.5 MW/m²** for every exposed part (survives high-altitude skip heating, not entry). Heat shields and aeroshells (UT-HS3/5, AR-SHELL; integral capsule shields on HB-CAP2/CAP4) are rated **10 MW/m²** while ablator remains (PICA-class; Stardust saw ~12).
-- **Protection geometry** (the mirror image of the E5 plume rule): a shield **protects every part whose footprint lies within the shield's w-cell-wide column behind it** (away from the velocity vector). The vessel must hold the shield within ±10° of the velocity vector; outside that cone, trailing parts are treated as exposed (in-flight warning). Parts inside an intact fairing or cargo bay are protected by it up to the *fairing's* 0.5 MW/m² rating (fairings are not entry shields).
-- **Ablator budget**: a shield loses ablator mass at `ṁ_abl = q̇ · A_shield / h_abl`, with `h_abl = 150 MJ/kg` effective heat of ablation (PICA-class; re-radiated fraction included). Catalog ablator masses: UT-HS3 0.30 t, UT-HS5 0.55 t, AR-SHELL 0.90 t, HB-CAP2 0.20 t, HB-CAP4 0.35 t. A depleted shield reverts to the 0.5 MW/m² default — multi-pass aerocapture draws down the same budget as entry.
+- **Stagnation heat flux** (Sutton-Graves, 01 §3.11): `q̇_conv = k · sqrt(ρ / r_n) · v³` [W/m²], with k per atmosphere (01 owns: k_air = 1.7415×10⁻⁴ for Earth and N2 bodies incl. Titan; k_CO2 = 1.90×10⁻⁴ for Mars/Venus; H2/He bodies ×2.0 [GAME MODEL]), ρ(h) from 03-solar-system.md, v = speed relative to the rotating atmosphere, and `r_n` = effective nose radius = half the footprint width (w/2, m) of the foremost part along the velocity vector. **Radiative augmentation** (01 §3.11): `q̇_total = q̇_conv · f_rad`, with f_rad = 1 for v ≤ 9,000 m/s and f_rad = min(1 + ((v − 9000)/3000)², 8) above. Sanity anchor: LEO entry at 7,800 m/s, ρ = 3×10⁻⁴ kg/m³, r_n = 1.85 m → q̇_conv ≈ 1.0 MW/m², f_rad = 1.
+- **Per-part flux rating `q̇_max`** (01 Table 4.5): default for every exposed part — bare aluminum structure — is **0.007 MW/m²** (radiative equilibrium ≈ 600 K; aluminum loses most of its strength well below its 933 K melt). Parts built with the T1 **SteelHotStructure** option (+15% dry mass, reusable) rate **0.10 MW/m²**. There is no generous default: skip heating is survivable only when brief and shallow, and any real entry needs TPS. Reusable TPS classes (tiles 0.30, RCC 0.75 MW/m²) fail when `q̇_total > q̇_max` for > 2 s; **ablative classes are checked against q̇_conv only** (convective — Table 4.5's ablative limits are anchored to flown convective values), while q̇_total drives consumption.
+- The catalog's ablative parts (UT-HS3/HS5, AR-SHELL; integral capsule shields on HB-CAP2/CAP4) are **PICA-class** (01 Table 4.5): `q̇_max = 12 MW/m²` checked against q̇_conv, ablator areal density 16 kg/m², capacity 800 MJ/m² (= 16 × 50). Carbon-phenolic (HEEET-class, 30 MW/m²) is the T3 class for Venus deep entry / ice-giant aerocapture parts.
+- **Protection geometry** (the mirror image of the E5 plume rule): a shield **protects every part whose footprint lies within the shield's w-cell-wide column behind it** (away from the velocity vector). The vessel must hold the shield within ±10° of the velocity vector; outside that cone, trailing parts are treated as exposed (in-flight warning). Parts inside an intact fairing or cargo bay are protected by it only up to the *fairing's own* bare-structure limit (0.007 MW/m² — fairings are not entry shields).
+- **Ablator budget** (01 §3.11): a shield loses ablator mass at `ṁ_abl = q̇_total · A_loaded / E_abl`, with **`E_abl = 50 MJ/kg` [GAME TUNING, 01]** (calibrated so Stardust-class entries consume ≈45% of a PICA shield). `A_loaded` = the shield's frontal projected disc area — the same A used in the Cd·A export — with the stagnation-point q̇ applied uniformly over it (deliberately conservative, per 01). Catalog ablator masses are sized at the PICA-class 16 kg/m² (AR-SHELL carries a 32 kg/m² double layup for Venus-entry heat loads): UT-HS3 0.17 t (10.8 m²), UT-HS5 0.31 t (19.6 m²), AR-SHELL 0.63 t (19.6 m²), HB-CAP2 0.05 t (3.1 m²), HB-CAP4 0.11 t (7.1 m²). A depleted shield exposes bare structure (0.007 MW/m²) — multi-pass aerocapture draws down the same budget as entry; the tracked heat-load integral ∫q̇_total dt is the EDL HUD's ablator-% bar (01 §5).
 - Exceeding `q̇_max` destroys the part in flight; the pre-flight entry sim raises **E11**.
 
 ## 4. Content Catalog
@@ -325,62 +324,70 @@ Dry-mass fractions: 6% of propellant for methalox and storables, 5% for kerolox 
 | TK-ML-M | Methalox tank M | T0 | 2×4 | 0.72 | 12 | 0.9 | 9.39 Oxygen + 2.61 Methane | — |
 | TK-ML-L | Methalox tank L | T0 | 3×6 | 2.1 | 35 | 2.2 | 27.4 Oxygen + 7.6 Methane | — |
 | TK-ML-XL | Methalox tank XL | T1 | 4×8 | 4.8 | 80 | 4.5 | 62.6 Oxygen + 17.4 Methane | Starship-class tankage |
-| TK-KL-M | Kerolox tank M (sealed) | T0 | 2×4 | 0.70 | 14 | 0.8 | Earth-fill only (see Q2) | F9 S1 PMF ≈ 0.95 |
+| TK-KL-M | Kerolox tank M | T0 | 2×4 | 0.70 | 14 | 0.8 | 9.83 Oxygen + 4.17 RP1 (2.36:1; RP1 is Earth-import only, 02 §4.1) | F9 S1 PMF ≈ 0.95 |
 | TK-LH2-M | LH2 tank M (ZBO) | T1 | 2×5 | 0.60 | 4.0 | 1.5 | Hydrogen; needs 0.4 kWe ZBO | LH2 70.85 kg/m³; CFM studies |
 | TK-LH2-L | LH2 tank L (ZBO) | T2 | 4×9 | 3.0 | 20 | 5 | Hydrogen; needs 1.7 kWe ZBO | DRA 5.0 LH2 tanks |
 | TK-LOX-M | LOX tank M | T0 | 2×3 | 0.40 | 8.0 | 0.5 | Oxygen | ISRU product storage |
 | TK-CH4-M | Methane tank M | T0 | 2×3 | 0.35 | 7.0 | 0.5 | Methane | — |
-| TK-HYP-S | Storable-prop tank S | T0 | 1×2 | 0.10 | 1.6 | 0.4 | Hypergols (MMH/NTO pair; see Q1) | Apollo SM tankage |
+| TK-HYP-S | Storable-prop tank S | T0 | 1×2 | 0.10 | 1.6 | 0.4 | 1.00 NTO + 0.60 MMH (1.65:1, 02 §4.1; freeze risk below 262 K — heaters per 02) | Apollo SM tankage |
 | TK-XE-S | Xenon COPV S | T0 | 1×1 | 0.025 | 0.42 | 0.6 | Xenon | Dawn: 425 kg Xe / 21.6 kg tank |
 | TK-XE-L | Xenon COPV L | T1 | 2×2 | 0.24 | 4.0 | 2.0 | Xenon | — |
 | TK-H2O | Water tank | T0 | 1×2 | 0.10 | 2.0 | 0.2 | Water; counts as shelter shielding | ISS water bags |
 | TK-N2 | Gas bottle (N2/Ar) | T0 | 1×1 | 0.05 | 0.25 | 0.2 | Nitrogen or Argon @ 30 MPa | COPV |
 | TK-DEPOT | Cryo depot tank | T1 | 5×12 | 14.0 | 200 | 25 | any cryo pair; ZBO 6 kWe; 2× DK-L fluid ports | ULA/NASA depot studies |
 
-### 4.3 Engines — chemical & solid (11)
+### 4.3 Engines — chemical & solid (12)
 
-Size = grid footprint w×h; the §3.6 plume rule's `w_engine` is the part's w, and the nozzle face exposes no attach node (§3.1). O/F = oxidizer:fuel mass ratio the engine draws (§3.7). All §4.3-4.5 entries are material class **ENGINE** (§3.13); engine stack nodes are rated `max(1,200 kN, 1.25 × rated vacuum thrust)` (§3.8a).
+**Stats canonical in 02-propulsion.md §4.2** — the rows below are builder stubs republishing 02's master list verbatim, with `(=02-ID)` aliases (the same pattern §4.6 uses for 09's power parts). This doc adds only grid footprints, attach-node behavior, and baseline $M price tags (12 owns final pricing); thrust, Isp, mass, O/F, gimbal, tier, min-throttle, rated ignitions/burn, ambient-ignition p_max, and reliability all come from 02 (§3.3, §3.6, §3.14) and **may not diverge here**. The full 02 §4.2 catalog is buildable; the rows below are the entries this doc's worked builds and UI presets use. Isp_SL values marked † are 02's synthetic back-pressure slopes for vacuum engines — model data, not a sea-level operating claim.
 
-| ID | Name | Tier | Size | Mass (t) | Thrust SL/vac (kN) | Isp SL/vac (s) | Prop | O/F | Gimbal | Cost | Anchor |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| EN-K1 | "Mule" kerolox SL | T0 | 1×2 | 0.47 | 845 / 914 | 282 / 311 | kerolox | 2.36 | ±5° | 1.5 | Merlin 1D |
-| EN-K1V | "Mule-Vac" kerolox | T0 | 1×3 | 0.60 | — / 981 | — / 348 | kerolox | 2.36 | ±5° | 2.0 | Merlin Vacuum |
-| EN-M2 | "Drayhorse" methalox SL | T0 | 2×3 | 1.6 | 2,256 / 2,530 | 327 / 350 | methalox | 3.6 | ±5° | 2.5 | Raptor 2 |
-| EN-M2V | "Drayhorse-Vac" | T0 | 2×4 | 1.8 | — / 2,300 | — / 378 | methalox | 3.6 | ±3° | 3.0 | Raptor Vacuum |
-| EN-M0 | "Bantam" methalox SL | T0 | 1×2 | 0.9 | 800 / 934 | 298 / 348 | methalox | 3.6 | ±5° | 1.2 | Archimedes-class (Neutron) |
-| EN-M1V | "Bantam-Vac" | T0 | 1×2 | 0.4 | — / 120 | — / 360 | methalox | 3.6 | ±4° | 0.8 | small GG vac methalox (conservative vs RVac 378 s) |
-| EN-H1 | Hydrolox vac engine | T0 | 2×4 | 0.28 | — / 110 | — / 465.5 | hydrolox | 6.0 | ±4° | 12 | RL10B-2 (2.2 m extendible nozzle) |
-| EN-H2 | Reusable hydrolox SL | T1 | 2×4 | 3.18 | 1,860 / 2,279 | 366 / 452.3 | hydrolox | 6.0 | ±8° | 40 | RS-25 |
-| EN-HYP | Storable apogee engine | T0 | 1×1 | 0.10 | — / 43.4 | — / 319 | Hypergols | — (paired commodity, Q1) | ±4° | 3 | AJ10-118K |
-| EN-SRB | Strap-on solid booster | T0 | 2×12 | 5.1 + 44.2 prop | ~1,290 mean (vac) | 252 / 279 | solid (integral, §3.7) | — | fixed | 6 | GEM 63 (≈49 t gross, 94 s burn) |
-| EN-KICK | Solid kick stage | T0 | 1×2 | 0.13 + 2.01 prop | — / ~68 mean | — / 292 | solid (integral, §3.7) | — | spin-stab | 1.5 | Star 48B |
+Size = grid footprint w×h; the §3.6 plume rule's `w_engine` is the part's w, and the nozzle face exposes no attach node (§3.1). O/F = oxidizer:fuel mass ratio the engine draws (§3.7), in canonical resources. All §4.3-4.5 entries are material class **ENGINE** (§3.13); engine stack nodes are rated `max(1,200 kN, 1.25 × rated vacuum thrust)` (§3.8a).
+
+| ID (=02 ID) | Anchor | Tier | Size | Mass (t) | Thrust SL/vac (kN) | Isp SL/vac (s) | Prop (O/F) | Gimbal | Cost |
+|---|---|---|---|---|---|---|---|---|---|
+| EN-K1 (=K-845 "Mule") | Merlin 1D | T0 | 1×2 | 0.47 | 845 / 914 | 282 / 311 | Oxygen+RP1 (2.36) | ±5° | 1.5 |
+| EN-K1V (=KV-981 "Mule-V") | Merlin Vacuum | T0 | 1×3 | 0.63 | — / 981 | 90† / 348 | Oxygen+RP1 (2.36) | ±3° | 2.0 |
+| EN-H1 (=H-102 "Crane") | RL10C-1 | T0 | 2×4 | 0.19 | — / 101.8 | 110† / 449.7 | Oxygen+Hydrogen (6.0) | ±4° | 12 |
+| EN-HYP (=OMS-27 "Vireo") | Shuttle OMS AJ10-190 | T0 | 1×1 | 0.12 | — / 26.7 | 100† / 316 | NTO+MMH (1.65) | ±6° | 2.5 |
+| EN-HYP-L (=SPS-91 "Pelican") | Apollo SPS AJ10-137 | T0 | 1×2 | 0.29 | — / 91 | 60† / 314 | NTO+MMH (1.65) | ±6° | 4 |
+| EN-SRB (=SRM-49 "Aurochs") | GEM 63 strap-on | T0 | 2×12 | 5.2 + 44.1 prop | 1,265 avg (1,663 max) | 245 / 275 | solid (sealed, §3.7); 94 s burn | fixed | 6 |
+| EN-KICK (=SRM-2 "Kestrel") | Star 48B | T0 | 1×2 | 0.126 + 2.011 prop | — / 66 mean | 250 / 286 | solid (sealed, §3.7); 87 s burn | spin-stab | 1.5 |
+| EN-LND (=LND-71 "Ibex") | SuperDraco lander | T1 | 1×1 | 0.12 | 71 / 73 | 235 / 243 | NTO+MMH (1.65) | fixed (cluster diff-throttle) | 2 |
+| EN-H2 (=H-2280 "Shire") | RS-25 | T1 | 2×4 | 3.18 | 1,860 / 2,279 | 366 / 452 | Oxygen+Hydrogen (6.0) | ±10.5° | 40 |
+| EN-M2 (=M-2256 "Drayhorse") | Raptor 2 | T1 | 2×3 | 1.63 | 2,256 / 2,394 | 327 / 347 | Oxygen+Methane (3.6) | ±15° | 2.5 |
+| EN-M2V (=MV-2530 "Drayhorse-V") | Raptor Vacuum | T1 | 2×4 | 2.10 | — / 2,530 | 100† / 380 | Oxygen+Methane (3.6) | ±3° | 3.0 |
+| EN-ML (=ML-24 "Gopher") | Project Morpheus lander | T2 | 1×1 | 0.08 | 22 / 24 | 295 / 320 | Oxygen+Methane (3.6) | ±5° | 1.5 |
+
+The Raptor-class pair (EN-M2/M2V) is **T1, gated by 11's era node PR-02 "Reusable Methalox Heavy Lift"** — Act 1 starts on the T0 kerolox/hydrolox/storable/solid line above (02 §6); the $/kg collapse when PR-02 lands is the designed Act 1 economic arc (11 §4.12, 12 E-2). Any engine this doc needs that 02's master list lacks must be **added to 02's catalog by 02 first, then stubbed here** (precedent: the bimodal NTR-111B, §4.4); see §9 Q1 for the open registration requests (small "Bantam"-class methalox pair, argon AEPS derivative).
 
 ### 4.4 Engines — nuclear thermal (3)
 
-Class **ENGINE** (§3.13); monopropellant Hydrogen (no O/F). Sizes include the integral shadow shield.
+**Stats canonical in 02 §4.3.** Class **ENGINE** (§3.13); monopropellant Hydrogen baseline (no O/F; alternate propellants — Water, Ammonia, CO2 — per 02 §3.10). Masses below include the +1.5 t shadow-shield option where noted. Operating rules from 02 §3.10, binding here: **no NTR operation below 60 km altitude on Earth** (hard regulatory rule — launch NTRs cold, first criticality only in orbit; firing below 60 km over Earth is a mission-ending regulatory event, 02 §8.10 / 12 event system; other bodies unrestricted, p_max 30 kPa permits Mars-ambient ignition but not Titan surface); 45-min restart lockout; crew outside the shadow cone during operation receive a promptly lethal dose (02 §3.10, 08).
 
-| ID | Name | Tier | Size | Mass (t) | Thrust vac (kN) | Isp (s) | Prop | Notes | Anchor |
+| ID (=02 ID) | Anchor | Tier | Size | Mass (t) | Thrust vac (kN) | Isp (s) | Prop | Notes |
+|---|---|---|---|---|---|---|---|---|
+| EN-NTR-S (=NTR-73 "Prometheus") | SNRE (Schnitzler/Borowski), DRACO-class | T2 | 2×5 | 2.4 (+1.5 shadow shield option; Charon flies 3.9) | 73 | 900 | Hydrogen | T/W ≈ 3.1 bare; LANTR option (02): +0.25 t, Isp 645 s, thrust ×2.75 (LOX O/F 3.0) |
+| EN-NTR-L (=NTR-246 "Prometheus-H") | NERVA XE' (modernized) | T2 | 3×6 | 12.5 | 247 | 850 | Hydrogen | T/W ≈ 2.0 (12.5 t game mass with modern composites; historic XE' 18.1 t incl. test hardware); heavy tug core, Act 3-4 |
+| EN-NTR-B (=NTR-111B "Prometheus-B") | Borowski BNTR studies, DRA 5.0 25-klbf class | T3 | 2×5 | 3.1 (+1.5 shadow shield option = 4.6 shielded) | 111 | 900 | Hydrogen | bimodal: +25 kWe idle export (09 ledger), no export while thrusting; mode rules 02 §3.10; no LANTR option |
+
+### 4.5 Engines — electric & RCS (11)
+
+**Stats canonical in 02 §4.4 (EP strings: thruster + PPU + feed, ±10° gimbal mount included) and 02 §4.7 (RCS blocks).** EP thrust scales with available power (§3.4); catalog η republished in §3.4. Class **ENGINE** (§3.13). EP propellants are single-resource (no O/F). RCS quads are 1×1 **surface-mount** parts: they attach radially to any hull edge cell and are exempt from the E5 plume rule (attitude blocks, per-nozzle thrust ≤ 2 kN); RCS wear is total-impulse-based, checked once per maneuver (02 §3.14).
+
+| ID (=02 ID) | Anchor | Tier | Size | Mass (t) | Thrust | Isp (s) | Power | Prop | Cost |
 |---|---|---|---|---|---|---|---|---|---|
-| EN-NTR-S | NTR, 111 kN | T2 | 2×5 | 3.4 | 111 | 900 | Hydrogen | shadow shield incl.; no Earth ops where ambient pressure exceeds 50 kPa, i.e. below ~5.5 km altitude (policy: exhaust is clean H2 but reactor-overflight rules apply, 12 owns; see Q3); T/W ≈ 3.3 | DRA 5.0 25-klbf class; NERVA heritage (XE' 246 kN, ~710 s delivered Isp; 841 s ideal vac) |
-| EN-NTR-L | NTR, 250 kN | T2 | 3×6 | 8.5 | 250 | 900 | Hydrogen | T/W ≈ 3.0 (modern composite fuel; historical NERVA XE was far heavier) | NERVA XE-class thrust |
-| EN-NTR-B | Bimodal NTR | T3 | 2×5 | 4.6 | 111 | 900 | Hydrogen | + 25 kWe electrical in idle mode (09) | bimodal NTR studies (Borowski et al.) |
+| EN-ION-2 (=ION-2 "Mayfly") | NSTAR (DS1, Dawn) | T0 | 1×1 | 0.030 | 92 mN | 3,120 | 2.3 kWe | Xenon | 2 |
+| EN-HALL-1 (=HALL-1 "Wren") | SPT-100 (flown since 1994) | T0 | 1×1 | 0.012 | 83 mN | 1,600 | 1.35 kWe | Xenon | 1 |
+| EN-ION-N (=ION-7 "Dragonfly") | NEXT (flew on DART) | T1 | 1×1 | 0.058 | 236 mN | 4,190 | 6.9 kWe | Xenon | 5 |
+| EN-HALL (=HALL-12 "Harrier") | AEPS/HERMeS (Gateway PPE) | T1 | 1×1 | 0.115 | 590 mN | 2,800 | 12.5 kWe | Xenon | 3 |
+| EN-HALL-X (=HALL-100 "Condor") | X3 nested Hall (UM/AFRL lab, 2017) | T3 | 2×2 | 0.46 | 5.4 N | 2,000 | 100 kWe | Xenon or Argon (η −0.06) | 12 |
+| EN-MPD (=MPD-200 "Albatross") | NASA Lewis / MAI applied-field MPD | T3 | 2×2 | 0.90 | 4.6 N | 4,000 | 200 kWe | Argon (Ammonia η −0.05; Hydrogen η −0.05, Isp +25%) | 15 |
+| EN-VAS (=VAS-200 "Petrel") | VASIMR VX-200 (lab) | T3 | 2×3 | 0.65 | 5.7 N | 4,900 (variable 3,000-12,000, 02 §3.9) | 200 kWe | Argon | 20 |
+| EN-FT (=DFD-5 "Helios") [SPECULATIVE] | Princeton Direct Fusion Drive concept | T4 | 3×8 | 10 | 20 N | 10,500 | self-powered (5 MW fusion; exports 1 MWe bus power, 09) | He3 + Hydrogen [SPECULATIVE] | 2,000 |
+| RCS-N2 (=RCS-N10) | industry cold-gas | T0 | 1×1 surface-mount | 0.008 | 4×10 N | 70 | — | Nitrogen (COPV feed, TK-N2) | 0.1 |
+| RCS-HYP (=RCS-D400) | SpaceX Draco | T0 | 1×1 surface-mount | 0.022 | 4×400 N | 300 | — | NTO+MMH (1.65); ullage-capable | 0.4 |
+| RCS-CH4 (=RCS-M2K) | Starship hot-gas methalox | T1 | 1×1 surface-mount | 0.060 | 4×2,000 N | 270 | — | gaseous Oxygen+Methane from main tanks (no separate RCS propellant) | 0.6 |
 
-### 4.5 Engines — electric & RCS (10)
-
-EP thrust scales with available power (§3.4); per-string masses include PPU and gimbal. Class **ENGINE** (§3.13). EP propellants are single-resource (no O/F). RCS quads are 1×1 **surface-mount** parts: they attach radially to any hull edge cell and are exempt from the E5 plume rule (per-nozzle thrust < 1 kN).
-
-| ID | Name | Tier | Size | Mass (t) | Thrust | Isp (s) | Power | Prop | Cost | Anchor |
-|---|---|---|---|---|---|---|---|---|---|---|
-| EN-ION-N | Ion thruster string | T0 | 1×1 | 0.06 | 236 mN | 4,190 | 6.9 kWe | Xenon | 5 | NEXT-C (flew on DART) |
-| EN-HALL | Hall thruster string | T0 | 1×1 | 0.08 | 589 mN | 2,800 | 12.5 kWe | Xenon | 3 | AEPS (Gateway PPE) |
-| EN-HALL-AR | Argon Hall string | T2 | 1×1 | 0.09 | 480 mN | 2,400 | 12.5 kWe | Argon | 3 | krypton/argon Hall research (Starlink krypton heritage) |
-| EN-HALL-X | Nested Hall cluster | T3 | 2×2 | 0.50 | 5.4 N | 2,650 | 102 kWe | Xenon/Argon | 12 | X3 (lab, 2017) |
-| EN-VAS | Plasma rocket | T3 | 2×3 | 1.2 | 5.7 N | 5,000 | 200 kWe | Argon | 20 | VASIMR VX-200 (lab) |
-| EN-MPD | Lithium MPD thruster | T3 | 2×2 | 0.8 | 12 N | 4,000 | 430 kWe | Xenon (game-simplified; real demos used lithium) | 15 | MAI/Energiya 500 kW Li-MPD (~12.5 N demo); Princeton LiLFA (η ≈ 0.55 per §3.4) |
-| EN-FT | Fusion torch [SPECULATIVE] | T4 | 8×20 | 180 | 18 kN | 35,000 | self-powered (3 GW jet) | Hydrogen (+He3 catalyst, [SPECULATIVE]) | 2,000 | NASA GRC Discovery II study |
-| RCS-N2 | Cold-gas quad | T0 | 1×1 surface-mount | 0.01 | 4×50 N | 68 | — | Nitrogen | 0.1 | industry standard |
-| RCS-HYP | Storable RCS quad | T0 | 1×1 surface-mount | 0.015 | 4×490 N | 312 | — | Hypergols | 0.4 | R-4D |
-| RCS-CH4 | Hot-gas methalox quad | T1 | 1×1 surface-mount | 0.03 | 4×400 N | 280 | — | Methane+Oxygen (gas, O/F 3.6) | 0.6 | Starship hot-gas RCS |
+Note: 02's T4 catalog also lists FFR-43 (fission-fragment probe drive) and the PULSE-D Daedalus megaproject; FFR-43 is probe-scale (10-vehicles.md territory) and PULSE-D is an economy-chain megaproject (12), not a buildable ship part — neither gets a builder stub here.
 
 ### 4.6 Power & thermal (builder entries; performance canonical in 09-power-thermal.md) (10)
 
@@ -388,25 +395,25 @@ All §4.6 entries are material class **ELEC** (§3.13). "Depl. area" = deployed 
 
 | ID | Name | Tier | Size | Mass (t) | Output | Depl. area (m²) | Cost | Anchor |
 |---|---|---|---|---|---|---|---|---|
-| PW-SA-R | Rigid solar wing | T0 | 1×4 stowed | 0.16 | 5 kWe @1 AU BOL (≈31 W/kg) | 60 (≈80 W/m²) | 0.8 | ISS legacy wings |
-| PW-SA-RO | Roll-out array | T0 | 1×3 stowed | 0.25 | 20 kWe @1 AU (80 W/kg) | 100 (≈200 W/m²) | 2 | ROSA / iROSA |
-| PW-BAT | Battery bank | T0 | 1×1 | 0.20 | 40 kWh (200 Wh/kg) | — | 0.5 | Li-ion pack, 2040s |
+| PW-SA-R (=SOL-RW) | Rigid solar wing | T0 | 1×4 stowed | 0.16 | 5 kWe @1 AU BOL (≈31 W/kg, η 0.295 — 09 §4) | 12.5 | 0.8 | ISS legacy wings |
+| PW-SA-RO (=SOL-RO) | Roll-out array | T0 | 1×3 stowed | 0.25 | 20 kWe @1 AU (80 W/kg, η 0.32 — 09 §4) | 46 | 2 | ROSA / iROSA |
+| PW-BAT (=STO-LI) | Battery bank | T0 | 1×1 | 0.20 | 30 kWh (150 Wh/kg Li-ion canon, 09 §3.4/§4; heater 50 W per 0.1 t below 273 K) | — | 0.5 | Li-ion pack, 2040s |
 | PW-FC | Fuel cell | T0 | 1×1 | 0.12 | 7 kWe cont. (Hydrogen+Oxygen→Water) | — | 1 | Shuttle PC17C |
 | PW-RTG | RTG | T0 | 1×1 | 0.045 | 0.11 kWe (Pu238) | — | 15 | MMRTG |
-| PW-KP1 | Fission unit 1 kWe | T1 | 1×2 | 0.40 | 1 kWe (Uranium) | — | 20 | Kilopower/KRUSTY |
+| PW-KP1 | Fission unit 1 kWe | T2 | 1×2 | 0.40 | 1 kWe (Uranium) | — | 20 | Kilopower/KRUSTY (ground-tested 2018, never flown → T2 per 09 §4.3; unlocked by 11's PW-04) |
 | PW-KP10 | Fission unit 10 kWe | T2 | 2×3 | 1.5 | 10 kWe | — | 60 | Kilopower 10 kWe design |
 | PW-FSP | Surface fission 100 kWe | T2 | 3×4 | 9.0 | 100 kWe | — | 150 | NASA Fission Surface Power studies |
-| PW-NEP | NEP reactor 2 MWe | T3 | 5×8 | 40 | 2,000 kWe (20 kg/kWe incl. conversion + radiators; optimistic end of the 20-40 kg/kWe MW-class study range) | ≈1,200 (integral radiator wings) | 600 | MW-class NEP concept studies (NASA human-Mars NEP / Copernicus-class; Prometheus/JIMO was ~200 kWe) |
-| TH-RAD | Deployable radiator | T0 | 1×3 stowed | 1.2 | rejects 50 kWt @ 500 K | 8 (two-sided panel) | 1.5 | ISS HRS-derived; 09 owns curve |
+| PW-NEP (=NUK-NEP) | NEP reactor 2 MWe | T3 | 5×8 | 35 | 2,000 kWe (17.5 kg/kWe incl. conversion, instrument shield and integral 800 K radiators — 09 flags this honestly as a 10× extrapolation beyond JIMO/Prometheus's 200 kWe, within the 5-25 kg/kWe MW-class study range) | 144 (integral radiator wings) | 600 | JIMO/Prometheus-class, game-extrapolated (09 §4) |
+| TH-RAD | Deployable radiator | T0 | 1×3 stowed | 1.2 | rejects 50 kWt @ 500 K (loop-capped; 76 radiative — 09 H-9 convention) | 12 (two-sided panel) | 1.5 | ISS HRS-derived; 09 owns curve |
 
-### 4.7 Habitat modules (12)
+### 4.7 Habitat modules (13)
 
 All §4.7 entries are material class **HAB** (§3.13). "Crew sleeps" = permanent berths; §3.11 defines how sleeps and volume jointly gate boarding.
 
 | ID | Name | Tier | Size | Mass (t) | V_press (m³) | Crew sleeps | Cost | Anchor |
 |---|---|---|---|---|---|---|---|---|
-| HB-CAP2 | 2-crew capsule | T0 | 2×3 | 4.2 | 9 | 2 (≤7 d) | 25 | Gemini (3.85 t) + modern materials; integral heat shield (q̇_max 10 MW/m², 0.20 t ablator, §3.15) & chutes (deploy q ≤ 20 kPa, a ≤ 7 g; UT-CHUTE scaling rule, §4.9) |
-| HB-CAP4 | 4-crew capsule | T0 | 3×4 | 9.5 | 20 | 4 (≤30 d) | 60 | Crew Dragon class; integral heat shield (q̇_max 10 MW/m², 0.35 t ablator, §3.15) & chutes (deploy q ≤ 20 kPa, a ≤ 7 g; UT-CHUTE scaling rule, §4.9) |
+| HB-CAP2 | 2-crew capsule | T0 | 2×3 | 4.2 | 9 | 2 (≤7 d) | 25 | Gemini (3.85 t) + modern materials; integral PICA-class heat shield (q̇_max 12 MW/m² vs q̇_conv, 0.05 t ablator over 3.1 m², §3.15 / 01 Table 4.5) & chutes (deploy q ≤ 20 kPa, a ≤ 7 g; UT-CHUTE scaling rule, §4.9) |
+| HB-CAP4 | 4-crew capsule | T0 | 3×4 | 9.5 | 20 | 4 (≤30 d) | 60 | Crew Dragon class (PICA-X heritage); integral PICA-class heat shield (q̇_max 12 MW/m² vs q̇_conv, 0.11 t ablator over 7.1 m², §3.15 / 01 Table 4.5) & chutes (deploy q ≤ 20 kPa, a ≤ 7 g; UT-CHUTE scaling rule, §4.9) |
 | HB-RIG-S | Rigid module S | T0 | 3×5 | 9.0 | 60 | 2 | 70 | ISS-module density ≈0.14 t/m³ |
 | HB-RIG-L | Rigid lab/hab module | T0 | 4×9 | 14.5 | 106 | 4 | 120 | ISS Destiny |
 | HB-INF-S | Inflatable module S | T0 | 2×2 (3×4 deployed) | 1.4 | 16 | 0 (storage) | 8 | BEAM (flown) |
@@ -415,7 +422,8 @@ All §4.7 entries are material class **HAB** (§3.13). "Crew sleeps" = permanent
 | HB-CUP | Cupola | T0 | 2×1 | 1.9 | 3 | 0; +morale | 15 | ISS Cupola 1.8 t |
 | HB-AIR | Airlock | T0 | 2×3 | 6.1 | 34 | 0; 2-person EVA | 30 | ISS Quest |
 | HB-LAB | Science lab | T1 | 4×9 | 12.0 | 100 | 0; research slots (11) | 100 | Destiny-derived |
-| HB-GRN | Greenhouse module | T3 | 4×9 (inflatable) | 16.0 | 280 | 0; 200 m² grow area (08) | 90 | bioregenerative LSS studies (BIOS-3, NASA) |
+| HB-GRN-S | Greenhouse module S | T2 | 3×5 (inflatable) | 6.0 | 80 | 0; 50 m² grow area — 25-50% food closure for ~4 crew (08; unlocked by 11 LS-04, feeds 12's Act 3 food-harvest milestones) | 40 | EDEN ISS Antarctic greenhouse, scaled (~270 kg vegetables/yr from 12.5 m²) |
+| HB-GRN | Greenhouse module | T3 | 4×9 (inflatable) | 16.0 | 280 | 0; 200 m² grow area — full-diet closure tier (08; 11 LS-07 era) | 90 | bioregenerative LSS studies (BIOS-3, NASA) |
 | HB-STORM | Storm shelter core | T1 | 2×2 | 3.0 (+5 Water fill) | 8 | refuge 8 crew | 12 | water-wall shielding concepts (08 owns dose) |
 
 ### 4.8 Spin-gravity, docking & assembly (12)
@@ -448,16 +456,18 @@ All §4.7 entries are material class **HAB** (§3.13). "Crew sleeps" = permanent
 | UT-DISH-S | High-gain dish 0.5 m | T0 | 1×1 | 0.02 | 1 | ELEC | link budget per 12/13 comms model | — |
 | UT-DISH-M | High-gain dish 3 m | T0 | 1×2 stowed | 0.09 | 3 | ELEC | deployed area 7 m² (§3.12) | MRO 3 m HGA |
 | UT-DISH-L | Deployable dish 10 m | T2 | 2×2 stowed | 0.4 | 10 | ELEC | outer-system relay; deployed area 80 m² (§3.12) | large deployable mesh antennas |
-| UT-HS3 | Heat shield 3.7 m | T0 | 3×1 | 0.5 | 2 | SHIELD | ablative, ≈45 kg/m² incl. carrier; q̇_max 10 MW/m², ablator 0.30 t, protects the 3-wide column behind it (§3.15); bottom face = TPS, no attach node | PICA-X |
-| UT-HS5 | Heat shield 5 m | T1 | 4×1 | 0.9 | 4 | SHIELD | as UT-HS3 at 4-wide: q̇_max 10 MW/m², ablator 0.55 t, protects the 4-wide column (§3.15) | — |
+| UT-HS3 | Heat shield 3.7 m | T0 | 3×1 | 0.5 | 2 | SHIELD | ablative PICA-class (01 Table 4.5): q̇_max 12 MW/m² vs q̇_conv, ablator 0.17 t (16 kg/m² over the 10.8 m² loaded disc; ≈46 kg/m² total incl. carrier), protects the 3-wide column behind it (§3.15); bottom face = TPS, no attach node | PICA-X |
+| UT-HS5 | Heat shield 5 m | T1 | 4×1 | 0.9 | 4 | SHIELD | as UT-HS3 at 4-wide / 5 m: q̇_max 12 MW/m² vs q̇_conv, ablator 0.31 t (16 kg/m² over 19.6 m²), protects the 4-wide column (§3.15) | — |
 | UT-CHUTE | Parachute cluster | T0 | 1×1 | 0.24 | 0.5 | MECH | recovers 6 t at ≤ 8 m/s (Earth SL); scaling `v_td = 8 m/s · sqrt(m / 6 t) · sqrt(ρ_Earth,SL / ρ_local)`; deploy limits q ≤ 20 kPa, a ≤ 7 g (exceed = chute destroyed); mass rule ≈ 4% of recovered | Apollo ELS ≈ 250 kg / 5.8 t |
 | ST-LL | Landing leg | T0 | 1×2 | 0.15 | 0.4 | MECH | 8 t per leg @ ≤3 m/s touchdown | — |
 | ST-LLH | Heavy landing leg | T1 | 1×3 | 0.6 | 1 | MECH | 40 t per leg @ ≤3 m/s | F9 leg class |
-| AR-SHELL | Entry aeroshell 5 m | T2 | 4×2 | 2.5 | 8 | SHIELD | PICA-class TPS + backshell; q̇_max 10 MW/m², ablator 0.90 t, protects the 4-wide column behind it (§3.15); jettisonable (SEPARATE event); no bottom attach node | HAVOC entry vehicle / MSL aeroshell class |
-| AR-CHUTE | Supersonic extraction chute | T2 | 1×1 | 0.6 | 1.5 | MECH | deploys ≤ Mach 2.2 and q ≤ 4 kPa; extracts ≤ 10 t payload from an aeroshell; single-use | MSL/HAVOC disk-gap-band chute |
-| AR-ENV | Aerostat envelope kit | T2 | 2×3 stowed | 1.3 | 6 | HAB | ≈2,500 m² Vectran/PTFE laminate; 11,700 m³ inflated; lift math per §4.11(d); DEPLOY event (blocked while stowed in bay/fairing, §8.15) | HAVOC envelope |
-| AR-GON | Aerostat gondola | T2 | 2×2 | 4.6 | 25 | ELEC | command source; 2 kWe solar, relay comms, atmosphere-ISRU sampler (07 operates) | HAVOC gondola |
-| AR-INF | Aerostat inflation hardware | T2 | 1×2 | 0.7 | 3 | MECH | inflates AR-ENV during parachute descent (≈20 min); feeds from any connected Hydrogen tank | HAVOC mid-air inflation system |
+| AR-SHELL | Entry aeroshell 5 m | T3 | 4×2 | 2.5 | 8 | SHIELD | PICA-class TPS + backshell (01 Table 4.5): q̇_max 12 MW/m² vs q̇_conv, ablator 0.63 t (32 kg/m² double layup over 19.6 m² — sized for Venus 10-11 km/s entry heat loads), protects the 4-wide column behind it (§3.15); jettisonable (SEPARATE event); no bottom attach node | HAVOC entry vehicle / MSL aeroshell class |
+| AR-CHUTE | Supersonic extraction chute | T3 | 1×1 | 0.6 | 1.5 | MECH | deploys ≤ Mach 2.2 and q ≤ 4 kPa; extracts ≤ 10 t payload from an aeroshell; single-use | MSL/HAVOC disk-gap-band chute |
+| AR-ENV | Aerostat envelope kit | T3 | 2×3 stowed | 1.3 | 6 | HAB | ≈2,500 m² Vectran/PTFE laminate; 11,700 m³ inflated; lift math per §4.11(d); DEPLOY event (blocked while stowed in bay/fairing, §8.15) | HAVOC envelope |
+| AR-GON | Aerostat gondola | T3 | 2×2 | 4.6 | 25 | ELEC | command source; 2 kWe solar, relay comms, atmosphere-ISRU sampler (07 operates) | HAVOC gondola |
+| AR-INF | Aerostat inflation hardware | T3 | 1×2 | 0.7 | 3 | MECH | inflates AR-ENV during parachute descent (≈20 min); feeds from any connected Hydrogen tank | HAVOC mid-air inflation system |
+
+The AR-* aerostat deployment set is **T3**, matching 07 §4.3.3 (Venus aerostat = Act 4, T3; HAB-11/12 at T3) and 11's gating of crewed aerostats/Venus platforms (HB-05, VH-09 behind DSC-08).
 
 Static tip-over rule for landed vessels: stable iff `tan(θ_slope) < (b/2) / h_COM` with b = leg-base width, h_COM = COM height. Example: legs spanning 7 m, COM at 4 m → stable to 41° slope.
 
@@ -475,34 +485,34 @@ All §4.10 entries are material class **SHIELD** (§3.13).
 
 All delta-v via `dv = Isp · g0 · ln(m0/m1)`, g0 = 9.80665. Arithmetic shown; all figures machine-checked.
 
-#### (a) "Anvil-1" — T0 two-stage methalox launcher (2 t to LEO, uncrewed)
+#### (a) "Anvil-1" — T0 two-stage kerolox/hydrolox launcher (2 t to LEO, uncrewed)
 
-Built entirely from integer catalog parts; the design's acceleration limiter is set to **5 g** (player-selected, below the 6 g uncrewed default — see the joint check below for why).
+Built entirely from integer catalog parts and **T0 engines only** (the Raptor-class methalox line is T1 behind PR-02 — §4.3); the design's acceleration limiter is set to **5 g** (player-selected, below the 6 g uncrewed default — see the joint check below for why).
 
 | Item | Mass (t) |
 |---|---|
 | Payload | 2.00 |
-| **Stage 2**: 1× TK-ML-M + 1× TK-ML-S (16.5 t prop; dry 0.72 + 0.27) | 17.49 |
-| EN-M1V engine | 0.40 |
+| **Stage 2**: 1× TK-LH2-M part-filled 2.0 Hydrogen (dry 0.60) + 2× TK-LOX-M, 12.0 Oxygen (dry 0.80) — 14.0 t hydrolox at O/F 6.0 | 15.40 |
+| EN-H1 engine (=H-102) | 0.19 |
 | UT-AV + structure | 0.30 |
-| **Stage 2 total (m0₂, incl. payload)** | **20.19** |
+| **Stage 2 total (m0₂, incl. payload)** | **17.89** |
 | ST-FR3 fairing (jettisoned with stage 1) | 0.90 |
 | ST-IS3 interstage + ST-DC3 decoupler (0.40 + 0.12) | 0.52 |
-| **Stage 1**: 2× TK-ML-L (70 t prop; dry 4.2) | 74.20 |
-| 2× EN-M0 | 1.80 |
+| **Stage 1**: 5× TK-KL-M (70 t prop = 49.2 Oxygen + 20.8 RP1; dry 3.50) | 73.50 |
+| 2× EN-K1 | 0.94 |
 | Structure, ST-FIN ×2, avionics | 1.50 |
-| **Liftoff mass (m0₁)** | **99.11** |
+| **Liftoff mass (m0₁)** | **95.25** |
 
-- Stage 2: m0 = 20.19 t, m1 = 3.69 t → dv = 360 × 9.80665 × ln(20.19/3.69) = 3,530 × 1.700 = **6,000 m/s**. TWR(ignition, Earth) = 120/(20.19×9.80665) = 0.61. Burn 485 s (ṁ = 34.0 kg/s).
-- Stage 1: m0 = 99.11 t, m1 = 29.11 t. Trajectory-avg Isp 320 s (bounds: 3,580 m/s at SL 298 s; 4,181 m/s at vac 348 s) → dv = 320 × 9.80665 × ln(99.11/29.11) = 3,138 × 1.225 = **3,845 m/s**. Liftoff TWR = 1,600/(99.11×9.80665) = **1.65**. Burn 128 s (ṁ = 547 kg/s, from either consistent F/Isp pair — §3.4).
-- **Total ideal dv = 9,845 m/s ≥ 9,400 m/s LEO requirement** (01-orbital-mechanics.md) → ~445 m/s designer margin. Payload fraction 2.0% (typical for a small launcher).
-- Joint check (§3.8a, evaluated at the selected 5 g limiter): m_above the interstage = 20.19 + 0.90 + 0.52 = 21.61 t. Unclamped stage-1 burnout acceleration would be 1,868/29.11 = 64.2 m/s² (6.5 g), so the limiter clamps a at 49.03 m/s² → L = 21.61 × 49.03 = **1,060 kN ≤ 1,200 kN PASS** (12% margin). At the 6 g uncrewed default the joint would see 1,272 kN → E6, which is exactly why this design selects 5 g (the gravity-loss cost of the lower clamp is negligible — it engages only in the final seconds). On-pad: 21.61 × 9.80665 = 212 kN PASS. Engine mounts: EN-M0 stack node rated max(1,200, 1.25×934) = 1,200 kN ≥ per-engine peak thrust 934 kN — pass by construction (§3.8a). Stage-2 burnout is 120/3.69 = 32.5 m/s² (3.3 g), under the limiter, all stage-2 joints trivially pass. Hardware cost ≈ $16M + propellant.
+- Stage 2: m0 = 17.89 t, m1 = 3.89 t → dv = 449.7 × 9.80665 × ln(17.89/3.89) = 4,410 × 1.5258 = **6,729 m/s**. TWR(ignition, Earth) = 101.8/(17.89×9.80665) = 0.58. Burn 607 s (ṁ = 23.08 kg/s; well inside H-102's 2,000 s rating). The TK-LH2-M's 0.4 kWe ZBO draw rides the avionics bus battery for the short coast.
+- Stage 1: m0 = 95.25 t, m1 = 25.25 t. Trajectory-avg Isp 295 s (bounds: 3,672 m/s at SL 282 s; 4,049 m/s at vac 311 s) → dv = 295 × 9.80665 × ln(95.25/25.25) = 2,893 × 1.3277 = **3,841 m/s**. Liftoff TWR = 1,690/(95.25×9.80665) = **1.81** (hard floor 1.0, recommended 1.3-1.5 — 02 §3.7; the surplus buys single-engine-out controllability, §3.3, at the price of an earlier max-Q throttle bucket). Burn 117 s (ṁ = 2 × 299.7 = 599.4 kg/s from the vacuum pair — §3.4).
+- **Total ideal dv = 10,570 m/s ≥ 9,400 m/s LEO requirement** (01-orbital-mechanics.md) → ~1,170 m/s designer margin (hydrolox upper stages are generous; the price is the $12M engine and cryo-handling logistics). Payload fraction 2.1% (typical for a small launcher).
+- Joint check (§3.8a, evaluated at the selected 5 g limiter): m_above the interstage = 17.89 + 0.90 + 0.52 = 19.31 t. Unclamped stage-1 burnout acceleration would be 1,828/25.25 = 72.4 m/s² (7.4 g), so the limiter clamps a at 49.03 m/s² → L = 19.31 × 49.03 = **947 kN ≤ 1,200 kN PASS** (21% margin). At the 6 g uncrewed default the joint would see 1,136 kN — legal, but only a 5% margin; the design selects 5 g because the clamp engages only in the final seconds (negligible gravity-loss cost) and buys real structural margin. E6 always evaluates at the selected limiter. On-pad: 19.31 × 9.80665 = 189 kN PASS. Engine mounts: EN-K1 stack node rated max(1,200, 1.25×914) = 1,200 kN ≥ per-engine peak thrust 914 kN — pass by construction (§3.8a). Stage-2 burnout is 101.8/3.89 = 26.2 m/s² (2.7 g), under the limiter, all stage-2 joints trivially pass. Hardware cost ≈ $30M + propellant.
 
 #### (b) "Charon" — T2 NTR Mars transfer vehicle (orbital-assembled)
 
 | Item | Mass (t) |
 |---|---|
-| 3× EN-NTR-S (111 kN, Isp 900 s, shadow shields) | 10.2 |
+| 3× EN-NTR-S (=NTR-73: 73 kN, Isp 900 s; incl. 1.5 t shadow shields → 3.9 t each) | 11.7 |
 | 3× TK-LH2-L (60 t Hydrogen; tanks 15% = 9.0) | 69.0 |
 | ST-KEEL truss | 9.0 |
 | PW-KP10 (ZBO power 5 kWe + ship bus) | 1.5 |
@@ -510,47 +520,47 @@ Built entirely from integer catalog parts; the design's acceleration limiter is 
 | UT-AV, dishes | 0.5 |
 | DK-L berth (payload) | 1.2 |
 | **Payload**: HB-INF-M hab 13.2 + consumables 6.0 (08) + HB-CAP2 return capsule 4.2 + storm-shelter Water 5.0 + science 1.6 | 30.0 |
-| **m0** | **122.6** |
+| **m0** | **124.1** |
 
-- m1 = 122.6 − 60 = 62.6 t → **dv = 900 × 9.80665 × ln(122.6/62.6) = 8,826 × 0.6722 = 5,933 m/s**.
-- TWR in LEO = 333/(122.6×9.80665) = 0.28 → TMI split into 3 periapsis burns (§3.5; TMI burn time ≈ 18.3 min at ṁ = 37.7 kg/s; the full 60 t load would take 26.5 min).
-- Mission ledger (01-orbital-mechanics.md budgets): TMI 3,650 m/s burns 41.5 t H2 → 81.1 t; Mars capture to 1-sol elliptic 1,100 m/s burns 9.5 t → 71.6 t; **reserve 9.0 t ≈ 1,180 m/s** for trans-Earth injection after a Phobos/ISRU LH2 top-up, or as partial cover toward an outbound abort.
-- Berth load at burnout: a = 333/62.6 = 5.32 m/s²; 30 t payload → 160 kN ≤ 800 kN (DK-L) PASS.
+- m1 = 124.1 − 60 = 64.1 t → **dv = 900 × 9.80665 × ln(124.1/64.1) = 8,826 × 0.6606 = 5,830 m/s**.
+- TWR in LEO = 219/(124.1×9.80665) = 0.18 → TMI split into 3 periapsis burns (§3.5; TMI burn time ≈ 27.9 min at ṁ = 24.8 kg/s; the full 60 t load would take 40.3 min).
+- Mission ledger (01-orbital-mechanics.md Table 4.2): TMI (R1) 3,590 m/s burns 41.5 t H2 → 82.6 t; Mars capture to 1-sol elliptic 1,100 m/s burns 9.7 t → 72.9 t; **reserve 8.8 t ≈ 1,136 m/s** for trans-Earth injection after a Phobos/ISRU LH2 top-up, or as partial cover toward an outbound abort.
+- Berth load at burnout: a = 219/64.1 = 3.42 m/s²; 30 t payload → 103 kN ≤ 800 kN (DK-L) PASS.
 
-#### (c) "Packmule" — Hall-thruster cargo tug (LEO → low lunar orbit)
+#### (c) "Packmule" — T1 Hall-thruster cargo tug (LEO → low lunar orbit)
 
 | Item | Mass (t) |
 |---|---|
-| 4× EN-HALL (AEPS strings: 50 kWe rated, 2.356 N total) | 0.32 |
-| 3× PW-SA-RO roll-out arrays: 60 kWe @1 AU (20% power margin; deployed area 300 m²) | 0.75 |
+| 4× EN-HALL (=HALL-12 AEPS strings: 50 kWe rated, 2.36 N total) | 0.46 |
+| 3× PW-SA-RO roll-out arrays: 60 kWe @1 AU (20% power margin; deployed area 138 m²) | 0.75 |
 | 1× TK-XE-L (4.0 t Xenon; 0.24 dry) | 4.24 |
 | Structure 0.45, UT-AV 0.15, DK-B 0.25, radiator stub 0.15 (09 small class) | 1.00 |
 | **Payload (container rack)** | 8.00 |
-| **m0** | **14.31** |
+| **m0** | **14.45** |
 
-- m1 = 10.31 t → **dv = 2,800 × 9.80665 × ln(14.31/10.31) = 27,459 × 0.32784 = 9,002 m/s** — covers the ≈8,000 m/s low-thrust LEO→LLO spiral (01-orbital-mechanics.md) with ~1,000 m/s margin.
-- Acceleration 1.65×10⁻⁴ m/s²; ṁ = 2.356/(2,800×9.80665) = 8.58×10⁻⁵ kg/s; thrust-on time 4.66×10⁷ s ≈ **540 days** (this is the honest physics of 50 kWe; time warp and uncrewed patience are the gameplay answer — crewed transfers use chemical/NTR).
+- m1 = 10.45 t → **dv = 2,800 × 9.80665 × ln(14.45/10.45) = 27,459 × 0.32409 = 8,900 m/s** — covers the ≈8,000 m/s low-thrust LEO→LLO spiral (01-orbital-mechanics.md) with ~900 m/s margin.
+- Acceleration 1.63×10⁻⁴ m/s²; ṁ = 2.36/(2,800×9.80665) = 8.59×10⁻⁵ kg/s; thrust-on time 4.65×10⁷ s ≈ **540 days** (this is the honest physics of 50 kWe; time warp and uncrewed patience are the gameplay answer — crewed transfers use chemical/NTR).
 - At Mars distance (1.52 AU) arrays deliver 60/1.52² = 26.0 kWe → thrust drops to 26.0/50 = **~52% of rated** (the §3.4 rule divides available power by *rated thruster power*, here 50 kWe — not by array output at 1 AU); the editor's transfer planner shows power-limited thrust along the trajectory.
 
-#### (d) "Cyclops" — Venus aerostat deployment ship (T2, HAVOC-class robotic)
+#### (d) "Cyclops" — Venus aerostat deployment ship (T3, HAVOC-class robotic)
 
-Deploys a robotic aerostat at 55 km in Venus's atmosphere (07-bases-habitats.md operates it).
+Deploys a robotic aerostat at 55 km in Venus's atmosphere (07-bases-habitats.md operates it; the AR-* deployment set is T3, §4.9, matching 07/11's Act 4 gating).
 
 | Item | Mass (t) |
 |---|---|
 | **Entry assembly (payload, §4.9 aerostat parts)**: AR-SHELL 2.5; AR-CHUTE 0.6; AR-ENV 1.3; AR-GON 4.6; TK-LH2-M 0.60 dry, part-filled with 0.5 Hydrogen lifting gas; AR-INF 0.7; mass margin 1.2 | 12.00 |
-| Carrier bus (UT-AV, PW-SA-RO, UT-DISH-M, RCS-HYP + Hypergols) | 1.50 |
-| **Departure stage**: EN-H1 (RL10B-2, O/F 6.0) 0.30; propellant 28.0 = 24.0 Oxygen in 3× TK-LOX-M + 4.0 Hydrogen in 1× TK-LH2-M (tank dry 3×0.40 + 0.60 = 1.80, per §4.2 fractions); structure 0.80; avionics 0.20 | 31.10 |
+| Carrier bus (UT-AV, PW-SA-RO, UT-DISH-M, RCS-HYP + NTO/MMH) | 1.50 |
+| **Departure stage**: EN-H1 (=H-102 RL10C-1, O/F 6.0) 0.19; propellant 28.0 = 24.0 Oxygen in 3× TK-LOX-M + 4.0 Hydrogen in 1× TK-LH2-M (tank dry 3×0.40 + 0.60 = 1.80, per §4.2 fractions); structure 0.80; avionics 0.20; trim ballast 0.11 | 31.10 |
 | **m0 (assembled in LEO)** | **44.60** |
 
-- m1 = 16.60 t → **dv = 465.5 × 9.80665 × ln(44.60/16.60) = 4,565 × 0.9883 = 4,512 m/s**; trans-Venus injection from LEO needs ≈3,500 m/s (01) → ~1,012 m/s for midcourse + carrier divert to relay flyby. TWR 0.25 (two perigee burns, 1,162 s total at ṁ = 24.1 kg/s). The hydrolox engine draws 6 kg Oxygen per kg Hydrogen across the four separate tanks per the §3.7 drain rule; ZBO power for the LH2 tanks comes from the carrier's PW-SA-RO. Peak proper acceleration 110/16.6 = 6.6 m/s² (0.68 g) — joint loads trivial (the payload stack joint sees 13.5 t × 6.63 = 90 kN).
+- m1 = 16.60 t → **dv = 449.7 × 9.80665 × ln(44.60/16.60) = 4,410 × 0.9883 = 4,358 m/s**; trans-Venus injection from LEO needs 3,480 m/s (01 Table 4.2, V1) → ~878 m/s for midcourse + carrier divert to relay flyby. TWR 0.23 (two perigee burns, 1,213 s total at ṁ = 23.1 kg/s). The hydrolox engine draws 6 kg Oxygen per kg Hydrogen across the four separate tanks per the §3.7 drain rule; ZBO power for the LH2 tanks comes from the carrier's PW-SA-RO. Peak proper acceleration 101.8/16.6 = 6.1 m/s² (0.63 g) — joint loads trivial (the payload stack joint sees 13.5 t × 6.13 = 83 kN).
 - Buoyancy check at 55 km (ρ ≈ 0.9 kg/m³, T ≈ 300 K, p ≈ 0.5 atm — 03-solar-system.md): envelope volume 11,700 m³ of Hydrogen → net lift = 11,700 × 0.9 × (1 − 2.016/43.45) ≈ **10,050 kg** vs. floated mass 8.9 t (12.0 minus jettisoned AR-SHELL 2.5 and AR-CHUTE 0.6) → buoyancy margin 13%. (Design note surfaced in-game: in CO2, breathable air lifts 0.30 kg/m³ — crewed aerostats at T3 keep their habitat *inside* the envelope, per HAVOC.)
 
 ## 5. Player Interaction & UI
 
 - **Drydock screen** (vector/schematic art): grid canvas; part palette filtered by category/tier; mirror-symmetry toggle (x-axis); sub-assembly save/load; blueprint export (JSON, shareable).
 - **Live readout panel** (always visible, recomputed per edit, all from §3 formulas): wet/dry mass; per-stage dv (with SL/vac/trajectory-avg toggle and g_ref selector), TWR at ignition/burnout, burn time; COM markers (wet/dry) + thrust-line overlay with GREEN/YELLOW/RED stability badge and engine-out badge; part count /600; cost total; crew capacity vs. sleeps; pressurized volume; power balance preview (generation vs. draw, at selected solar distance — 09); radiator margin (09); MMOD coverage % and P_pen/yr at selected orbit; q_max worst part; spin section: rpm slider with live a_spin, comfort verdict, balance offset.
-- **Validation list** with stable codes (clicking zooms to the offender): E1 no command source; E2 disconnected parts; E3 invalid decoupler; E4 overlapping footprints; E5 plume impingement; E6 joint overload at the design-selected limiter accel (§3.8a); E7 q_max exceeded in pre-flight ascent sim; E8 port size mismatch; E9 crewed spin > 6 rpm; E10 negative dry mass from cargo-manifest misconfiguration; E11 q̇_max exceeded in pre-flight entry sim (§3.15); W1 liftoff TWR < 1.3; W2 no airlock with crew; W3 no storm shelter beyond LEO (§3.11 shelter rule); W4 solid above liquid stage; W5 dv below mission planner target; W6 spin imbalance > 0.02·r; W7 uncovered hull in high-flux orbit; W8 insufficient docking ports for crew logistics; W9 crossfeed duct flow cap throttles engines (§3.7).
+- **Validation list** with stable codes (clicking zooms to the offender): E1 no command source; E2 disconnected parts; E3 invalid decoupler; E4 overlapping footprints; E5 plume impingement; E6 joint overload at the design-selected limiter accel (§3.8a); E7 q_max exceeded in pre-flight ascent sim; E8 port size mismatch; E9 crewed spin > 6 rpm; E10 negative dry mass from cargo-manifest misconfiguration; E11 q̇_max exceeded in pre-flight entry sim (§3.15); W1 liftoff TWR < 1.2 (02 §3.7; recommended 1.3-1.5); W2 no airlock with crew; W3 no storm shelter beyond LEO (§3.11 shelter rule); W4 solid above liquid stage; W5 dv below mission planner target; W6 spin imbalance > 0.02·r; W7 uncovered hull in high-flux orbit; W8 insufficient docking ports for crew logistics; W9 crossfeed duct flow cap throttles engines (§3.7).
 - **Pre-flight ascent sim**: one-click 2D ascent integration (same code path as flight, 13-architecture.md) plotting q, q·α, accel, and throttle vs. time with limit lines.
 - **Station view**: docking topology graph overlay; per-port load/rating; station-keeping dv/yr forecast; spin-up/spin-down buttons with propellant quote (§3.10 formula).
 - Engineer-founder fantasy: every readout has a "show the math" hover expanding the formula with the current numbers plugged in.
@@ -559,32 +569,32 @@ Deploys a robotic aerostat at 55 km in Venus's atmosphere (07-bases-habitats.md 
 
 | Tier | Act | Unlocks (this document) |
 |---|---|---|
-| T0 (2049 baseline) | Act 1 | Full chemical engine line (EN-K1/K1V/M0/M1V/M2/M2V/H1, EN-HYP, solids, all RCS), basic tanks, PAD-1/2, fairings, capsules, rigid modules, BEAM-class inflatable, IDSS/CBM ports, basic Whipple, NEXT-C ion & AEPS Hall strings (smallsat-scale EP), legacy + ROSA arrays |
-| T1 | Acts 1-2 | PAD-3, EN-H2 reusable hydrolox, ZBO LH2 tanks, TK-DEPOT cryo depot, FD-1 crossfeed, DK-L fluid berth, DK-ARM orbital assembly, TransHab/B330-class inflatables, stuffed Whipple, storm shelter, Kilopower-1 |
-| T2 | Acts 2-4 | EN-NTR-S/L, LH2-L tanks, SP-HUB/ARM/TETHER/HAB spin sections, Kilopower-10 / FSP-100, Argon Hall, Dry Dock module (assemble beyond fairing limits), ISRU printing of STRUCT/TANK/MECH/SHIELD (BasaltFiber & IronSteel variants), HAVOC-class aerostat deployment hardware (AR-SHELL/AR-CHUTE/AR-ENV/AR-GON/AR-INF, §4.9) |
-| T3 | Acts 4-5 | X3-class Hall clusters, VASIMR, MPD, NEP 2 MWe, bimodal NTR, SP-RING 1 g ring segments, greenhouse modules, orbital ENGINE/HAB/ELEC printing |
-| T4 [SPECULATIVE] | Act 5 / Endgame | EN-FT fusion torch, He3-augmented variants, interstellar-precursor bus structures, reactor printing |
+| T0 (2049 baseline) | Act 1 | Flight-proven chemical line per 02 §6 / 11 PR-00: EN-K1/K1V kerolox, EN-H1 hydrolox, EN-HYP/EN-HYP-L storables, EN-SRB/EN-KICK solids, RCS-N2 + RCS-HYP; smallsat-scale EP strings EN-ION-2 (NSTAR) + EN-HALL-1 (SPT-100); basic tanks, PAD-1/2, fairings, capsules, rigid modules, BEAM-class inflatable, IDSS/CBM ports, basic Whipple, legacy + ROSA arrays |
+| T1 | Acts 1-2 | PAD-3; EN-M2/M2V Raptor-class methalox reuse (=M-2256/MV-2530, behind 11's era node PR-02) + RCS-CH4 hot-gas quads; EN-LND lander engine; EN-H2 reusable hydrolox; EN-ION-N (NEXT, PR-06) + EN-HALL (AEPS, PR-07) EP strings; ZBO LH2 tanks, TK-DEPOT cryo depot, FD-1 crossfeed, DK-L fluid berth, DK-ARM orbital assembly, TransHab/B330-class inflatables, stuffed Whipple, storm shelter, Kilopower-1 |
+| T2 | Acts 2-4 | EN-NTR-S/L (=NTR-73/246), EN-ML methalox lander, LH2-L tanks, SP-HUB/ARM/TETHER/HAB spin sections, Kilopower-10 / FSP-100, HB-GRN-S partial-closure greenhouse (11 LS-04), Dry Dock module (assemble beyond fairing limits), ISRU printing of STRUCT/TANK/MECH/SHIELD (BasaltFiber & IronSteel variants) |
+| T3 | Acts 4-5 | X3-class Hall clusters, VASIMR, MPD, NEP 2 MWe, EN-NTR-B bimodal NTR (=NTR-111B), SP-RING 1 g ring segments, HB-GRN full-diet greenhouse (11 LS-07 era), HAVOC-class aerostat deployment hardware (AR-SHELL/AR-CHUTE/AR-ENV/AR-GON/AR-INF, §4.9 — matches 07 §4.3.3 / 11), orbital ENGINE/HAB/ELEC printing |
+| T4 [SPECULATIVE] | Act 5 / Endgame | EN-FT fusion drive (=DFD-5), He3 supply chain [SPECULATIVE], interstellar-precursor bus structures, reactor printing |
 
-Act gating in practice: Act 1 is launcher design under pad/fairing/budget constraints; Act 2 adds orbital assembly and depots (Moon); Act 3 is the NTR + ISRU-printing inflection (Mars builds get cheap); Act 4 is spin-gravity stations and aerostats; Act 5 is MW-class electric ships; Endgame is the fusion torch and self-sufficient off-Earth shipyards (no Earth imports in any recipe).
+Act gating in practice: Act 1 is launcher design under pad/fairing/budget constraints on the T0 flight-proven line, broken open by PR-02's reusable methalox $/kg collapse; Act 2 adds orbital assembly and depots (Moon); Act 3 is the NTR + ISRU-printing inflection (Mars builds get cheap); Act 4 is spin-gravity stations and aerostats; Act 5 is MW-class electric ships; Endgame is the fusion drive and self-sufficient off-Earth shipyards (no Earth imports in any recipe).
 
 ## 7. Cross-System Interfaces
 
 **Consumes:**
-- 01-orbital-mechanics.md: mission dv targets for the planner (LEO 9,400; TMI 3,650; Venus TVI 3,500; LEO→LLO low-thrust ≈8,000 m/s); low-TWR burn-splitting rule; ascent guidance (α profile); lunar station-keeping budgets.
-- 02-propulsion.md: authoritative engine performance curves, throttle ranges, ullage/restart rules, boiloff rates; this doc's engine tables must match 02's master list.
+- 01-orbital-mechanics.md: mission dv targets for the planner from the Table 4.2 catalog (LEO 9,400; TMI = R1 3,590; Venus transfer = V1 3,480; LEO→LLO low-thrust ≈8,000 m/s — any design margin is stated separately, never folded into the catalog quote); low-TWR burn-splitting rule; ascent guidance (α profile); the station-keeping fee curve (Table 4.8, §3.12); the entry-heating constants and TPS class table (§3.11 / Table 4.5: Sutton-Graves k per atmosphere, f_rad, E_abl = 50 MJ/kg — binding for §3.15 and the §4.7/§4.9 TPS stats).
+- 02-propulsion.md: authoritative engine performance stats and tiers (§4.2-4.7 — §4.3-4.5 here republish them verbatim and must match 02's master list), throttle ranges, ullage/restart rules, boiloff rates, TWR thresholds (§3.7), the NTR 60 km Earth rule (§3.10), the engine reliability model (§3.14), and the RP1/NTO/MMH resource extensions (§4.1).
 - 03-solar-system.md: atmosphere ρ(h) profiles (max-Q, drag, aerostat deployment), MMOD flux Φ by region, body g and radiation environments.
-- 04-resources-isru.md: canonical resource properties/densities; the Hypergols extension decision (Q1).
+- 04-resources-isru.md: canonical resource properties/densities; sign-off on any late ISRU synthesis routes for 02's RP1/NTO/MMH extensions (Q1).
 - 05-industry-logistics.md: fabrication rates, machine-shop/printer buildings, standard container spec (CG-CON mounts it), propellant transfer rates, launch logistics.
 - 08-life-support-crew.md: crew mass (100 kg w/ suit), consumable rates, habitable-volume morale curve, radiation dose model, spin-adaptation effects.
 - 09-power-thermal.md: array/reactor/radiator performance (parts §4.6 are builder stubs of 09's systems), ZBO power draws.
 - 10-vehicles.md: construction drones (orbital assembly), landers/rovers reuse this part system and builder math.
 - 11-research-tech.md: tier unlock placement of every part.
-- 12-gameplay-economy-ui.md: prices, commercial launch market, contracts, event system (MMOD conjunctions, part reliability rolls).
+- 12-gameplay-economy-ui.md: prices (including the RP1/NTO/MMH rows 02 §4.1 requires), commercial launch market, contracts, event system (MMOD conjunctions; reliability events are *rolled* by 02 §3.14's model and surfaced through 12).
 - 13-architecture.md: physics body merging on dock, 600-part cap rationale, ascent-sim code path, blueprint serialization.
 
 **Provides:**
 - To 01/02: vessel mass properties (m, COM, I), thrust/torque tables, per-stage dv — the flight model's inputs.
-- To 01: the per-part Cd·A drag table (frontal-area default §3.12, deployed areas §4.6/§4.9; Cd = 2.2 default) for ascent and orbital drag integration, plus entry-vehicle stats — shield diameter, q̇_max, ablator budget, protected column (§3.15). 01 owns the entry/aerocapture trajectory integration; this doc owns what heating does to parts.
+- To 01: the per-part Cd·A drag table (frontal-area default §3.12, deployed areas §4.6/§4.9; Cd = 2.2 default) for below-interface drag integration (ascent, entry, aerobraking — above the interface 01 charges its Table 4.8 fee instead, §3.12), plus entry-vehicle stats — shield diameter, TPS class and q̇_max per 01 Table 4.5, ablator budget, loaded area, protected column (§3.15). 01 owns the entry/aerocapture trajectory integration and the heating constants; this doc owns what heating does to parts.
 - To 05: part material classes + masses (manufacturing demand), depot/berth fluid-transfer interfaces.
 - To 07: station modules, spin sections, aerostat deployment hardware (07 owns surface/atmosphere base operation; the boundary is "if it can free-fly, it's mine").
 - To 08: pressurized volumes, crew capacities, shelter shielding mass per module.
@@ -598,7 +608,7 @@ Act gating in practice: Act 1 is launcher design under pad/fairing/budget constr
 1. **Joint overload** (§3.8a violated in flight, e.g. player overrides the g-limiter): joint breaks; vessel splits into two physics bodies; downstream parts uncontrolled. Deterministic, no RNG.
 2. **Max-Q part loss**: exposed part exceeding q_max is destroyed; if it was structural, cascades to joint check.
 3. **q·α stack break**: snap at the highest-load joint; the dramatic "rocket folds at max Q" failure for hand-flown pitch-overs.
-4. **Engine-out**: baseline ignition-failure and burn-failure probabilities owned by 12 (T0 baseline 0.5%/ignition, halves each tier); the §3.3 engine-out badge tells the player at design time whether it's survivable.
+4. **Engine-out**: ignition and in-flight failure probabilities are owned by **02 §3.14** — per-class `p_base` per ignition (solid 0.001; pressure-fed liquid 0.0005; pump-fed liquid 0.002 new type, 0.0005 once Mature; NTR 0.003; electric 0.0002) and `λ0` per burn-second, both multiplied by the wear factor (1 + 9·w²); a type goes **Mature** (p_base and λ0 ÷4, every class) after 25 program-wide successful ignitions, with 11 §3.4's maturity stack layered on top — there is no per-tier halving and no separate model in 12. Failure outcomes (70% benign shutdown / 25% dead / 5% energetic, solids and EP per their own splits) follow 02 §3.14's outcome roll; the adjacent-module damage from an energetic failure resolves in this doc's damage model. The §3.3 engine-out badge tells the player at design time whether a single failure is survivable.
 5. **Landing failures**: touchdown v > 3 m/s or leg load > rating → leg collapse; tip-over per §4.9 rule; engine plume on > 20° slope triggers slide.
 6. **Docking bounce**: §3.11 capture limits missed → elastic bounce at 0.5× closing speed, possible part damage above 0.5 m/s.
 7. **MMOD penetration**: per §3.9; leaks interface to 08; unrepaired tank leaks drain to vacuum. Repair: EVA crew or drone + MachineParts (rate in 05).
@@ -614,11 +624,11 @@ Act gating in practice: Act 1 is launcher design under pad/fairing/budget constr
 
 ## 9. Open Questions
 
-1. **Hypergols as a resource extension.** RCS and storable apogee engines need MMH/NTO. Proposal: single paired commodity `Hypergols` (fixed 1.6:1 NTO:MMH), Earth-sourced at T0, ISRU-producible from Ammonia + Water electrolysis chains at T3. Needs sign-off from 04-resources-isru.md (it extends the canonical resource list).
-2. **Kerolox representation.** RP-1 is not a canonical resource. Current design: kerolox tanks are sealed Earth-fill-only units (no ISRU path, engines retired by mid-game). Alternative: model RP-1 as a `Polymers`-class refined product. Decision with 04.
-3. **NTR overflight policy.** Real NTR exhaust is clean hydrogen, but ground launch of an operating reactor is politically forbidden; we currently hard-ban NTR thrust on Earth wherever ambient pressure exceeds 50 kPa (i.e., below ~5.5 km altitude); high-altitude and vacuum operation is permitted. Mars has a thin atmosphere — allow NTR landers there? Needs 12 (politics/events) input.
+1. **Engine registration requests to 02** (catalog owner — nothing ships here until 02 lists it; precedent: NTR-111B). (a) A small "Bantam"-class methalox SL/vac pair (Archimedes/Neutron anchor, ~800 kN class) for compact T1 launchers under PR-02. (b) An argon-fueled AEPS derivative for a cheap mid-tier Argon Hall string (currently argon capability starts at HALL-100/MPD/VAS, T3). Resolved and withdrawn: the storable apogee niche (covered by OMS-27/SPS-91), the RL10B-2 variant (H-102/RL10C-1 is the hydrolox master), the bimodal NTR (NTR-111B, now stubbed as EN-NTR-B), and the Discovery II torch (02's T4 catalog DFD-5 replaces it as EN-FT).
+2. **Storable/kerolox resources — RESOLVED.** 02 §4.1 declares **RP1, NTO and MMH** as canonical-resource extensions (exact spellings, no hyphen in RP1); this doc's tanks, engines and RCS use them directly (no merged "Hypergols" commodity, no sealed Earth-only kerolox tank). Remaining actions elsewhere: 12 §4.3 must add RP1/NTO/MMH price rows; 04 owns whether late ISRU synthesis routes (e.g. Ammonia-chain MMH at T3) ever exist.
+3. **NTR overflight policy — RESOLVED per 02 §3.10.** Hard rule: no NTR operation below 60 km altitude on Earth (regulatory; launch cold, first criticality in orbit; violation = mission-ending regulatory event via 12); other bodies unrestricted within the engine's p_max 30 kPa (Mars-ambient ignition legal, Titan surface not). This doc carries no separate 50 kPa rule.
 4. **Propellant-shift COM realism.** We freeze propellant at tank centroids (§3.2). Is the resulting error acceptable for long LH2 stages (real COM moves meters as tanks drain)? Option: linear COM interpolation per tank between full/empty centroids — cheap, worth it?
 5. **Stuffed-Whipple ISRU parity.** WS-BF at η = 0.97 vs imported 0.98 — is a 1-point difference worth the UI complexity, or should they be identical?
 6. **Spin-section rendering.** 2D side view of a rotating ring is visually ambiguous; current plan is a schematic "ring inset" panel. Needs UI prototype (12/13).
-7. **Reliability model granularity.** Per-ignition engine failure (12) vs. per-part wear with maintenance hours (05/08 crew tasks)? Affects how much spare-parts logistics matter.
+7. **Reliability model granularity — RESOLVED.** Both layers already exist in canon: 02 §3.14 owns per-ignition/per-second engine failure *and* wear-based growth (refurbish via 05's workshops at 20% MachineParts cost), and 11 §3.4 layers type maturity on top. Spare-parts logistics matter exactly as much as 02's wear curve makes them; no separate model in 12 or here.
 8. **Aerostat hand-off boundary.** This doc delivers the aerostat to float-positive at 55 km; 07-bases-habitats.md takes over. The deployment hardware is statted here (§4.9 AR-SHELL/AR-CHUTE/AR-ENV/AR-GON/AR-INF); confirm 07 does not want the envelope/gondola entries migrated to its own catalog (if migrated, §4.9 keeps AR-SHELL/AR-CHUTE and Build D references 07's IDs).

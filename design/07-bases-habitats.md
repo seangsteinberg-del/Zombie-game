@@ -11,8 +11,8 @@ This document specifies everything between "a body and its sites exist" (`03-sol
 - The **surface grid** (2D top-down placement), the four connection networks (power, thermal, fluid, data), and the three-stage construction pipeline (Deploy → Outfit → Commission).
 - The **habitat module catalog**: rigid (ISS-Destiny class), inflatable (TransHab/BEAM heritage), ISRU-built (sintered regolith vaults, basalt-fiber-wound shells, ice structures), and buried/bermed variants — each with mass, volume, berths, leak rate, and envelope thermal properties.
 - **Pressure-vessel and structure rules** — simplified but physically honest. Internal-pressure vessels (everything from the Moon to Mars) fail in tension; external-pressure vessels (Venus surface at 9.2 MPa, deep Titan/Europa ocean access) fail by buckling, which is a different formula and a different material logic. Titan surface habitats are the special iso-baric case where the hull carries (almost) no pressure load at all.
-- **Per-environment engineering packages** with hazard→response tables and real anchors: Moon (vacuum, 354-hour night, thermal cycling, PSR ice bases), Mars (dust storms, perchlorates, the classic ISRU base), Venus aerostats at 50–56 km (NASA HAVOC / Landis), Titan (cold is the enemy, ice as structure, shoreline bases, the ocean bore megaproject), Europa (5.4 Sv/day — burrow or die), Enceladus (plume stations), asteroid interiors (the best radiation environment off Earth), and Mercury (terminator crawlers, polar bonanza bases).
-- **Environmental simulation per base**: external temperature cycles, dust events and contamination loads, and the radiation-dose ledger with explicit halving-thickness shielding math for regolith, water, and polyethylene.
+- **Per-environment engineering packages** with hazard→response tables and real anchors: Moon (vacuum, 354-hour night, thermal cycling, PSR ice bases), Mars (dust storms, perchlorates, the classic ISRU base), Venus aerostats at 50–56 km (NASA HAVOC / Landis), Titan (cold is the enemy, ice as structure, shoreline bases, the ocean bore megaproject), Europa (5.4 Sv/day — burrow or die), Enceladus (plume stations), asteroid interiors (GCR-floor dose and total SPE immunity for zero imported shielding mass), and Mercury (terminator crawlers, polar bonanza bases).
+- **Environmental simulation per base**: external temperature cycles, dust events and contamination loads, and the radiation-dose ledger with explicit areal-density shielding math (the canonical `f_GCR`/`f_SPE` response law owned by `08-life-support-crew.md`) plus per-material thickness conversions for regolith, water, and polyethylene.
 
 Design intent: every environment must feel *different to engineer for*, because in reality it is. The Moon is a thermal-swing and dust problem; Mars is an energy-reliability and toxicology problem; Venus at altitude is shockingly benign except for acid and the absence of ground; Titan inverts everything — pressure is free, heat is precious; Europa is a radiation siege; asteroids reward digging. The player who copies their Mars base onto Titan should fail in instructive ways.
 
@@ -31,10 +31,10 @@ Every environment package in §4.3 names its anchors inline; the headline source
 - *Apollo* dust experience (abraded seals, "lunar hay fever" — Schmitt, Apollo 17); NASA **Electrodynamic Dust Shield** flight demo (Blue Ghost Mission 1, 2025) — our dust-mitigation anchor.
 - Apollo passive seismometers: ~28 **shallow moonquakes** in 8 years, some ≈ magnitude 5 — flexible inter-module couplings are not optional flavor.
 - Shackleton/de Gerlache rim sites: ~80–90% annual illumination with 10 m masts; longest continuous darkness still 2–5 days (Mazarico et al. 2011 illumination modeling).
-- NASA TP-3079 (Simonsen & Nealy, 1991): regolith shielding transport results for GCR/SPE — basis of our [SIMPLIFIED] halving-thickness fits.
+- NASA TP-3079 (Simonsen & Nealy, 1991): regolith shielding transport results for GCR/SPE — cross-check anchor for the [SIMPLIFIED] exponential shielding-response fits (the canonical `f_GCR`/`f_SPE` law itself is owned by `08-life-support-crew.md`; reproduced in B-6b).
 
 **Mars.**
-- *MSL RAD* (Hassler et al., Science 2014): surface dose equivalent ≈ **0.64–0.71 mSv/day**; cruise (free space, 1–1.5 AU) ≈ **1.84 mSv/day** (Zeitlin et al. 2013).
+- *MSL RAD* (Hassler et al., Science 2014): surface dose equivalent ≈ **0.64–0.71 mSv/day** — game canon **0.67 mSv/day** per `03-solar-system.md` S-8a; cruise (free space, 1–1.5 AU) ≈ **1.84 mSv/day** (Zeitlin et al. 2013).
 - *Phoenix WCL*: **0.4–0.6 wt% perchlorate** (ClO4⁻) in Martian soil — thyroid toxin (iodide-uptake inhibitor); also decomposes at ~350–500 °C releasing O2.
 - Global dust storms: 2018 event killed *Opportunity* (optical depth τ peaked ≈ 10.8); MER panels degraded ~0.2%/sol from deposition between cleaning events. Global storms recur irregularly every ~3–4 Mars years; regional storms every dust season (Ls 180–330).
 - Atmospheric column at datum: 610 Pa / 3.71 m/s² = **16.4 g/cm²** CO2 overhead (≈ 33 g/cm² in Hellas at 1,240 Pa) — real but modest radiation shielding.
@@ -208,40 +208,48 @@ Insulation classes: fiber batt k = 0.02 W/m·K (Mars CO2-filled, cheap), aerogel
 
 ### 3.6 Radiation & shielding (B-6)
 
-(B-6a) **Site baseline dose rates are data, not derived** — we use measured/model values per body (§4.4 master table; flagged [model] where no spacecraft has measured). Free-space GCR reference: **1.8 mSv/day at 1 AU** (MSL RAD cruise), scaled `×(1 + 0.03·(d_AU − 1))` radial gradient and ×[0.7…1.5] solar-cycle modulation (event stream from `03-solar-system.md`) [SIMPLIFIED].
+(B-6a) **Site baseline dose rates are data, not derived** — we use measured/model values per body (§4.4 master table; flagged [model] where no spacecraft has measured). Free-space GCR (canon: `03-solar-system.md` S-8a): `D_gcr = 1.8 · f_cycle(t)` mSv/day anywhere in the system — **flat with heliocentric distance at game fidelity** (anchor: MSL RAD cruise 1.84 mSv/day) — with solar-cycle modulation `f_cycle ∈ [0.65, 1.35]` (0.65 at solar maximum, 1.35 at minimum; event stream from `03-solar-system.md`) [SIMPLIFIED]. There is **no radial gradient**: belt and Mercury free space see the same 1.8·f_cycle as 1 AU; only atmospheres, magnetospheres, and body half-sky shadowing (already folded into the §4.4 surface values) change the ambient.
 
-(B-6b) **Added shielding** attenuates exponentially by areal density x [g/cm²] with component-specific halving thicknesses (fit to NASA TP-3079 / OLTARIS-class transport results; ignores the few-percent secondary-buildup bump below ~20 g/cm² — noted, accepted) [SIMPLIFIED]:
+(B-6b) **Added shielding** — the dose-response law is **owned by `08-life-support-crew.md` §3.6** and reproduced here verbatim as canon. Shielding is accounted as areal density σ [g/cm²], summed over everything between crew and sky (hull + berm + water walls), **material-blind** [SIMPLIFIED — real polyethylene outperforms steel per kg via hydrogen content, and thin shields show a few-percent secondary-buildup bump below ~20 g/cm²; both deliberately not modeled, see §9 Q2 and 08 Q5]:
 
-| Material | HVT_GCR (g/cm²) | HVT_SPE (g/cm²) | Practical layer |
+```
+f_GCR(σ) = 0.30 + 0.70 · exp(−σ / 30)      (hard 0.30 floor — secondaries prevent full blocking; returns saturate past ~2 t/m²)
+f_SPE(σ) = exp(−σ / 12)                    (strong attenuation — ~20 g/cm² cuts an SPE ~80%)
+
+D_in = D_site,GCR · [ f_open + Σ_i f_i · f_GCR(σ_i) ]  +  D_SPE(t) · [ f_open + Σ_i f_i · f_SPE(σ_i) ]      [mSv/day]
+```
+
+`f_i` = fraction of sky solid angle covered by shield stack i; `σ_i` = that stack's summed areal density. Canonical coverage fractions: **side berm ring only (HAB-08 "+1 ring") f_i = 0.5** (zenith open, f_open = 0.5); **roof slab only f_i = 0.5**; **berm + roof ⇒ f_open = 0**. The module hull always counts as an additional full-sky (f = 1) stack at its own areal density. Body self-shielding of the lower hemisphere is already inside `D_site` for surface values. `D_SPE(t)` is zero except during an active SPE event (B-6d).
+
+**The 0.30 GCR floor is canon and binds at every burial depth** (settled, per 08): no habitat shield stack reduces GCR below `0.30 × D_site,GCR`, and a 2 t/m² berm (200 g/cm² ⇒ f_GCR = 0.301) already sits within 1% of the floor — cover beyond that buys SPE blackout, thermal stability (B-9a), and MMOD immunity (B-4c), but no further GCR margin. (Thick-atmosphere ambients — Earth 0.01, Titan < 0.01, Venus 54 km 0.03 mSv/day — are 03-owned measured/model **overrides of D_site**, not outputs of this law; whether ≥ 1,000 g/cm² burial columns should likewise break the floor is escalated to 08 — §9 Q2.)
+
+Material conversion table for the shielding planner (layer thickness that delivers 100 g/cm² = 1 t/m²):
+
+| Material | ρ (kg/m³) | Layer per 100 g/cm² | Notes |
 |---|---|---|---|
-| Regolith (ρ 1,650 loose) | 110 | 8 | 0.67 m per GCR halving |
-| Water / ice | 70 | 6 | 0.70 m per GCR halving |
-| Polyethylene / Polymers | 60 | 5 | best per kg — hydrogen content |
-| Steel hull | 140 | 11 | worst per kg; counts anyway |
+| Regolith (loose fill) | 1,650 | 0.61 m | berm/burial default; tailings-fed (04 M-8) |
+| Water / ice | 1,000 / 917 | 1.00 m / 1.09 m | shelter jackets, Ice Home cells |
+| Polyethylene / Polymers | 950 | 1.05 m | real-world best per kg (hydrogen) — modeled flat [SIMPLIFIED] |
+| Steel hull | 7,900 | 0.013 m | hull plate counts toward σ |
 
-```
-D_in = D_site · [ f_open + Σ_i f_i · 2^(−x_i / HVT) ]      [mSv/day]
-```
+(B-6c) Worked canon examples: lunar surface 1.37 mSv/day → under 2 m regolith (3.3 t/m² = 330 g/cm²): f_GCR = 0.30 (floor) → 1.37 × 0.30 = **0.41 mSv/day** (150 mSv/yr — a ~4-year stay against the 600 mSv career budget, 08). A 1 t/m² berm (100 g/cm²) already gives f_GCR = 0.325 → 0.45 mSv/day, and 2 t/m² is within 1% of the floor — which is why `04-resources-isru.md` budgets 2–3 t/m² of Regolith overhead per habitat: the tonnes past the first buy SPE blackout (f_SPE(200) ≈ 6×10⁻⁸), thermal stability, and MMOD immunity rather than GCR margin. Mars 0.67 (03 S-8a) → 1 m regolith (165 g/cm²): f_GCR = 0.303 → **0.20 mSv/day**.
 
-`f_i` = fraction of sky solid angle covered by shield stack i. Canonical coverage fractions: **side berm ring only (HAB-08 "+1 ring") f_i = 0.5** (zenith open, f_open = 0.5); **roof slab only f_i = 0.5**; **berm + roof ⇒ f_open = 0**. The module hull always counts as an additional full-sky (f = 1) stack at its own areal density. Body self-shielding of the lower hemisphere is already inside `D_site` for surface values.
+(B-6d) **SPE events** (stream from `03-solar-system.md`; frequency up at solar max). Design envelope event = "Aug-1972 class": **1,000 mSv effective, free space, 1 AU, over 36 h**, scaling ×(1 AU/d)²; typical events are 10–100 mSv. Attenuated by f_SPE(σ) per B-6b. Warning time **30 min only if** a solar-monitor satellite with Sun line-of-sight and data link exists (player infrastructure, `06-ships-stations.md`) — otherwise the dose arrives unannounced.
 
-(B-6c) Worked canon examples: lunar surface 1.37 mSv/day → under 2 m regolith (3.3 t/m² = 330 g/cm²): 1.37 × 2^(−3.0) = **0.17 mSv/day** (62 mSv/yr — long-stay capable). This is why `04-resources-isru.md` budgets 2–3 t/m² of Regolith overhead per habitat. Mars 0.70 → 1 m regolith → 0.25 mSv/day.
-
-(B-6d) **SPE events** (stream from `03-solar-system.md`; frequency up at solar max). Design envelope event = "Aug-1972 class": **1,000 mSv effective, free space, 1 AU, over 36 h**, scaling ×(1 AU/d)²; typical events are 10–100 mSv. Attenuated by HVT_SPE. Warning time **30 min only if** a solar-monitor satellite with Sun line-of-sight and data link exists (player infrastructure, `06-ships-stations.md`) — otherwise the dose arrives unannounced.
-
-(B-6e) **Storm-shelter rule**: a compliant shelter = ≥ 25 g/cm² water-equivalent over 4π around ≥ 1.5 m³/crew (HAB-17, water-wall jackets, or any spot under ≥ 2 t/m² berm). Design event behind 25 g/cm² water: 1,000 × 2^(−25/6) ≈ **56 mSv** — bad day, not a casualty. In a 0.5 g/cm² suit it is acute radiation syndrome (`08-life-support-crew.md` owns health effects; crew career framework references NASA's 600 mSv limit).
+(B-6e) **Storm-shelter rule**: a compliant shelter = ≥ **35 g/cm²** water-equivalent over 4π around ≥ 1.5 m³/crew (HAB-17, water-wall jackets, or any spot under ≥ 2 t/m² berm) — matching 08's worked σ = 35 g/cm² shelter exactly. Design event behind 35 g/cm²: 1,000 × f_SPE(35) = 1,000 × e^(−35/12) ≈ **54 mSv** — bad day, not a casualty. (A 25 g/cm² jacket only cuts the design event to ≈ 124 mSv under the canonical f_SPE; the spec was thickened to 35 g/cm² rather than weakening the ~55 mSv design guarantee.) In a 0.5 g/cm² suit the same event delivers ≈ 960 mSv — acute radiation syndrome territory (`08-life-support-crew.md` owns health effects; crew career framework references NASA's 600 mSv limit).
 
 (B-6f) **Europa special case** — three-component attenuation in ice/regolith cover, with an explicit dose decomposition (x = ice depth, x_areal = areal density in g/cm²):
 
 ```
-D(x) = D_site · [ f_e · 2^(−x / 1.5 cm)  +  f_b · 2^(−x / 30 cm) ]  +  D_GCR · 2^(−x_areal / HVT_GCR)
+D(x) = D_site · [ f_e · 2^(−x / 1.5 cm)  +  f_b · 2^(−x / 30 cm) ]  +  D_GCR · f_GCR(x_areal)
 
 f_e   = 0.9   trapped MeV electrons, HVT = 1.5 cm ice (top ~30 cm absorbs them)
 f_b   = 0.1   bremsstrahlung photons, HVT = 30 cm ice (dominate 0.3–4 m, per Paranicas)
-D_GCR ≈ 1.0 mSv/day   half-sky GCR at 5.2 AU; HVT_GCR per B-6b (ice = 70 g/cm²)
+D_GCR ≈ 0.9·f_cycle mSv/day   half-sky of the flat 1.8·f_cycle free-space GCR (B-6a);
+                              f_GCR per B-6b — its 0.30 floor ⇒ deep-ice GCR remnant ≈ 0.27 mSv/day at mean f_cycle
 ```
 
-Rule of thumb the UI teaches: **4 m of ice overhead → ≈ 0.08 mSv/day anywhere on Europa** (trailing apex: 5,400 × 0.1 × 2^(−400/30) ≈ 0.05 bremsstrahlung + 0.03 GCR remnant; electrons are long gone). The < 0.5 mSv/day habitability line is crossed at ≈ 3.2 m — 4 m is the taught value, with margin. Surface EVA at the trailing apex (5,400 mSv/day = 225 mSv/h) is dose-budgeted in minutes; leading-hemisphere mid-latitudes (game value 200 mSv/day [model]) allow ~1 h sorties. Crewed presence is legal only after robots finish a buried habitat (Act 5 gating, §6).
+The electron/bremsstrahlung halving thicknesses are a **Europa-specific belt-electron model** (Paranicas anchor), not the B-6b GCR/SPE law — magnetospheric MeV electrons and their photons really are absorbed nearly exponentially in ice; only the GCR term carries the secondaries floor. Rule of thumb the UI teaches: **4 m of ice overhead → ≈ 0.32 mSv/day anywhere on Europa** (trailing apex: 5,400 × 0.1 × 2^(−400/30) ≈ 0.05 bremsstrahlung + 0.27 GCR-floor remnant; electrons are long gone). The < 0.5 mSv/day habitability line is crossed at ≈ 3.4 m — 4 m is the taught value, with margin. Surface EVA at the trailing apex (5,400 mSv/day = 225 mSv/h) is dose-budgeted in minutes; leading-hemisphere mid-latitudes (game value 200 mSv/day [model]) allow ~1 h sorties. Crewed presence is legal only after robots finish a buried habitat (Act 5 gating, §6).
 
 ### 3.7 Dust & contamination (B-7)
 
@@ -329,15 +337,15 @@ Leak = `L_cat` %/day of contained gas at 101.3 kPa ΔP (B-4a). The Berths column
 | HAB-06 | Glazed Dome 10 m (T2) | 6 t | 12 t Glass + frame | 260 m³ | 2 (or greenhouse) | 0.06 | 2×2 | lunar/Mars greenhouse; glazing rule B-5c; crops dose-tolerant (08) |
 | HAB-07 | Sintered Regolith Vault (T2) | 1.5 t (liner+hatch) | 120 t sinter + 0.6 t BasaltFiber | 200 m³ | 5 | 0.08 | 3×2 | Taylor/Meek microwave sinter + ICON-class printing; liner rule B-3d |
 | HAB-08 | Berm Kit (T1, applies to any module) | — | 2–5 t/m² Regolith (+frame per B-2b) | — | — | — | +1 ring | radiation per B-6, thermal per B-9a, MMOD immunity |
-| HAB-09 | Ice Home (T2, Mars/icy bodies) | 6 t | 370 t Water (fill ≈ 1 m³/day → ~400 days, staged) | 240 m³ | 4 | 0.06 | 2×2 | NASA Langley Mars Ice Home (~400–650 m³ ice in the ConOps); translucent shielding ≈ 90 g/cm² water when full → 0.29 mSv/day on Mars; occupiable during fill at proportional shielding (ConOps-honest) |
+| HAB-09 | Ice Home (T2, Mars/icy bodies) | 6 t | 370 t Water (fill ≈ 1 m³/day → ~400 days, staged) | 240 m³ | 4 | 0.06 | 2×2 | NASA Langley Mars Ice Home (~400–650 m³ ice in the ConOps); translucent shielding ≈ 90 g/cm² water when full → 0.22 mSv/day on Mars (B-6b: 0.67 × f_GCR(90)); occupiable during fill at proportional shielding (ConOps-honest) |
 | HAB-10 | Titan Iso-baric Longhouse (T3) | 8 t (frame+aerogel) | optional ice cladding | 500 m³ | 8 | 0.02 (drift, B-4a) | 4×2 | iso-baric rule B-3c; 30 cm aerogel; 5 kW heater node |
 | HAB-11 | Aerostat Gondola Module (T3) | 6 t | — | 80 m³ | 2 | 0.04 | keel slot | HAVOC gondola; FEP-clad, acid ledger B-7 |
 | HAB-12 | Envelope Unit 10,000 m³ (T3) | 1.3 t (FEP/Vectran laminate, 0.35 kg/m² + fittings) | — | (lifting/living volume) | — | 0.5 kg/day gas | — | VEGA balloon material heritage; lifts 3.3 t gross @ 54 km (B-8a) |
-| HAB-13 | Asteroid Gallery, per 1,000 m³ (T3) | 1.5 t liner + 0.4 t collar | 2,500 t excavation (04 e_dig) | 1,000 m³ | 20 | 0.06 | interior | B-3e; interior dose < 0.05 mSv/day under ≥ 10 m rock |
+| HAB-13 | Asteroid Gallery, per 1,000 m³ (T3) | 1.5 t liner + 0.4 t collar | 2,500 t excavation (04 e_dig) | 1,000 m³ | 20 | 0.06 | interior | B-3e; interior dose at the B-6b GCR floor under ≥ 10 m rock (0.30 × ambient ≈ 0.5 mSv/day in the belt), SPE-immune |
 | HAB-14 | Europa Ice Gallery, per 500 m³ (T3/T4) | 2 t liner + heaters | melted-bore spoil | 500 m³ | 10 | 0.08 | interior, ≥ 6 m deep | cryobot-cut; B-6f cover rule; walls held < 200 K standoff |
 | HAB-15 | Venus Surface Crucible (T4) | 25 t | — | 25 m³ | 2 (30-day sortie) | 0.10 | 2×2 | Venera + GEER/LLISSE lineage: Ti buckling sphere (B-3b, t≈33 mm), internal microporous insulation, 30 kWe duplex-Stirling cooling, 900 K glow radiator |
 | HAB-16 | Mercury Crawler Platform (T3) | 30 t chassis | — | carries 2 modules (each ≤ 2×1 footprint, ≤ 16 t) | — | — | mobile 4×2 | terminator-pacing base, 0.5–5 km/h; sustained ≥ 3.63 km/h equatorial requirement (= 87.1 km/day), design cruise 4.0 km/h (10% margin); drive power from `10-vehicles.md` |
-| HAB-17 | Storm Shelter Cell (T1) | 2 t + 10 t Water fill (or 40 t Regolith bags) | optional | 8 m³ | 5 (shelter only) | 0.02 | 1×1 | B-6e compliant (25 g/cm² water-eq, 4π) |
+| HAB-17 | Storm Shelter Cell (T1) | 2 t + 14 t Water fill (or 56 t Regolith bags) | optional | 8 m³ | 5 (shelter only) | 0.02 | 1×1 | B-6e compliant (35 g/cm² water-eq, 4π) |
 | HAB-18 | BasaltFiber Wound Hab (T3) | 1 t (bladder, hatches) | 6 t BasaltFiber + 2 t Glass | 300 m³ | 6 | 0.05 | 2×2 | filament-wound on-site (winder = 05 machine); the "grown locally" rigid hab |
 
 **Crew berth rule:** the catalog **Berths column is canonical** for every catalog module — its values already fold in real-world anchor caps (TransHab crew 6 for HAB-04) and volume reserved for function-specific outfitting (HAB-06 reserves most volume for crops; HAB-09's ice annulus and HAB-10/13/14's plant/standoff space are not berth-able). The formula `berths = floor(V_press / 35 m³)` is a **fallback only**, for non-catalog or player-reconfigured hab-outfitted volumes; labs/workshops/greenhouses count 0 berths. Net habitable volume reported to `08-life-support-crew.md` as `0.5 × V_press` [SIMPLIFIED] against its 25 m³/crew comfort floor.
@@ -366,7 +374,7 @@ Each package = the hazard→response table the build UI surfaces when the player
 |---|---|
 | Vacuum; 101 kPa ΔP everywhere | Standard tension hulls (B-3a); pumped airlocks; leak ledger (B-4) |
 | 354-h night, 95 K; 390 K day; ±150 K thermal cycling | MLI (B-5a); night storage or fission sizing (09); buried modules sit at constant 250 K (Apollo HFE) — berming is thermal *and* radiation strategy; exposed modules take wear ×1.5 (B-10) |
-| GCR 1.37 mSv/day (Chang'E-4 LND) + SPE | 2–3.3 t/m² regolith berms → 0.39–0.17 mSv/day (B-6b: 200 g/cm² → 0.39, 300 → 0.21, 330 (the 2 m B-6c case) → 0.17); shelter rule B-6e |
+| GCR 1.37 mSv/day (Chang'E-4 LND) + SPE | 1–3.3 t/m² regolith berms → 0.45–0.41 mSv/day (B-6b: 100 g/cm² → 0.45; 200 g/cm² → 0.41; 330 (the 2 m B-6c case) → 0.41 — the GCR floor, saturated past ~2 t/m²); shelter rule B-6e |
 | Abrasive electrostatic dust (Apollo) | Dust ledger B-7; suitports + EDS (Blue Ghost anchor); sintered pads/roads |
 | Micrometeoroids | Berm/burial immunity or Whipple wrap (B-4c) |
 | Shallow moonquakes (Apollo seismometry, up to ~M5) | Flex couplings between modules (B-9c) |
@@ -381,7 +389,7 @@ Package structures: polar **Rim Power Station** site tag (80–90% annual sun, 1
 | 0.61 kPa CO2; ΔP ≈ 101 kPa | Standard tension hulls; cheap fiber insulation works (CO2 gap, B-5b) |
 | Dust storms: solar ×0.2–0.5 for 5–100 sols; deposition −0.3%/sol | Storm model B-9b; PV oversizing + cleaning robots, or fission (the canonical 04 §3.7 architecture lesson); intakes unaffected (HEPA ×3, 04 F-4) |
 | Perchlorates 0.4–0.6 wt% (Phoenix) | Perchlorate sub-ledger (B-7): wet-wipe stations, dust-locks, greenhouse soil bake-out |
-| GCR/SPE 0.70 mSv/day (MSL RAD), 16 g/cm² atmosphere already counted | 1 m regolith (165 g/cm² → 0.25 mSv/day) or full Ice Home water cells (90 g/cm² → 0.29 mSv/day) per B-6b; storm shelter for SPE (atmosphere alone cuts design event to ~100–200 mSv outdoors) |
+| GCR/SPE 0.67 mSv/day (MSL RAD; 03 S-8a canon), 16 g/cm² atmosphere already counted | 1 m regolith (165 g/cm² → 0.20 mSv/day) or full Ice Home water cells (90 g/cm² → 0.22 mSv/day) per B-6b; storm shelter for SPE (the 16.4 g/cm² column alone, f_SPE ≈ 0.26, cuts the distance-scaled design event to ≈ 90–135 mSv outdoors) |
 | −90 °C nights, 24.66 h sol | mild: U = 0.2 envelope, heater node per 250 m² (09) |
 | Marsquakes (InSight) | low-severity B-9c rolls |
 
@@ -420,7 +428,7 @@ Megaproject: **Titan Ocean Bore** (T4): cryobot string toward the 50–100 km-de
 
 | Hazard | Engineering response |
 |---|---|
-| **5.4 Sv/day** surface (trailing apex; JPL/Paranicas), 200 mSv/day leading [model] | Crew may not land until robots bury a habitat: B-6f three-component shielding; ≥ 4 m ice → ≈ 0.08 mSv/day (< 0.5 mSv/day from ≈ 3.2 m); EVA dose budgets in minutes (trailing) to ~1 h (leading) |
+| **5.4 Sv/day** surface (trailing apex; JPL/Paranicas), 200 mSv/day leading [model] | Crew may not land until robots bury a habitat: B-6f three-component shielding; ≥ 4 m ice → ≈ 0.32 mSv/day (< 0.5 mSv/day from ≈ 3.4 m; the residual is the B-6b GCR floor); EVA dose budgets in minutes (trailing) to ~1 h (leading) |
 | Electronics death | Robots need Clipper-style vaults: +0.3 t per robot, electronics-lifetime ×20 (anchor: Europa Clipper ~9 mm vault) |
 | Vacuum, 50–125 K | Lunar-style MLI + heat trace 8 W/m; ice galleries sit at ~100 K walls — heaters + liner standoff |
 | Ice as overburden | HAB-14 galleries melted at 6–30 m depth by construction cryobots; spoil refreezes as closure plug |
@@ -432,7 +440,7 @@ Megaproject: **Titan Ocean Bore** (T4): cryobot string toward the 50–100 km-de
 | Hazard | Engineering response |
 |---|---|
 | Vacuum; 101 kPa ΔP | Lunar-pattern tension hulls (B-3a), pumped airlocks (B-4b); MMOD rules B-4c |
-| 0.1 mSv/day dose (JPL ladder, §2) — outside Jupiter's hard belts | Long-stay capable with shallow ~1 t/m² berms (B-6b: 100 g/cm² regolith → 0.05 mSv/day); shelter rule B-6e still applies for SPE remnants |
+| 0.1 mSv/day dose (JPL ladder, §2) — outside Jupiter's hard belts | Long-stay capable with shallow ~1 t/m² berms (B-6b: 100 g/cm² regolith, f_GCR = 0.325 → 0.03 mSv/day); shelter rule B-6e still applies for SPE remnants |
 | 165 K day / 80 K night, 400.5 h solar cycle | MLI per B-5a; burial to T_deep ≈ 120 K (B-9a) |
 | Icy, low-abrasion regolith — no lunar-style electrostatic fines [model] | Dust ledger off; standard pads still required for landing ejecta |
 | Jupiter logistics hub | Supervised-autonomy ops center for Europa/Io robotics (4.0–8.5 s one-way to Europa); propellant depot pairing with `06-ships-stations.md` |
@@ -455,7 +463,7 @@ Package structures: **Plume-Curtain Collector** (T3): mast-and-fence electrostat
 |---|---|
 | µg: nothing stays put | Anchoring per 04 M-6 (microspines 250 N, bolts 2,000 N); excavation debris rule (04 M-6.3) |
 | No overburden weight | Liner-only galleries (B-3e); rock = shielding, never pressure containment on rubble piles |
-| GCR 1.3–1.5 mSv/day in the belt (radial gradient B-6a) | Interior galleries under ≥ 10 m rock: **< 0.05 mSv/day — Earth-surface class**, the best radiation real estate off Earth; this is the belt's quiet selling point |
+| GCR 1.8·f_cycle mSv/day in the belt — same as everywhere in free space (flat with distance, B-6a; 1.17–2.43 over the solar cycle) | Interior galleries under ≥ 10 m rock sit on the B-6b GCR floor: **0.30 × ambient ≈ 0.35–0.73 mSv/day, with total SPE immunity** — floor-level dose for zero imported shielding mass; this is the belt's quiet selling point (whether deep burial should break the floor is §9 Q2) |
 | Rotation (≤ 2.2 h rubble limit, 04 M-6.4) | Galleries aligned to spin axis; despin option per 04; centrifugal "gravity" off-axis is millis-g — not health-relevant (08 owns µg health) |
 | Thermal: fast sun/shade cycles (hours) | Interior is thermally dead-stable; only surface kit takes cycling wear ×1.5 |
 
@@ -467,8 +475,8 @@ Package structures: **Gallery Network** (HAB-13 stacks; berths 20/1,000 m³ make
 |---|---|
 | 176-day solar day; 700 K subsolar (perihelion), 100 K night | Either **polar/PSR siting** (Moon-pattern base; MESSENGER ice, purer than lunar: grade roll 0.5/0.8/0.95) or the **Terminator Crawler** (HAB-16): stay in the twilight band by moving ≥ 3.63 km/h at the equator (= 87.1 km/day; slower at latitude ×cos φ) |
 | SPE ×(1 AU/d)²: ≈ ×6.6 at mean distance (0.39 AU), up to ×10.6 at perihelion (0.307 AU) | Storm shelter non-negotiable, sized to the ×10.6 perihelion case; 30-min warning needs an inner-system monitor sat |
-| GCR ~1.3 mSv/day + SPE | berm rules as Moon |
-| Solar bonanza 6.3–14.4 kW/m² | 10× Earth-orbit PV yield; drives the T3+ **Mass Driver Port** (launcher itself owned by `02-propulsion.md`/`05-industry-logistics.md`; we own its 20-cell site, pad, and 2 MWe substation footprint) |
+| GCR 1.8·f_cycle mSv/day (flat with distance, B-6a; 03 §4 table) + SPE | berm rules as Moon |
+| Solar bonanza 6.3–14.4 kW/m² | 10× Earth-orbit PV yield; drives the T3+ **Mass Driver Port** (launcher itself owned by `05-industry-logistics.md` §3.8/§4.5; we own its 20-cell site, pad, and 2 MWe substation footprint) |
 | Day thermal siege on stationary kit | Surface lines buried (B-5d); radiators face poleward sky; crawler radiators trail in own shadow |
 
 ### 4.4 Environment master table (canonical inputs to B-5/B-6/B-9)
@@ -478,7 +486,7 @@ Package structures: **Gallery Network** (HAB-13 stacks; berths 20/1,000 m³ make
 | Moon equator | 1.62 | vacuum | 390 / 95 | 250 | 708.7 h | 1.37 (LND, measured) | 1,361 | dust ledger on |
 | Moon polar rim | 1.62 | vacuum | 230 / 120 | 190 | 708.7 h, 80–90% lit | 1.37 | 1,361 grazing | mast PV |
 | Moon PSR floor | 1.62 | vacuum | 40 / 25 | 38 | never lit | 1.37 | 0 | B-9e heat discipline |
-| Mars datum | 3.71 | 0.61 kPa CO2 | 270 / 185 | 215 | 24.66 h | 0.70 (RAD, measured) | 490–715 | storms B-9b; perchlorate |
+| Mars datum | 3.71 | 0.61 kPa CO2 | 270 / 185 | 215 | 24.66 h | 0.67 (RAD, measured; 03 S-8a) | 490–715 | storms B-9b; perchlorate |
 | Venus 54 km | 8.87 | ≈ 61 kPa CO2 (53–80 kPa over the 52–55 km band) | 310 / 295 | — | ≈ 6 d (super-rotation) | 0.03 [model] | 400–1,000 day | acid ledger; B-8 |
 | Venus surface | 8.87 | 9,200 kPa | 737 / 737 | 737 | 116.8 d | ~0.001 [model] | ~15–20 (heavy overcast; Tomasko/Pioneer Venus net-flux) | T4 sorties only |
 | Titan surface | 1.352 | 146.7 kPa N2 | 94 / 93.5 | 94 | 15.95 d (moot) | < 0.01 [model] | ~1 (useless) | iso-baric; fission |
@@ -486,11 +494,11 @@ Package structures: **Gallery Network** (HAB-13 stacks; berths 20/1,000 m³ make
 | Europa leading | 1.315 | vacuum | 125 / 85 | 100 | 85.2 h | 200 [model] | 50 | 1-h EVA budgets |
 | Callisto | 1.235 | vacuum | 165 / 80 | 120 | 400.5 h | 0.1 (JPL ladder) | 50 | HOPE crew staging; dust ledger off |
 | Enceladus (non-stripe) | 0.113 | vacuum | 80 / 65 | 75 | 32.9 h | ~1 [model] | 14.8 | anchoring lite |
-| NEA @ 1 AU | ~10⁻⁴ | vacuum | 350 / 150 (fast cycle) | 230 | hours | 1.3 | 1,361 | 04 M-6 rules |
-| Belt C-type @ 2.7 AU | ~10⁻⁴–10⁻² | vacuum | 233 / 120 | 160 | hours | 1.4–1.5 | 187 | gallery doctrine |
-| Ceres | 0.28 | vacuum | 235 / 110 | 160 | 9.07 h | 1.1 [model] | 178 | ice crust (04) |
-| Mercury equator | 3.70 | vacuum | 700 / 100 | 350 | 4,223 h | 1.3 + SPE ×6.6 mean / ×10.6 perihelion | 6,270–14,450 | crawler or pole |
-| Mercury PSR | 3.70 | vacuum | < 100 | 90 | never lit | 1.3 | 0 | purest PSR ice |
+| NEA @ 1 AU | ~10⁻⁴ | vacuum | 350 / 150 (fast cycle) | 230 | hours | 1.8·f_cyc (03 §4 table) | 1,361 | 04 M-6 rules |
+| Belt C-type @ 2.7 AU | ~10⁻⁴–10⁻² | vacuum | 233 / 120 | 160 | hours | 1.8·f_cyc (flat GCR, B-6a) | 187 | gallery doctrine |
+| Ceres | 0.28 | vacuum | 235 / 110 | 160 | 9.07 h | 1.8·f_cyc (03 §4 table) | 178 | ice crust (04) |
+| Mercury equator | 3.70 | vacuum | 700 / 100 | 350 | 4,223 h | 1.8·f_cyc + SPE ×6.6 mean / ×10.6 perihelion | 6,270–14,450 | crawler or pole |
+| Mercury PSR | 3.70 | vacuum | < 100 | 90 | never lit | 1.8·f_cyc | 0 | purest PSR ice |
 
 (B-5a derives `T_env,eff` from the T_day/T_night columns via the half-sky rule `T_env,eff⁴ = 0.5·T_ground⁴ + 0.5·T_sky⁴`, T_sky = 3 K [LUMPED]; buried structures substitute T_deep per B-9a. `03-solar-system.md` owns orbital-season refinements.)
 
@@ -580,7 +588,7 @@ Research costs/prereqs live in `11-research-tech.md`. Act-gating teeth: Europa c
 ## 9. Open Questions
 
 1. **Grid scale vs body size**: 10 m cells × 64² site works for the Moon/Mars; is it right for aerostat keels (mass-slots, not cells) and asteroid interiors (3D-ish galleries flattened to 2D decks)? Current answer: keel = slot list, gallery = stacked 2D decks; needs a UI prototype.
-2. **Halving-thickness fidelity (B-6b)**: single-exponential per material ignores the secondary-particle buildup bump below ~20 g/cm² (thin aluminum shields can *raise* dose-equivalent slightly). Accept [SIMPLIFIED], or add a flat +5% penalty band under 20 g/cm² to teach the real lesson?
+2. **Deep-burial GCR floor (B-6b)**: 08's canonical f_GCR floor (0.30, secondaries) is adopted here as binding at every depth, so 10 m asteroid galleries and 4 m Europa ice bottom out at 0.30 × ambient GCR — yet 03's measured thick-atmosphere overrides (Earth 0.01 mSv/day under 1,033 g/cm², Titan < 0.01 under ~10,900 g/cm²) show the floor must physically break somewhere past ~1,000 g/cm². Escalated to 08: either confirm that habitat shield stacks never graduate past the floor (the current binding answer), or publish a deep-shield extension (e.g. the floor itself decaying with an e-fold of ~1,000 g/cm²) — that would restore "Earth-surface-class" deep galleries and materially buff belt and Europa endgame real estate. Related fidelity items deliberately left out of the material-blind model: polyethylene's hydrogen advantage and the thin-shield secondary-buildup bump below ~20 g/cm² (08 Q5).
 3. **Leak-rate canon**: rigid 0.02%/day is anchored (ISS ≈ 0.025%); inflatable 0.04–0.05 and ISRU-liner 0.06–0.10 are extrapolations. Hostile reviewers will ask for BEAM leak data (NASA reports it performed *better* than rigid spec) — consider flipping inflatables to 0.02 and making ISRU liners the only leaky class.
 4. **Venus 52–56 km solar flux band** (B-8d, 400–1,000 W/m² + 40% albedo bonus): verify against Pioneer Venus LSFR/Tomasko net-flux profiles before 09 locks its power curves (the surface value, ~15–20 W/m² in §4.4, is already anchored to the same Tomasko et al. 1980 dataset).
 5. **Europa leading-hemisphere dose** (200 mSv/day game value): model-based; Paranicas maps suggest possibly lower at high latitude on the leading side. If much lower, leading-pole surface ops become too easy — re-check before tuning Act 5 difficulty.

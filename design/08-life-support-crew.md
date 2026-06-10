@@ -43,7 +43,7 @@ Every number below names its anchor. Sources are NASA BVAD (Baseline Values and 
 
 **Radiation anchors.**
 - **NASA career limit: 600 mSv** effective dose, single universal standard for all ages/sexes (NASA-STD-3001, adopted 2021; based on ≤3% risk of exposure-induced cancer death).
-- **Dose rates**: ISS LEO **0.5-1.0 mSv/day** (avg ~0.7); deep-space interplanetary cruise **~1.8 mSv/day** (MSL/RAD instrument, Hassler et al. 2013, 1.84 mSv/day measured Nov 2011–Aug 2012 during the **rise toward solar maximum** of cycle 24 — the true **solar-minimum** cruise dose is somewhat *higher*, because GCR flux peaks at solar minimum, so 1.8 mSv/day is a near-solar-max value, not a worst case); Mars surface **~0.64 mSv/day** (RAD on Curiosity); Moon surface **~0.4-0.6 mSv/day**; **Europa surface ~5,400 mSv/day (5.4 Gy/day)** — lethal in hours, the most hostile crewed destination in the game.
+- **Dose rates**: ISS LEO **0.5-1.0 mSv/day** (avg ~0.7); deep-space interplanetary cruise **~1.8 mSv/day** (MSL/RAD instrument, Hassler et al. 2013, 1.84 mSv/day measured Nov 2011–Aug 2012 during the **rise toward solar maximum** of cycle 24 — the true **solar-minimum** cruise dose is somewhat *higher*, because GCR flux peaks at solar minimum, so 1.8 mSv/day is a near-solar-max value, not a worst case); Mars surface **~0.67 mSv/day** (MSL RAD on Curiosity; matches `03` S-8a); Moon surface **~1.37 mSv/day** (Chang'e-4 LND, Zhang et al. 2020; our canonical unshielded lunar rate, matching `03` S-8a and `07`); **Europa surface ~5,400 mSv/day (5.4 Gy/day)** — lethal in hours, the most hostile crewed destination in the game.
 - **Acute thresholds**: Acute Radiation Syndrome (ARS) onset ~**1,000 mSv (1 Gy)** delivered in hours; LD50/60 ≈ **4,000-4,500 mSv (4-4.5 Gy)** acute, whole-body, untreated; near-certain death ≥ 8 Gy.
 - **Solar Particle Events (SPE)**: episodic; a large event (e.g. an August-1972-class flare) can deliver **hundreds-to-thousands of mSv in hours** to lightly-shielded crew — the reason a storm shelter (`06`/`07`) exists.
 
@@ -165,7 +165,9 @@ ECLSS is modeled as a set of **closure fractions** η ∈ [0,1] applied to the m
 | CO2 removal from air | η_CO2rm | 0 (LiOH consumed) | ~1.0 (CDRA, regenerable) | ~1.0 (uptake by plants) |
 | O2 loop closure | η_O2 | 0 | 0.42 (Sabatier) → 0.50 (Sabatier+) | 0.95-0.98 (photosynthesis) |
 | Water recovery | η_H2O | 0 | 0.90 → 0.98 (brine proc.) | 0.98 |
-| Food closure | η_food | 0 | 0 | 0.50 (BIOS-3 level) → 0.95 (full greenhouse) |
+| Food closure | η_food | 0 | 0 phys-chem; **0.25–0.50** (T2 EDEN-class greenhouse, LS-GARDEN / `11` LS-04) | 0.80 → 0.95 (full bioregen greenhouse, `11` LS-07) |
+
+**Food closure is the only fraction with a meaningful T2 step.** Air and water close physico-chemically (T1-T2), but food does not — *yet* a partial bioregenerative loop arrives a tier before the full one. At **T2** (`11` LS-04, EDEN ISS Antarctic-greenhouse anchor: ~270 kg vegetables/yr from 12.5 m²) a dedicated **salad/veg greenhouse rack** (LS-GARDEN, §4.1) reaches **η_food ≈ 0.25–0.50** — fresh produce, vitamins, morale, and partial calories from fast root/leaf crops — bridging Acts 2–3 without waiting for T3. Full-diet closure (η_food 0.80→0.95, the complete grain+protein+oil staple set) remains **T3** (`11` LS-07 bioregenerative era, ≥80% food closure). This staging means a Mars outpost can grow *some* of its own food during the Act-3 surface campaign and become food-independent only after the T3 unlock.
 
 **Net daily resupply per crew** (kg/day), given selected closures:
 ```
@@ -239,22 +241,22 @@ Each crew member carries two **distinct** dose accumulators (do **not** equate t
 
 **Quality factor (effective vs absorbed).** Effective dose (mSv) = absorbed dose (mGy) × Q, where Q ≈ 1 for SPE protons and Q ≈ 3 for the GCR heavy-ion mix (a deliberate v1 simplification; real GCR Q spans ~3–20 — see Q5). The `Ḋ_env` table below is given as **effective** dose-rate (mSv/day) and feeds `D_career` directly; the **absorbed** rate feeding `D_acute` is `Ḋ_env / Q`. Consequence: an SPE (Q ≈ 1) contributes almost equally to both accumulators, whereas chronic GCR (Q ≈ 3) adds ~3× more to the career (mSv) total than to the acute (mGy) total — which is why GCR drives the cancer limit but rarely the ARS limit.
 
-**Environmental dose rate** at the crew's current location (per `03-solar-system.md` region table), before shielding:
+**Environmental dose rate** at the crew's current location. **`03-solar-system.md` §3.7 (S-8a/b/c) is canonical for the field**; `08` consumes those `Ḋ_env` functions verbatim and the table below merely reproduces 03's anchors for reference (it is *not* an independent value set). Values are unshielded ambient (before habitat shielding) **except the Van Allen row, which 03 S-8c defines as effective dose behind a nominal 5 g/cm² hull** (08's habitat-shielding factors §3.6 are then applied on top of that hull baseline):
 
-| Region | Ḋ_env (mSv/day) | Anchor |
+| Region | Ḋ_env (mSv/day) | Anchor (per `03` S-8) |
 |---|---|---|
-| Earth surface / under atmosphere | ~0.01 | sea-level background |
+| Earth surface / under atmosphere | ~0.01 | sea-level background (S-8a override) |
 | LEO (ISS, 400 km) | 0.5-1.0 | ISS dosimetry |
-| Van Allen transit (brief) | ~2,400 peak (≈100 mSv/**h** at peak) | inner-belt protons; transient, crossed only briefly |
-| Cislunar / interplanetary cruise | 1.8 | MSL/RAD |
-| Moon surface | 0.4-0.6 | half-sky + RAD-analog |
-| Mars surface | ~0.64 | Curiosity/RAD |
-| Main belt / Ceres | ~1.8 | GCR-dominated |
-| Jupiter system (outside Europa) | 10-100+ | magnetosphere |
-| **Europa surface** | **~5,400** | 5.4 Gy/day, lethal in hours |
-| SPE event (unshielded, peak) | +100 to +3,000 over hours | Aug-1972-class |
+| Van Allen belts (behind 5 g/cm² hull) | piecewise: peak **150 @ 1.6 R_E** (inner proton belt) → 10 @ 2.5 → second hump **50 @ 4.5 R_E** (outer electron belt) → 0 @ 8 R_E; a **chemical transit accrues ~1–5 mSv/pass**, an electric-propulsion spiral Sv-class | S-8c [AP8/AE8-simplified, behind-hull effective dose] |
+| Cislunar / interplanetary cruise | 1.8 · f_cycle | MSL/RAD (S-8a; f_cycle 0.65–1.35) |
+| Moon surface | **1.37** | Chang'e-4 LND (Zhang et al. 2020); matches `03` S-8a and `07` |
+| Mars surface | **0.67** | MSL RAD on Curiosity; matches `03` S-8a |
+| Main belt / Ceres | 1.8 · f_cycle | GCR-dominated (S-8a; no belt override) |
+| Jupiter system (outside Europa) | 10-100+ (D_jup(r), S-8c) | magnetosphere |
+| **Europa surface** | **~5,400** | 5.4 Gy/day, lethal in hours (S-8c) |
+| SPE event (unshielded, peak) | +100 to +3,000 over hours (1/d²) | Aug-1972-class (S-8b) |
 
-**Reading the table for the shielding formula.** Each region's tabulated `Ḋ_env` is its **GCR background** rate and is used as `Ḋ_GCR` (the quantity the GCR shielding factor multiplies). `Ḋ_SPE` is **zero except during an active SPE event**, which supplies the `+100…+3,000 mSv-over-hours` term (the last row) as `Ḋ_SPE` for the duration of the event. The Van Allen value is a transient peak crossed only briefly during transfer (mark it per-hour, not a sustained daily rate). Where a region is GCR-dominated, set `Ḋ_GCR = Ḋ_env` and `Ḋ_SPE = 0` between events.
+**Reading the table for the shielding formula.** Each region's tabulated `Ḋ_env` is its **GCR background** rate and is used as `Ḋ_GCR` (the quantity the GCR shielding factor multiplies). `Ḋ_SPE` is **zero except during an active SPE event**, which supplies the `+100…+3,000 mSv-over-hours` term (the last row) as `Ḋ_SPE` for the duration of the event. The **Van Allen belt field** is *not* GCR: it is 03 S-8c's piecewise proton/electron field already expressed behind a nominal 5 g/cm² hull, evaluated by geocentric radius r [R_E] along the trajectory; 08 applies any *additional* habitat shielding (§3.6 factors, treated as SPE-like proton attenuation) on top, integrates dose over the time spent in the belts, and reproduces 03's anchor of **~1–5 mSv per chemical transit pass** (an EP spiral lingers for weeks → Sv-class, the in-game reason SEP tugs fly uncrewed). Where a region is GCR-dominated, set `Ḋ_GCR = Ḋ_env` and `Ḋ_SPE = 0` between events.
 
 **Shielding.** Habitat areal density `σ` (g/cm²) is the sum of hull, dedicated shielding, stored Water walls, regolith overburden (`07`), and any structure between the crew and the sky (owned/aggregated by `06 §3.9` and `07`). The dose multiplier differs for GCR vs SPE:
 ```
@@ -340,7 +342,7 @@ M_target = 50 + Σ (modifiers, clamped to [0,100])
 | Overwork (scheduled > 12 h/day) | −0.5/day | — |
 | Skill-matched fulfilling work | +5 | — |
 
-**Light-lag (L_owl)**: one-way light time from Earth, computed from current distance (`01`/`03`): Moon ~1.3 s (negligible), Mars 3-22 min, Jupiter 33-53 min, Saturn 68-84 min. Beyond a few light-minutes, real-time conversation with Earth is impossible — a quantified loneliness penalty that grows with distance and is unique to this game's honest scale.
+**Light-lag (L_owl)**: one-way light time from Earth, computed from current distance (`01`/`03` S-4b): Moon ~1.3 s (negligible), Mars 3.0-22.3 min, Jupiter 32.7-53.7 min, Saturn ≈67-91 min (66.5-90.6, `03` S-4b). Beyond a few light-minutes, real-time conversation with Earth is impossible — a quantified loneliness penalty that grows with distance and is unique to this game's honest scale.
 
 **Morale effects:**
 - Productivity multiplier `P_morale = 0.5 + 0.5·(M/100)` (at M=100, full; at M=50, 0.75; at M=0, 0.5).
@@ -473,7 +475,8 @@ Masses in t, power in kW, all anchored. ECLSS hardware performance (throughput, 
 | LS-BPA | Brine processor add-on | T2 | 0.3 | 0.4 | 6 crew | η_H2O → 0.98 | 4 | ISS BPA |
 | LS-CHX | Condensing heat exchanger | T0 | 0.2 | 0.4 | 6 crew | humidity → grey water | 3 | ISS CHX |
 | LS-ALGAE | Algae photobioreactor | T3 | 2.0 | 19 (light) | O2 balance 4 crew (32 m² illuminated) | η_O2 → 0.95 at 8 m²/crew | 5 | BIOS-3 Chlorella; MELiSSA C4a |
-| LS-GREEN | Greenhouse rack (per 40 m²) | T3 | (module, `06/07`) | ~11 (light) | full diet 1 crew | η_food → 0.95, η_O2 0.98 | Ammonia + 8 MedSupplies | BIOS-3 / CELSS |
+| LS-GARDEN | Salad/veg greenhouse rack (EDEN-class, per ~14 m²) | T2 | (module, `06/07`) | ~4 (light) | partial diet 1 crew (~14 m² salad/root/leaf) | η_food 0.25–0.50, η_O2 partial | Ammonia + 4 MedSupplies | EDEN ISS (Antarctic, ~270 kg veg/yr from 12.5 m²); `11` LS-04 |
+| LS-GREEN | Greenhouse rack (full diet, per 40 m²) | T3 | (module, `06/07`) | ~11 (light) | full diet 1 crew | η_food 0.80 → 0.95, η_O2 0.98 | Ammonia + 8 MedSupplies | BIOS-3 / CELSS; `11` LS-07 |
 | LS-N2 | Buffer-gas regulator | T0 | 0.1 | 0.1 | meters Nitrogen makeup | — | — | standard |
 
 **LS-ALGAE power note:** O2-balancing 4 crew requires 4 × 8 m² = **32 m²** of illuminated *Chlorella*; at the §4.2 Chlorella light load of **0.60 kW/m²** that is `32 · 0.60 ≈ 19 kW` of lighting (hence the 19 kW figure, corrected from a prior 6.0 kW that only supported ~10 m² ≈ 1.25 crew). The rule `power = illuminated_area × light_density` is reproducible for any rating; a 1-crew unit would be ~8 m² ≈ 5 kW. This load propagates to `09-power-thermal.md`.
@@ -484,19 +487,21 @@ Design figures, simplified, anchored to BIOS-3 and NASA CELSS. yield = edible kc
 
 | Crop | Tier | Cycle (days) | kcal/m²/day | Light (kW/m²) | Water (L/m²/day) | Role |
 |---|---|---|---|---|---|---|
-| Potato | T3 | 95 | 250 | 0.28 | 3.5 | top staple calories/area |
+| Potato | T2 | 95 | 250 | 0.28 | 3.5 | top staple calories/area; the T2 LS-GARDEN caloric anchor |
 | Wheat (dwarf) | T3 | 70 | 200 | 0.30 | 3.0 | staple grain, bread (BIOS-3) |
 | Sweet potato | T3 | 120 | 230 | 0.30 | 3.5 | staple, vitamin A |
 | Rice | T3 | 85 | 160 | 0.32 | 5.0 | staple, high water |
 | Soybean | T3 | 90 | 120 | 0.30 | 3.2 | protein + oil |
 | Peanut | T3 | 110 | 130 | 0.30 | 3.0 | protein + fat |
-| Lettuce | T2 | 30 | 25 | 0.18 | 2.0 | morale, vitamins, fast |
-| Tomato | T2 | 80 | 40 | 0.25 | 4.0 | morale, vitamin C |
-| Kale/Chard | T2 | 40 | 30 | 0.20 | 2.5 | vitamins, hardy |
+| Lettuce | T1 | 30 | 25 | 0.18 | 2.0 | morale, vitamins, fast (`11` LS-02 salad rack) |
+| Tomato | T1 | 80 | 40 | 0.25 | 4.0 | morale, vitamin C (`11` LS-02) |
+| Kale/Chard | T1 | 40 | 30 | 0.20 | 2.5 | vitamins, hardy (`11` LS-02) |
 | Strawberry | T3 | 90 | 35 | 0.22 | 3.0 | morale (fresh fruit) |
 | Chlorella (algae) | T3 | continuous | ~60 (protein) | 0.60/m² illum | n/a (in medium) | O2 balance + protein paste |
 
 A full balanced diet for 1 crew ≈ 40 m² mixed beds (≈ 22 m² staples + 10 m² protein + 8 m² veg/fruit), ≈ 11 kW lighting, ≈ 130 L/day transpiration (≈98% recovered), ≈ **0.02–0.03 kg/day Ammonia-N gross uptake** (in a closed loop most N is recycled; *imported* makeup is only the ~2% leakage, ~0.001 kg/day/crew — see §3.5). Note this layout's `Σ(Area·yield)` ≈ **6,300 kcal/day ≈ 2.5×** the 2,500 kcal requirement, a deliberate crop-failure/variety margin (surplus banked to the fresh-food store then dried to FoodRations, §3.5). Staple-only **calorie** closure needs only **~16.7 m²/crew**; the survival ration ≈ 13–20 m²/crew (BIOS-3 level, ~78% diet).
+
+**Crop tier staging** (matches `11`): **T1** salad/leaf crops (lettuce, tomato, kale/chard — `11` LS-02 racks) give morale + trace food only. **T2** adds **potato** (the calorie-dense root anchor of the EDEN-class LS-GARDEN, §4.1), enabling the η_food 0.25–0.50 **partial diet** of Acts 2–3. **T3** unlocks the remaining full-diet staples (wheat, sweet potato, rice, soybean, peanut), fruit (strawberry), and algae — the grain+protein+oil set needed for η_food 0.80–0.95 (`11` LS-07). So a player can grow fresh greens from T1, partial calories from T2, and become food-independent only at T3.
 
 ### 4.3 Food & rations (stored)
 
@@ -504,7 +509,7 @@ A full balanced diet for 1 crew ≈ 40 m² mixed beds (≈ 22 m² staples + 10 m
 |---|---|---|---|---|---|---|
 | FD-DEHY | Dehydrated rations | T0 | 0.62 kg dry | 1.2 kg/day from loop | ~5 yr | lightest to ship |
 | FD-PKG | Packaged shelf-stable | T0 | 1.83 kg | 0 | ~1.5 yr | no prep; emergency reserve |
-| FD-FRESH | Greenhouse fresh food | T3 | grown | 0 | days | full nutrition + morale +12 |
+| FD-FRESH | Greenhouse fresh food | T2 | grown | 0 | days | partial diet + morale +12 from T2 LS-GARDEN; full nutrition at T3 LS-GREEN |
 | FD-EMRG | Emergency bar cache | T0 | 0.5 kg (2,000 kcal) | 0 | ~7 yr | survival-only, morale −10 if sustained |
 
 FoodRations (canonical resource) is shipped/produced as dry-equivalent mass; `05` owns production rates, `12` owns price.
@@ -570,12 +575,12 @@ Each candidate also rolls hidden traits affecting morale/health: e.g. *Resilient
 | Tier | Capability unlocked | Anchor | Act |
 |---|---|---|---|
 | **T0** | Open-loop life support (stored O2/Water/Food, LiOH CO2, FD-DEHY/PKG), IVA + EVA suits, exercise device, basic medbay, sea-level/exploration atmospheres | Apollo/ISS-era stored consumables | Act 1 (Earth+LEO): days-to-weeks crewed missions, consumables dominate mass |
-| **T1** | CDRA, OGA (water-fed O2), WRS (~90% water), private quarters, scavenge airlock, telemedicine | ISS ECLSS | Act 1-2: weeks-to-months stations; water recycling makes LEO stations sustainable |
-| **T2** | Sabatier/Bosch (40-50% O2 closure), BPA (98% water), hard suits, lunar/Mars Water → OGA O2, fission power for ECLSS, storm shelters | ISS+ / Fission Surface Power | Act 2-3 (Moon, Mars): months-long surface bases; ISRU Water closes O2 locally |
-| **T3** | Bioregenerative loops: greenhouses (full-diet CEA), algae bioreactors, ~95-98% closure, agronomist skill cap 5, MCP suits | BIOS-3, MELiSSA, CELSS | Act 3-4 (Mars, belt, Venus): permanent self-feeding settlements; food independence |
+| **T1** | CDRA, OGA (water-fed O2), WRS (~90% water), salad-crop racks (morale + trace food, `11` LS-02), private quarters, scavenge airlock, telemedicine | ISS ECLSS / ISS Veggie | Act 1-2: weeks-to-months stations; water recycling makes LEO stations sustainable |
+| **T2** | Sabatier/Bosch (40-50% O2 closure), BPA (98% water), **EDEN-class greenhouse (LS-GARDEN, partial diet η_food 0.25–0.50)**, hard suits, lunar/Mars Water → OGA O2, fission power for ECLSS, storm shelters | ISS+ / EDEN ISS / Fission Surface Power | Act 2-3 (Moon, Mars): months-long surface bases; ISRU Water closes O2 locally and **the first off-Earth food harvest** begins |
+| **T3** | Bioregenerative loops: full-diet greenhouses (CEA, η_food 0.80→0.95), algae bioreactors, ~95-98% closure, agronomist skill cap 5, MCP suits | BIOS-3, MELiSSA, CELSS | Act 3-4 (Mars, belt, Venus): permanent self-feeding settlements; full food independence |
 | **T4** | [SPECULATIVE] advanced closed ecologies for interstellar-precursor crews; multi-generation life support; not required for v1 win | speculative closed-loop | Endgame: self-sufficient off-Earth civilization |
 
-**Cross-act survival curve**: Act 1 you fight the clock with stored consumables; Act 2 you close the *water* loop (the biggest mass) and feed O2 from ISRU Water; Act 3 you close *food* with greenhouses (the last and hardest loop, gated on power); Act 4-5 you operate where humans barely can (Venus aerostat habitable zone via `07`; Jupiter system where Europa is robots-only). The greenhouse's huge power appetite (~11 kW/crew) explicitly couples this ladder to the nuclear-power ladder in `09`.
+**Cross-act survival curve**: Act 1 you fight the clock with stored consumables; Act 2 you close the *water* loop (the biggest mass) and feed O2 from ISRU Water; Act 3 you begin closing *food* — a **T2 EDEN-class greenhouse** delivers the first off-Earth harvest (partial diet, η_food 0.25–0.50) while **full** food closure (T3 bioregenerative, the last and hardest loop, gated on power) lands at the Act 3→4 transition; Act 4-5 you operate where humans barely can (Venus aerostat habitable zone via `07`; Jupiter system where Europa is robots-only). The greenhouse's huge power appetite (~11 kW/crew) explicitly couples this ladder to the nuclear-power ladder in `09`.
 
 ## 7. Cross-System Interfaces
 

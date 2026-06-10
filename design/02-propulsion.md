@@ -45,6 +45,7 @@ A solid-core fission reactor heats a working fluid (ideally hydrogen, lowest mol
 - **SNRE** (Small Nuclear Rocket Engine, LANL/NASA Glenn Schnitzler & Borowski design studies): 16.5 klbf ≈ 73 kN, Isp ~900 s, 367 MWt reactor, engine ≈2,400 kg with internal shield — the modern reference design.
 - **DRACO** (NASA/DARPA Demonstration Rocket for Agile Cislunar Operations, 2023–2025 program; HALEU fuel): our T2 unlock narrative assumes a DRACO-like flight demo happened before 2049.
 - **LANTR** (LOX-Augmented NTR, Borowski/NASA studies): inject LOX into the nozzle as an afterburner. At LOX/H2 mixture ratio 3.0 the 1994 LANTR/LUNOX study tables give Isp ≈ 647 s (down from 941 s at MR 0; the ≈607–610 s figure belongs to MR ≈ 4) and ≈2.7× thrust (engine T/W rises 3.0 → 8.2) — a perfect lunar-LOX synergy, modeled as a mode switch (game values 645 s, ×2.75; §3.10).
+- **Bimodal NTR** (Borowski et al., NASA Glenn bimodal NTR Mars architecture studies, ~1998–2001): add a closed-Brayton power-conversion loop to the NTR core so the reactor idles between burns as the ship's power plant — the reference crewed-Mars studies carried three 15-klbf BNTR engines, each supplying ≈25 kWe during coast, replacing dedicated transit-vehicle power. Study-level only, never ground-tested as a combined system → T3. The game scales the concept to the DRA 5.0 25-klbf engine class: NTR-111B, §4.3; mode rules §3.10.
 - Shadow shield: the reactor is shielded only in a cone toward the crew; mass outside the cone gets a promptly lethal dose (~10⁴ Sv/h class at 25 m for an SNRE-class core at full power — §3.10 derivation). Post-shutdown decay heat requires continued propellant flow (real mission studies budget 1–3% extra H2 for cooldown).
 
 ### 2.3 Electric propulsion
@@ -199,7 +200,7 @@ TWR_local = ΣF(p_amb) / (m · g_local)        g_local from 03-solar-system.md
 | Surface launch, atmosphere (Earth, Mars, Titan) | Liftoff requires TWR > 1.0; builder warns < 1.2; recommended 1.3–1.5 (Earth). Gravity/drag losses emerge from the 01 integrator; the locked budget figure for Earth pad→LEO is **9,400 m/s**. |
 | Surface launch, airless (Moon, asteroids) | TWR > 1.0 strictly; recommended ≥ 1.8 to limit gravity loss. |
 | Powered landing | At ignition of final descent: TWR_local must be > 1.0 at touchdown body or the lander is unrecoverable; UI suicide-burn planner enforces. |
-| Orbital tug / deep space | No minimum. Maneuver planner warns when t_burn > T_orbit/20 at the burn's orbit (impulsive approximation degrading) and offers burn-splitting across periapsis passes (mechanic owned by 01). |
+| Orbital tug / deep space | No minimum. Maneuver planner warns when t_burn > T_orbit/6 at the burn's orbit (impulsive approximation degrading; threshold canonical in 01 §3.7) and offers the one-click split across periapsis passes (mechanic owned by 01). |
 | Low-thrust (EP, sail) | Planner uses the circular-spiral estimate `Δv ≈ |v_c,start − v_c,end|` (circular orbit speeds); truth is the 01 integrator under warp. |
 
 ### 3.8 Solid motors
@@ -244,6 +245,7 @@ P/T = g0 · Isp / (2 · η)                     [W per N]   e.g. NSTAR: 25 kW/N
 
   Thrust scales with ṁ·ve at constant reactor power: `F_alt = F_H2 / k`, ṁ_alt = ṁ_H2 / k². (Denser propellant → more thrust, less Isp.)
 - **LANTR mode** (T2 upgrade module, +250 kg per engine): injects LOX at O/F 3.0 → Isp = 645 s, thrust ×2.75, draws LOX from tanks (ISRU demand: 3 kg LOX per kg H2). Toggle in flight. (Borowski LANTR/LUNOX study values, §2.2.)
+- **Bimodal mode** (NTR-111B only, T3; Borowski BNTR anchor §2.2): between burns the core idles at ≈115 kWt (0.02% of its rated 575 MWt) driving a closed-Brayton converter that exports **+25 kWe** to the ship bus (`09-power-thermal.md` ledger entry) and rejects ≈90 kWt through the engine's integral conical radiator (mass included in the catalog row — no separate 09 radiator purchase). Idle consumes no propellant and accrues no wear (w counts burn seconds and ignitions only, §3.14). The converter is bypassed while thrusting: **no electrical export during burns**. Mode switches: idle → thrust takes a 15-min power ramp and *replaces* the 45-min cold-restart lockout (the core is already critical and hot); thrust → idle is permitted only after the 2-h cooldown trickle completes. Radiation: an idling core is still an operating reactor — the dose law above applies with the factor (0.115 MWt / 367 MWt) in place of (P_t / 367 MWt) × x, ≈3 Sv/h at 25 m off-cone — so crewed bimodal stacks keep the shadow shield even when "just generating".
 - **Shadow shield**: optional module (catalog). Defines a safe cone, half-angle 12°, axis along the stack, apex at the reactor. During burns, any crew/electronics module outside the cone receives dose rate `D = 1×10⁴ Sv/h × (P_t / 367 MWt) × x × (25 m / r)²` (r = distance to reactor; P_t = catalog reactor power, so NTR-246 scales up by 1,140/367; x = throttle). Derivation kept in-doc: ~3% of core thermal power escapes the pressure vessel as prompt n/γ leakage → 11 MW at 367 MWt → 11 MW / (4π·625 m²) ≈ 1.4 kW/m² at 25 m ≈ 5×10³ Gy/h to tissue, ~1×10⁴ Sv/h after neutron quality factors. An operating, unshielded NTR is promptly lethal within tens of meters in seconds-to-minutes — exactly why real NTR crew studies carry tonnes of shadow shield. Inside the cone: 0.1 mSv/h at full power, scaling with the same `(P_t / 367 MWt) × x` factor. Any gameplay softening must be bought as additional 4π secondary shield mass, never by editing the unshielded constant. Dose bookkeeping and limits live in `08-life-support-crew.md`; electronics degradation in `06-ships-stations.md`. Uncrewed tugs may skip the shield (save 1.5 t) at the cost of irradiating any docked payload.
 - **Cooldown rule**: after each burn the engine automatically trickle-flows 1.5% of the propellant mass just burned over the following 2 h (decay heat), producing thrust at Isp 350 s (auto-applied by the integrator as a small acceleration). If feed propellant is unavailable, reactor takes damage: wear +0.25.
 - **Restart**: 45 min minimum between shutdown and re-ignition (thermal). Rated ignition counts per catalog (NERVA XE' demonstrated 24).
@@ -452,16 +454,19 @@ Columns: dry mass; thrust SL/vac; Isp SL/vac; min throttle x_min; gimbal; rated 
 
 Notes: Merlin SL/vac thrust pair implies ṁ = 914,000/(9.80665·311) = 299.7 kg/s; the model derives F_SL from Isp_SL per §3.3 (small rounding vs the listed real figure is accepted). T/W sanity anchors: Merlin ≈183, Raptor 2 ≈141, RS-25 ≈73, RL10C ≈55 — all match published values.
 
-### 4.3 Nuclear-thermal engines (T2; cost class D; H2 baseline, alternates per §3.10)
+### 4.3 Nuclear-thermal engines (T2 unless noted; cost class D; H2 baseline, alternates per §3.10)
 
 | ID / name | Anchor | Dry mass (kg) | Thrust vac (kN) | Isp vac (s) | Isp SL (s) | Reactor (MWt) | x_min | Gimbal | Ign | Burn rated (s) | p_max (kPa) | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | NTR-73 "Prometheus" | SNRE (Schnitzler/Borowski), DRACO-class | 2,400 (+1,500 shadow shield option) | 73 | 900 | 750† | 367 | 0.25 | ±3° | 30 | 16,200 | 30 | LANTR option +250 kg: Isp 645 s, thrust ×2.75 (LOX O/F 3.0) |
 | NTR-246 "Prometheus-H" | NERVA XE' (modernized) | 12,500 game (historic 18,144 incl. test hardware; modern composites) | 247 | 850 (historic 841 ideal) | 700† | 1,140 | 0.25 | ±3° | 30 (XE' demoed 24) | 10,800 | 30 | heavy tug core, Act 3–4 |
+| NTR-111B "Prometheus-B" | Borowski BNTR studies, scaled to DRA 5.0 25-klbf class | 3,100 incl. Brayton loop + radiator (+1,500 shadow shield option; shielded total 4.6 t = 06's EN-NTR-B) | 111 | 900 | 750† | 575 | 0.25 | ±3° | 30 | 16,200 | 30 | **T3.** Bimodal: +25 kWe idle export, §3.10 mode rules; no export while thrusting; no LANTR option (Brayton ducting occupies the nozzle shroud) |
 
 † synthetic Isp_SL per §3.3; scales by the same k as Isp_vac on alternate propellants (§3.10). p_max 30 kPa permits Mars-ambient NIMF hops (0.6–1 kPa) but not Titan surface ignition (147 kPa).
 
-NTR T/W: 3.1 and 2.0 — deliberately, honestly poor; NTRs are space-only tugs.
+NTR-111B reactor sanity check per §3.10: 111 kN × 8,826 m/s / 1.7 = 576 ≈ catalog 575 MWt — formula and catalog agree here, no NTR-246-style exception needed.
+
+NTR T/W: 3.1, 2.0, and 3.7 (2.5 with shield) for the bimodal — deliberately, honestly poor; NTRs are space-only tugs.
 
 ### 4.4 Electric thrusters (per-string = thruster + PPU + feed; gimbal ±10° mount included)
 
@@ -471,6 +476,7 @@ NTR T/W: 3.1 and 2.0 — deliberately, honestly poor; NTRs are space-only tugs.
 | ION-7 "Dragonfly" | NEXT | T1 | Xenon | 6.9 | 236 mN | 4,190 | 0.70 | 58 `[est]` | 918 (LDT-demonstrated) | C |
 | HALL-1 "Wren" | SPT-100 | T0 | Xenon | 1.35 | 83 mN | 1,600 | 0.48 | 12 | 170 | B |
 | HALL-12 "Harrier" | AEPS/HERMeS | T1 | Xenon | 12.5 | 590 mN | 2,800 | 0.65 | 115 `[est]` | 1,700 `[design target]` | C |
+| HALL-12A "Harrier-A" | krypton/argon-propellant Hall research (Starlink krypton-Hall heritage) | T2 | Argon | 12.5 | 480 mN | 2,400 | 0.45 (higher ionization cost) | 115 `[est]` | 1,500 `[est]` | C |
 | HALL-100 "Condor" | X3 nested Hall (UM/AFRL) | T3 | Xenon or Argon (η −0.06) | 100 | 5.4 N | 2,000 | 0.52 | 460 `[est]` | 5,000 `[est]` | D |
 | MPD-200 "Albatross" | NASA Lewis / MAI applied-field MPD | T3 | Argon (Ammonia η −0.05; Hydrogen η −0.05, Isp +25%) | 200 | 4.6 N | 4,000 | 0.45 | 900 `[est]` | 20,000 `[est]` | D |
 | VAS-200 "Petrel" | VASIMR VX-200 | T3 | Argon | 200 | 5.7 N @4,900 s (variable 3,000–12,000 s, §3.9) | 4,900 | 0.69 | 650 `[est]` | 30,000 `[est]` | D |
@@ -537,8 +543,8 @@ A consumable · B mass-produced · C precision aerospace · D nuclear/exotic (re
 
 ### 5.2 Flight
 
-- Maneuver planner (owned by 01) displays burn duration from §3.2 and splits burns when t_burn > T_orbit/20.
-- Engine panel per engine: throttle, gimbal lock, wear bar (w), ignition count vs rated (a wear input, not a remaining-shots counter — §3.14), health state (OK / SHUTDOWN / DEAD / DESTROYED), restart button (greyed during NTR 45-min lockout).
+- Maneuver planner (owned by 01) displays burn duration from §3.2 and offers the one-click periapsis split when t_burn > T_orbit/6 (threshold canonical in 01 §3.7).
+- Engine panel per engine: throttle, gimbal lock, wear bar (w), ignition count vs rated (a wear input, not a remaining-shots counter — §3.14), health state (OK / SHUTDOWN / DEAD / DESTROYED), restart button (greyed during NTR 45-min lockout). NTR-111B adds a mode selector THRUST / POWER / OFF: POWER shows the +25 kWe export live in the 09 bus ledger; switching POWER → THRUST shows the 15-min ramp countdown (§3.10 bimodal rule).
 - NTR overlay: shadow-shield cone drawn over the ship schematic; modules outside flash during burns; cumulative dose meter (08).
 - Sail control: single θ dial + auto modes "spiral out / spiral in / hold" (sets θ = ∓35° / 0°, the near-optimal tangential-thrust angles).
 - Time-warp interaction: chemical burns limit warp to 4×; EP/sail/NTR-trickle integrate analytically under high warp (13 owns thresholds).
@@ -555,8 +561,8 @@ A consumable · B mass-produced · C precision aerospace · D nuclear/exotic (re
 |---|---|---|
 | T0 (2049 baseline) | SRM-2, SRM-49, OMS-27, SPS-91, K-845, KV-981, H-102, ION-2, HALL-1, RCS-N10, RCS-D400, basic tanks | Act 1: expendable launch, LEO ops, first GEO/lunar probes |
 | T1 | M-2256 + MV-2530 (methalox reuse — the cost-curve breaker), LND-71, HL-67, H-2280, depots DEP-60/600 + PTC-200 + ZBO line + SUN-series sunshields + PMD, ION-7, HALL-12, RCS-M2K, SAIL-86, "Mature engine" reliability upgrades | Act 1→2: reusable lift, LEO depot, lunar landings |
-| T2 | NTR-73, NTR-246, LANTR option, ML-24 ISRU landers, NTR alternate propellants, SAIL-1650, depot-grade insulation everywhere | Act 2–3: lunar LOX economy, Mars cyclers, NEA mining tugs |
-| T3 | HALL-100, MPD-200, VAS-200, SAIL-10K, NTR refurbishment-in-space, PTC-300L LAD couplers | Act 4–5: belt freighters, Venus aerostat support, Jupiter/Saturn tugs |
+| T2 | NTR-73, NTR-246, LANTR option, ML-24 ISRU landers, NTR alternate propellants, HALL-12A Argon Hall string (06's EN-HALL-AR / 05's Drayage Argon variant), SAIL-1650, depot-grade insulation everywhere | Act 2–3: lunar LOX economy, NEA mining tugs |
+| T3 | HALL-100, MPD-200, VAS-200, NTR-111B bimodal NTR, SAIL-10K, NTR refurbishment-in-space, PTC-300L LAD couplers | Act 4–5: Mars cyclers (architecture node SH-07 in `11-research-tech.md`), belt freighters, Venus aerostat support, Jupiter/Saturn tugs |
 | T4 `[SPECULATIVE]` | DFD-5, FFR-43, PULSE-D megaproject | Act 5 + Endgame: outer-system clippers, interstellar precursor |
 
 Research costs/prereq graph lives in `11-research-tech.md`; the intended spine is: methalox reuse → cryo depots → ISRU methalox (with 04) → NTR → high-power EP (gated by 09's reactors) → T4.
@@ -572,7 +578,7 @@ Reliability progression: each engine *type*, in every engine class, graduates to
 - **06-ships-stations.md** — *provides*: all engine/tank/RCS/depot module stats, gimbal authority, energetic-failure adjacency damage trigger, shadow-shield cone geometry. *Consumes*: stack structure, CoM/lever arms, stack moment of inertia I_stack (RCS responsiveness check §3.15), docking couplers, module damage model, staging.
 - **07-bases-habitats.md** — *provides*: surface refueling plumbing specs (PTC rates apply), pad boiloff environments (lunar day/night, Mars). *Consumes*: base power for heaters/ZBO/pumping.
 - **08-life-support-crew.md** — *provides*: NTR dose rate law (D = 1×10⁴ Sv/h × (P_t/367 MWt) × throttle × (25 m/r)² off-cone; 0.1 mSv/h in-cone at full power, same P_t/throttle scaling — §3.10). *Consumes*: crew dose limits, crew availability for maintenance.
-- **09-power-thermal.md** — *consumes*: bus electrical power for EP (P_in per string), ZBO (0.75/2.0 kWe units), tank heaters (50 W/t), pumping (0.1 kWe). *Provides*: waste heat loads — EP per family (ion/Hall 10%, VASIMR 15%, MPD 30% of P_in — §3.9), cryocoolers P_in + Q_lift, DFD-5 exports 1 MWe.
+- **09-power-thermal.md** — *consumes*: bus electrical power for EP (P_in per string), ZBO (0.75/2.0 kWe units), tank heaters (50 W/t), pumping (0.1 kWe). *Provides*: waste heat loads — EP per family (ion/Hall 10%, VASIMR 15%, MPD 30% of P_in — §3.9), cryocoolers P_in + Q_lift, NTR-111B bimodal idle export +25 kWe (§3.10; self-rejects its ≈90 kWt Brayton waste heat via the integral engine radiator), DFD-5 exports 1 MWe.
 - **10-vehicles.md** — *provides*: small engines for hoppers/landers (ML-24, LND-71, RCS blocks), NIMF-style CO2-fed NTR hopper option (§3.10 table).
 - **11-research-tech.md** — *provides*: unlock list per tier (§6), Mature-engine usage-based upgrade rule. *Consumes*: research gating, T4 [SPECULATIVE] placement.
 - **12-gameplay-economy-ui.md** — *provides*: cost classes A–E, depot propellant as standard tradable good, regulatory event hooks (NTR class D, no NTR < 60 km Earth). *Consumes*: prices, contracts, Δv-map presentation.

@@ -17,7 +17,7 @@ The tree itself is the campaign's skeleton. Tiers T0–T4 (locked by conventions
 
 Design pillars of this document:
 
-- **128 named nodes** across 10 categories, each with explicit Science cost, ED threshold (naming the donor part family), prerequisites, unlock list, and a real-world anchor.
+- **129 named nodes** across 10 categories, each with explicit Science cost, ED threshold (naming the donor part family), prerequisites, unlock list, and a real-world anchor.
 - **No stat-bump filler.** Roughly one node in twelve is *era-defining*: it changes what kind of game you are playing (§4.12). The rest unlock concrete parts and processes defined in sibling docs.
 - **Prototyping hurts.** The first article of any new part type costs ×3 resources, builds at half speed, and fails 4× more often until it survives one full-duration operation. Maturity is earned, not bought.
 - **Exploration is mandatory, not flavor.** Eighteen location-gated Discoveries (§4.11) are hard prerequisites or large discounts for key nodes. You cannot research polar ice mining from an armchair in LEO.
@@ -86,7 +86,7 @@ ED is tracked **per part family** as a cumulative high-water mark `D_f ≥ 0` (u
 | 4 | HydroloxEngines | H-102, HL-67, H-2280 (02) |
 | 5 | MethaloxEngines | M-2256, MV-2530, ML-24, RCS-M2K (02) |
 | 6 | NTRCores | NTR-73, NTR-246, LANTR (02) |
-| 7 | EPThrusters | ION/HALL/MPD/VAS strings; T0 donor: HALL-1S stationkeeping thruster (PR-00, 02) |
+| 7 | EPThrusters | ION/HALL/MPD/VAS strings; T0 donors: ION-2 + HALL-1 stationkeeping thrusters (PR-00, 02) |
 | 8 | CryoFluidMgmt | ZBO coolers, depots, couplers, cryo tanks incl. PR-00's T0 parametric tanks (02) |
 | 9 | SolarPower | PV arrays, sails' power share (09) |
 | 10 | EnergyStorage | batteries, fuel cells (09) |
@@ -167,7 +167,7 @@ Unlock is instantaneous on payment (the *time* cost of new tech lives in prototy
 | T3 | 900–2,500 | 400–2,000 |
 | T4 `[SPECULATIVE]` | 4,000–12,000 | 2,000–4,000 |
 
-Whole-tree totals (sums of §4 as written): T1 ≈ 5,100 / T2 ≈ 21,200 / T3 ≈ 52,500 / T4 ≈ 72,000 → ≈ **151,000 SCI** to research everything (T4 ≈ 48%). Total recoverable Science in the solar system with thorough Earth-return play ≈ **210,000 SCI**, derived from: the §3.6 `V_base` table × 03's region catalog (pools extracted at ×1.25 Earth-return), Discoveries ≈ 12,300, milestones (§3.7), and observation campaigns counted at their **program-wide cap of 15,000 SCI** (§3.5). The figure deliberately **excludes** the repeatable contract trickle (F-2, owned by 12), which is unbounded over infinite time but small by design (≤ 25% of act income, §9 Q4). Finishing the tree therefore requires exploring most of the system; finishing the *campaign* requires roughly half of it.
+Whole-tree totals (sums of §4 as written): T1 ≈ 5,100 / T2 ≈ 21,200 / T3 ≈ 54,000 / T4 ≈ 72,000 → ≈ **152,500 SCI** to research everything (T4 ≈ 47%). Total recoverable Science in the solar system with thorough Earth-return play ≈ **210,000 SCI**, derived from: the §3.6 `V_base` table × 03's region catalog (pools extracted at ×1.25 Earth-return), Discoveries ≈ 12,300, milestones (§3.7), and observation campaigns counted at their **program-wide cap of 15,000 SCI** (§3.5). The figure deliberately **excludes** the repeatable contract trickle (F-2, owned by 12), which is unbounded over infinite time but small by design (≤ 25% of act income, §9 Q4). Finishing the tree therefore requires exploring most of the system; finishing the *campaign* requires roughly half of it.
 
 ### 3.4 Prototyping and reliability maturation
 
@@ -234,7 +234,7 @@ m(D_f) = 1 + 3 · 2^(−D_f / D_half)            [type-maturity multiplier, 4 �
 - **Orbital survey:** carry the instrument package (SC nodes) in any orbit with periapsis below the package's survey ceiling (per-class values in §4.10: SC-00 5,000 km global mapper, SC-03 200 km high-res mapper, SC-05 50,000 km remote survey) around the target body, accumulate 30 days of instrument-on time (warpable). One-shot award per (instrument class, region), where **instrument class = the package-level class ID (SC-00, SC-03, SC-05 — exactly three classes; individual instruments inside a package do not award separately)**: `15 · X` SCI. Upgraded classes re-survey the same regions once more at full value — new instruments see new things (anchor: Lunar Prospector → LRO → ShadowCam).
 - **Ground survey:** rover/crew traverse with survey package: per region, one-shot `10 · X` SCI plus the resource-prospecting data layer consumed by 04 (K2 survey mechanics).
 - **Observation campaign:** telescope platforms (SC-05) generate a trickle: `0.2 SCI/day` per platform, ×2 if outside 1.1 AU or in a dust-free vantage (03 tags), capped at 4,000 SCI lifetime per platform **and 15,000 SCI program-wide across all observation campaigns** (a telescope farm under time warp must not substitute for exploration; §3.3's recoverable-Science total counts this source at the program-wide cap). Models NEO Surveyor-class population science.
-- **Anomalies:** hand-placed points of interest revealed by surveys (lava-tube skylights, fresh craters, exposed ice scarps, derelict-hardware historical sites like the Apollo 11 descent stage — real heritage objects only). Investigating on-site: lump 50–400 SCI per the anomaly table in 03. Some anomalies *are* Discoveries (§4.11).
+- **Anomalies:** hand-placed points of interest revealed by surveys (lava-tube skylights, fresh craters, exposed ice scarps, derelict-hardware historical sites like the Apollo 11 descent stage — real heritage objects only). Investigating on-site: lump SCI at the canonical conversion co-signed in 03 §4.6 — **2 SCI per GB** of the anomaly's SurveyData yield (03 §4.5 table; 30–400 SCI across the curated catalog, one-shot per anomaly; the GB remain a tradeable 12-§4.3 data resource and selling them does not forfeit the SCI). Some anomalies *are* Discoveries (§4.11).
 
 ### 3.6 Samples, labs, and sample return
 
@@ -327,13 +327,13 @@ Unlock:          visible(§3.8) ∧ prereqs ∧ discoveries ∧ SCI ≥ cost (sp
 
 ## 4. Content Catalog
 
-The tree: **128 nodes** in 10 categories. Columns: Science cost (SCI, spent), ED threshold (checked against named family), prerequisites — grammar: `+` and `,` both mean AND (all required); `|` means OR and **binds tighter than AND**, so `(A | B) + C` requires C plus at least one of A/B; `DSC-xx` = Discovery §4.11 — unlocks (part/process IDs from sibling docs), real-world anchor. Tier `T4*` = `[SPECULATIVE]`. Start-unlocked T0 nodes cost 0 and have no prerequisites. **(era)** marks era-defining nodes (§4.12).
+The tree: **129 nodes** in 10 categories. Columns: Science cost (SCI, spent), ED threshold (checked against named family), prerequisites — grammar: `+` and `,` both mean AND (all required); `|` means OR and **binds tighter than AND**, so `(A | B) + C` requires C plus at least one of A/B; `DSC-xx` = Discovery §4.11 — unlocks (part/process IDs from sibling docs), real-world anchor. Tier `T4*` = `[SPECULATIVE]`. Start-unlocked T0 nodes cost 0 and have no prerequisites. **(era)** marks era-defining nodes (§4.12).
 
 ### 4.1 Propulsion (PR) — parts in 02-propulsion.md
 
 | ID | Node | Tier | Prereqs | SCI | ED (family) | Unlocks | Anchor |
 |---|---|---|---|---|---|---|---|
-| PR-00 | Flight-Proven Stack | T0 | — | 0 | — | SRM-2, SRM-49, OMS-27, SPS-91, K-845, KV-981, H-102, RCS-N10, RCS-D400, HALL-1S stationkeeping Hall thruster (EPThrusters T0 donor), parametric tanks (CryoFluidMgmt T0 donor) | Falcon 9 / Centaur / Soyuz heritage; SPT-100 Hall stationkeeping (flown since 1994) |
+| PR-00 | Flight-Proven Stack | T0 | — | 0 | — | SRM-2, SRM-49, OMS-27, SPS-91, K-845, KV-981, H-102, RCS-N10, RCS-D400, ION-2 "Mayfly" gridded ion + HALL-1 "Wren" stationkeeping Hall thruster (EPThrusters T0 donors, IDs per 02 §4.4), parametric tanks (CryoFluidMgmt T0 donor) | Falcon 9 / Centaur / Soyuz heritage; NSTAR gridded ion (DS1/Dawn); SPT-100 Hall stationkeeping (flown since 1994) |
 | PR-01 | Deep-Throttle Landing Engines | T1 | PR-00, GN-02 | 80 | 100 (StorableEngines) | LND-71 lander engine | Apollo LMDE (10:1 throttle); Blue Origin BE-7 |
 | PR-02 | Reusable Methalox Heavy Lift **(era)** | T1 | PR-00 | 220 | 200 (KeroloxEngines) | M-2256, MV-2530, RCS-M2K; reusable booster ops (06/12) | SpaceX Raptor FFSC, Starship flight program |
 | PR-03 | Modern Hydrolox Upper Stages | T1 | PR-00 | 100 | 150 (HydroloxEngines) | HL-67, H-2280 | RL10 family (since 1963), Centaur V |
@@ -344,7 +344,7 @@ The tree: **128 nodes** in 10 categories. Columns: Science cost (SCI, spent), ED
 | PR-08 | Solar Sail Demonstrator | T1 | PR-00 | 90 | — | SAIL-86 | NEA Scout; IKAROS, LightSail 2 |
 | PR-09 | Nuclear Thermal Rocket **(era)** | T2 | PR-04, PW-04 | 700 | 500 (HydroloxEngines) + 300 (FissionSystems) | NTR-73 "Prometheus" | NERVA-derived, Isp ~900 s; SNRE (Borowski); DARPA/NASA DRACO |
 | PR-10 | Heavy NTR Core | T2 | PR-09 | 500 | 800 (NTRCores) | NTR-246 "Prometheus-H" | NERVA XE': 246 kN ground-tested 1969 |
-| PR-11 | LANTR Augmentation | T2 | PR-09 | 350 | 600 (NTRCores) | LANTR option (O/H MR 3.0: thrust ×2.75 @ Isp 647 s) | Borowski LANTR studies (NASA Glenn) |
+| PR-11 | LANTR Augmentation | T2 | PR-09 | 350 | 600 (NTRCores) | LANTR option (O/H MR 3.0: thrust ×2.75 @ Isp 645 s — game value per 02 §3.10) | Borowski LANTR studies (NASA Glenn; 1994 study tables ≈ 647 s at MR 3.0) |
 | PR-12 | NTR Alternate Propellants | T2 | PR-09 | 300 | 600 (NTRCores) | Ammonia/Water NTR modes (02 §3.10) | NERVA-era alternate-propellant studies |
 | PR-13 | ISRU-Refuelable Landers | T2 | PR-02, IS-04 | 400 | 300 (MethaloxEngines) | ML-24 "Gopher", field-refueling ops | NASA Project Morpheus; Mars Direct ERV (Zubrin 1990) |
 | PR-14 | Large Solar Sails | T2 | PR-08 | 350 | — | SAIL-1650 | NASA Solar Cruiser (1,653 m²) |
@@ -375,15 +375,15 @@ The tree: **128 nodes** in 10 categories. Columns: Science cost (SCI, spent), ED
 | ID | Node | Tier | Prereqs | SCI | ED (family) | Unlocks | Anchor |
 |---|---|---|---|---|---|---|---|
 | PW-00 | Baseline Power | T0 | — | 0 | — | rigid PV arrays, Li-ion packs, MMRTG (110 We, 4.8 kg PuO2), baseline body-mounted radiators (ThermalControl T0 donor) | ISS arrays; MMRTG (Curiosity/Perseverance) |
-| PW-01 | Roll-Out Solar Arrays | T1 | PW-00 | 80 | 100 (SolarPower) | ROSA-class wings (20+ kW each), drop-in array upgrades | ISS iROSA (2021–) |
+| PW-01 | Roll-Out Arrays & Concentrator Mirrors | T1 | PW-00 | 80 | 100 (SolarPower) | ROSA-class wings (20+ kW each), drop-in array upgrades; SOL-CONC concentrator mirrors (heat-only, 116 kWt @ 1 AU — process heat for 04 recipes; T1 per 09 §4.1) | ISS iROSA (2021–); terrestrial CSP heliostat practice |
 | PW-02 | Regenerative Fuel Cells | T1 | PW-00 | 120 | 100 (EnergyStorage) | RFC night-survival storage (H2/O2 loop) | Gemini PEM fuel cells / Shuttle alkaline fuel cells + NASA lunar-night regenerative-PEM RFC studies |
 | PW-03 | High-Capacity Radiators | T1 | PW-00 | 100 | 100 (ThermalControl) | deployable two-phase radiator wings | ISS EATCS (~70 kW heat rejection) |
-| PW-04 | Kilopower Fission | T2 | PW-00 | 450 | 200 (FissionSystems) | 1–10 kWe Kilopower units | KRUSTY test, NNSS, March 2018 (1 kWe) |
+| PW-04 | Kilopower Fission | T2 | PW-00 | 450 | 200 (FissionSystems) | NUK-KP1 + NUK-KP10 Kilopower units, 1–10 kWe (09 §4.3; = 06's PW-KP1/PW-KP10 — T2 in all three registries: ground-tested, never flown) | KRUSTY test, NNSS, March 2018 (1 kWe) |
 | PW-05 | Fission Surface Power **(era)** | T2 | PW-04 | 800 | 500 (FissionSystems) | 40–100 kWe-class surface reactors | NASA FSP program (40 kWe contracts, 2022) |
-| PW-06 | Concentrator PV & Dust Mitigation | T2 | PW-01 | 350 | 250 (SolarPower) | concentrator arrays; electrodynamic dust shields (Mars/Moon derating relief, 09) | NASA EDS, demonstrated on the lunar surface by Firefly Blue Ghost Mission 1 (CLPS, 2025); prior ISS MISSE exposure tests |
+| PW-06 | Advanced PV & Dust Mitigation | T2 | PW-01 | 350 | 250 (SolarPower) | T2 36%-cell array retrofits (09 §3.2 efficiency tier), SOL-BLK thin-film blanket arrays; SOL-EDS electrodynamic dust shields (Mars/Moon derating relief; T2 per 09 §4.1) | NREL 39.2% six-junction cell (2020); NASA EDS, demonstrated on the lunar surface by Firefly Blue Ghost Mission 1 (CLPS, 2025); prior ISS MISSE exposure tests |
 | PW-07 | Thermal Energy Storage | T2 | PW-03 | 300 | 200 (ThermalControl) | molten-salt / regolith thermal batteries for lunar night | terrestrial CSP storage; lunar TES studies |
 | PW-08 | Megawatt Space Reactors | T3 | PW-05, PW-09 | 1,800 | 1,800 (FissionSystems) | 0.5–2 MWe NEP reactor cores (powers PR-16/17/18 tugs) | SP-100; Project Prometheus/JIMO (200 kWe design) |
-| PW-09 | Closed Brayton Conversion | T3 | PW-05 | 1,200 | 900 (ThermalControl) | Brayton power-conversion units (η ≈ 25–30%), big radiator economy | NASA Brayton Rotating Unit tests (1960s–70s, 10 kWe class) |
+| PW-09 | Closed Brayton Conversion | T3 | PW-05 | 1,200 | 900 (ThermalControl) | Brayton power-conversion units (η ≈ 25–30%), big radiator economy; NUK-MSR 500 kWe thorium molten-salt surface plant (09 §4.3 — Thorium feed from lunar KREEP, 04) | NASA Brayton Rotating Unit tests (1960s–70s, 10 kWe class); ORNL MSRE (ran 1965–69) + Th-cycle studies |
 | PW-10 | Radioisotope Production | T3 | PW-05, IS-09b | 1,000 | 1,000 (FissionSystems) | RX-19 Pu-238 line (04): 20 g Pu238/yr per 100 kWe core | Oak Ridge Pu-238 production restart (2015–) |
 | PW-11 | Power Beaming | T3 | PW-08, GN-06 | 1,400 | 600 (SolarPower) | laser power links: kW-class over 10s of km (PSR rim→crater floor) | NASA Watts on the Moon; kW-class beaming demos |
 | PW-12 | Fusion Power Plant `[SPECULATIVE]` | T4* | PW-08, IS-20 | 10,000 | 4,000 (FissionSystems) | D-He3 fusion plants (MWe-class, 09); enables PR-22 | D-He3 fusion concepts (Kulcinski, UW-Madison); SPARC/ARC lineage for confinement |
@@ -432,7 +432,7 @@ The tree: **128 nodes** in 10 categories. Columns: Science cost (SCI, spent), ED
 | IN-09 | Supervised Autonomy (A3) | T3 | IN-07 | 1,400 | 1,000 (RoboticsAutonomy) | A3 autonomy: task queues without comms link | Mars rover AutoNav lineage; NASA autonomy roadmaps |
 | IN-10 | Autonomous Factory Complex **(era)** | T3 | IN-09 | 2,200 | 1,600 (RoboticsAutonomy) + 800 (FabricationMachines) | autonomous factory complexes (χ = 0.90, 05) | NASA 1980 summer study, *Advanced Automation for Space Missions* (CP-2255) |
 | IN-11 | Wafer Fab **(era)** | T3 | IS-16, IN-09 | 2,500 | 1,200 (FabricationMachines) | off-Earth wafer fab — "Silicon Independence" milestone (05) | trailing-edge rad-hard fab (90–180 nm class) |
-| IN-12 | Mass Driver & Catcher **(era)** | T3 | PW-05, IN-05 | 2,000 | 800 (FabricationMachines) | lunar mass driver (2.4 km/s muzzle), orbital catcher, regolith pelletizer | O'Neill & Kolm mass-driver work; NASA Ames 1977 summer study, *Space Resources and Space Settlements* (SP-428) |
+| IN-12 | Mass Driver & Catcher **(era)** | T3 | PW-05, IN-05 | 2,000 | 800 (FabricationMachines) | lunar mass driver (2.5 km/s muzzle ≈ escape 2,380 m/s + trim; 1.45 kWh/kg per 05 §3.8), orbital catcher, regolith pelletizer | O'Neill & Kolm mass-driver work; NASA Ames 1977 summer study, *Space Resources and Space Settlements* (SP-428) |
 | IN-13 | In-Space Truss Fabrication | T3 | IN-06 | 1,200 | 700 (FabricationMachines) | trusselator robots (05): print structure on orbit | Tethers Unlimited SpiderFab / Trusselator (NIAC) |
 | IN-14 | Self-Expanding Industry Seed `[SPECULATIVE]` | T4* | IN-10, IN-11 | 9,000 | 3,500 (RoboticsAutonomy) | self-expanding industry seed (χ = 0.98, 05) | AASM self-replicating lunar factory chapter (1980); Freitas |
 
@@ -462,6 +462,7 @@ The tree: **128 nodes** in 10 categories. Columns: Science cost (SCI, spent), ED
 | HB-05 | Venus Aerostat Habitat | T3 | SH-02, GN-04, DSC-08 | 2,000 | 500 (PressureStructures) + 400 (AeroFlight) | crewed aerostats at 50–54 km (60–107 kPa [≈0.6–1.05 atm], 315–350 K; ≈100 kPa only at the 50 km HAVOC altitude; breathable-air lifting gas) | NASA Langley HAVOC (2015) |
 | HB-06 | Spin-Gravity Centrifuge | T3 | SH-01 | 900 | 400 (PressureStructures) | centrifuge sleep modules (partial-g countermeasure, 08) | Nautilus-X centrifuge demo concept; Gemini 11 tether spin (1966) |
 | HB-07 | Titan Surface Outpost | T3 | PW-04, DSC-13 | 1,500 | — | Titan base kit: 94 K / 146.7 kPa N2 environment systems (07) | NASA Glenn Titan exploration studies; Huygens (2005) |
+| HB-09 | Mercury Terminator Operations | T3 | VH-04, PW-04 | 1,500 | 800 (SurfaceMobility) | HAB-16 Mercury Crawler Platform (07 §4.3.8), RVR-CRAWL crawler drivetrain (10 §4.1; NUK-KP10 ×3 powered), Mercury Mass Driver Port site class (07; launcher itself per IN-12) — Act 4 optional content (03 §6) | JPL Mercury terminator-rover studies (equatorial dawn ≈ 3.6 km/h — a slow crawler outruns sunrise); MESSENGER radar-bright polar ice |
 | HB-08 | Rotating Settlement `[SPECULATIVE]` | T4* | HB-06, IN-12, IS-15 | 4,500 | 1,500 (PressureStructures) | large spin habitat (1 g rim, 100+ crew) — endgame megaproject | NASA Ames/Stanford Torus summer study (1975) |
 
 ### 4.8 Life Support & Crew (LS) — systems in 08-life-support-crew.md
@@ -472,10 +473,10 @@ The tree: **128 nodes** in 10 categories. Columns: Science cost (SCI, spent), ED
 | LS-01 | Regenerative ECLSS | T1 | LS-00 | 200 | 150 (ECLSS-PhysChem) | CO2 sorbent beds, O2 electrolysis, Sabatier loop, water processor | ISS ECLSS: 98% water recovery (2023); OGA/CDRA |
 | LS-02 | Crop Production Modules | T1 | LS-00 | 150 | 80 (ECLSS-Bio) | salad-crop racks (morale + trace food, 08) | ISS Veggie / Advanced Plant Habitat |
 | LS-03 | Surface EVA Suits | T1 | LS-00 | 180 | 100 (PressureStructures) | dust-tolerant surface EVA suits | NASA xEMU / Axiom AxEMU |
-| LS-04 | Greenhouse Food Production | T2 | LS-02 | 500 | 300 (ECLSS-Bio) | greenhouse modules: 25–50% food closure (08) | EDEN ISS Antarctic greenhouse (~270 kg vegetables/yr from 12.5 m²) |
+| LS-04 | Greenhouse Food Production | T2 | LS-02 | 500 | 300 (ECLSS-Bio) | LS-GARDEN EDEN-class greenhouse racks: partial diet, η_food 0.25–0.50 (08 §3.3/§4.1; full-diet closure starts at T3 via LS-07) | EDEN ISS Antarctic greenhouse (~270 kg vegetables/yr from 12.5 m²) |
 | LS-05 | Radiation Protection Planning | T2 | LS-01 | 400 | — | water-wall storm shelters, dosimetry & career-dose planner (08) | NASA permissible exposure limits; SPE shelter studies |
 | LS-06 | Advanced Water & Waste Loops | T2 | LS-01 | 450 | 350 (ECLSS-PhysChem) | brine recovery, waste pyrolysis (08) | ISS Brine Processor Assembly (2021–) |
-| LS-07 | Closed-Loop Bioregenerative ECLSS **(era)** | T3 | LS-04, LS-06 | 2,400 | 1,500 (ECLSS-Bio) | algae/bacteria/plant loop: ≥ 95% air/water, ≥ 80% food closure (08) | ESA MELiSSA; BIOS-3 (Krasnoyarsk, 6-month closures); Lunar Palace 365 (Beihang, 370 d, 2017–18) |
+| LS-07 | Closed-Loop Bioregenerative ECLSS **(era)** | T3 | LS-04, LS-06 | 2,400 | 1,500 (ECLSS-Bio) | algae/bacteria/plant loop (LS-GREEN full-diet racks, 08 §4.1; HB-GRN module, 06): ≥ 95% air/water, η_food 0.80→0.95 (08 §3.3) | ESA MELiSSA; BIOS-3 (Krasnoyarsk, 6-month closures); Lunar Palace 365 (Beihang, 370 d, 2017–18) |
 | LS-08 | Long-Duration Crew Health | T2 | LS-01 | 350 | — | med bay, exercise countermeasures, psych-support systems (08) | ISS medical ops; ARED countermeasure heritage |
 
 ### 4.9 Vehicles (VH) — chassis/craft in 10-vehicles.md
@@ -610,13 +611,13 @@ The intended research spine (mirrors 02 §6): methalox reuse → cryo depots →
 | **Act 1 — Earth + LEO** | T0→T1 | LEO/Earth surveys (X=1–1.5), first-milestones, 12's contracts; ≈ 1,500–2,500 SCI | the ~1,400-SCI spine to the Moon: GN-01/02/03, PR-01/02/04/05, SH-01, LS-03 (Σ = 1,390) | KeroloxEngines + CryoFluidMgmt hours from flight rate; first depot ops |
 | **Act 2 — Moon** | T1→T2 | lunar regions X=2–4, PSR anomalies, first sample returns (×1.25 path); ≈ 8,000 SCI on a thorough Moon | finish T1 (Σ ≈ 5,100), enter T2: IS-05 chain, PW-04/05, PR-09 | **DSC-01, DSC-02, DSC-03**; MiningMachines + ISRU-Chem hours; NTR test-stand campaign |
 | **Act 3 — Mars + NEAs** | T2 | Mars X=5, Phobos/Deimos, C/S-type NEAs, comet option; ≈ 15,000 SCI | bulk of T2 (Σ ≈ 21,000): IS-06, SH-04/05/06, LS-04/05/06, VH-04/05 | **DSC-04, DSC-05, DSC-06, DSC-15**; AeroFlight EDL events; Methalox field ops |
-| **Act 4 — Belt + Venus** | T2→T3 | belt X=6, M-types, Venus clouds X=6 / surface X=8; ≈ 25,000 SCI | T3 industry/ISRU (IS-13..18, IN-09..13), HB-05, PW-08/09 | **DSC-07, DSC-08, DSC-09, DSC-16**; RoboticsAutonomy + FissionSystems hours |
-| **Act 5 — Jupiter/Saturn** | T3→T4 | Europa/Io X=10, Titan/Enceladus X=10–12, oceans X=14; ≈ 40,000+ SCI | finish T3 (Σ ≈ 52,500); open T4 (Σ ≈ 72,000) | **DSC-10..14, DSC-17, DSC-18**; EPThrusters throughput on long hauls |
+| **Act 4 — Belt + Venus** | T2→T3 | belt X=6, M-types, Venus clouds X=6 / surface X=8; ≈ 25,000 SCI | T3 industry/ISRU (IS-13..18, IN-09..13), HB-05, HB-09 (optional Mercury crawler), PW-08/09 | **DSC-07, DSC-08, DSC-09, DSC-16**; RoboticsAutonomy + FissionSystems hours |
+| **Act 5 — Jupiter/Saturn** | T3→T4 | Europa/Io X=10, Titan/Enceladus X=10–12, oceans X=14; ≈ 40,000+ SCI | finish T3 (Σ ≈ 54,000); open T4 (Σ ≈ 72,000) | **DSC-10..14, DSC-17, DSC-18**; EPThrusters throughput on long hauls |
 | **Endgame** | T4* | megaproject milestones, remaining pools | SH-09 victory chain (PR-21/22, IN-14, PW-12) | He3 chain validation; `[SPECULATIVE]` honesty maintained |
 
 **Victory-path guarantee:** SH-09 is reachable via PR-21 (fission-fragment) without any fusion/He3 content, and its discovery prerequisites (DSC-02 chain via IS-20 only applies on the PR-22/PW-12 branch) touch only the Moon. Because researching requires visibility (§3.3 condition 1) and a T4 node is hidden until a T3 node in the same category is researched (§3.8), the audited chain also includes **SH-07 Cycler Architecture** — the SH category's only T3 node — and its prerequisites **GN-07 + HB-06** (≈ 3,300 SCI extra, no Discoveries required, so the geographic claim is unchanged); SH-08 is likewise visibility-gated behind SH-07. Venus, Titan, and Europa content is *optional but lucrative* — discounts and ~40% of total recoverable Science.
 
-**Pacing note:** tier Science sums (T1 ≈ 5,100 / T2 ≈ 21,200 / T3 ≈ 52,500 / T4 ≈ 72,000) deliberately exceed per-act income until the player pushes outward — the tree *pulls* exploration. ED thresholds independently pull *operations*: you cannot Science your way to an NTR without 500 ED of hydrolox engine hours and 300 ED of reactor time.
+**Pacing note:** tier Science sums (T1 ≈ 5,100 / T2 ≈ 21,200 / T3 ≈ 54,000 / T4 ≈ 72,000) deliberately exceed per-act income until the player pushes outward — the tree *pulls* exploration. ED thresholds independently pull *operations*: you cannot Science your way to an NTR without 500 ED of hydrolox engine hours and 300 ED of reactor time.
 
 ---
 
@@ -665,7 +666,7 @@ The intended research spine (mirrors 02 §6): methalox reuse → cryo depots →
 | F-12 | **Region redefinition across saves** (03 rebalances biomes) | Pools keyed by stable region IDs; orphaned IDs keep their depleted state; new regions spawn fresh pools. Node IDs are stable strings (13 save schema). |
 | F-13 | **Discount stacking** | Multiplicative, floor at 40% of base cost: `cost = base · Π(1−d_i)`, clamped ≥ 0.4·base. |
 | F-14 | **"Biology question" misread as aliens** | Hard content rule (§4.11): every organics result ships with the abiotic counter-hypothesis in the same codex entry. Marketing copy may not promise life. Fact-checkers welcome. |
-| F-15 | **ED threshold orphan** (node requires ED from a family the player owns no parts of) | Audit rule: every ED threshold's family must be accruable from parts unlocked **by a T0 start node or by one of the node's own prerequisite nodes (same tier or lower)**. Two sanctioned patterns: *donor family* — PR-09 draws on HydroloxEngines, not NTRCores; *prerequisite donor* — PR-10/11/12's NTRCores thresholds accrue from NTR-73, unlocked by their common prerequisite PR-09. T0 donors close every first-of-family chain: HALL-1S (PR-00) → EPThrusters; PR-00 parametric tanks → CryoFluidMgmt; PW-00 baseline radiators → ThermalControl; VEG-1 (LS-00) → ECLSS-Bio; VH-00 arm task orders → RoboticsAutonomy (§3.2 family table). Enforced by a build-time content lint (13). |
+| F-15 | **ED threshold orphan** (node requires ED from a family the player owns no parts of) | Audit rule: every ED threshold's family must be accruable from parts unlocked **by a T0 start node or by one of the node's own prerequisite nodes (same tier or lower)**. Two sanctioned patterns: *donor family* — PR-09 draws on HydroloxEngines, not NTRCores; *prerequisite donor* — PR-10/11/12's NTRCores thresholds accrue from NTR-73, unlocked by their common prerequisite PR-09. T0 donors close every first-of-family chain: ION-2/HALL-1 (PR-00) → EPThrusters; PR-00 parametric tanks → CryoFluidMgmt; PW-00 baseline radiators → ThermalControl; VEG-1 (LS-00) → ECLSS-Bio; VH-00 arm task orders → RoboticsAutonomy (§3.2 family table). Enforced by a build-time content lint (13). |
 
 ---
 

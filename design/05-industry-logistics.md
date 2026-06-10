@@ -71,10 +71,10 @@ Every module, rate, and rule below names its anchor. Summary table of the load-b
 | **Falcon 9 / Starship launch environment** | ~6 g axial design load factor, max-Q ~30–35 kPa, 5.2 m fairing (Starship 9 m); JWST's 6.5 m mirror had to fold into a 5.4 m fairing | Why orbital assembly matters |
 | **O'Neill mass driver studies (Princeton/MIT/NASA Ames 1977)** | Lunar escape 2.38 km/s; KE = 2.83 MJ/kg; prototype accelerators built; studies up to 1,000 g | T3 mass-driver physics |
 | **ULA/NASA cryogenic depot studies** | LH2 boiloff: legacy stages ~2%/day; advanced passive ~0.1–0.5%/day; MLI leak ~0.5–1.5 W/m²; cryocooler specific power ~15–20 W/W at 90 K, ≥100 W/W at 20 K | Depot boiloff & ZBO rules |
-| **NASA Gateway PPE + AEPS Hall thrusters** | 60 kW-class SEP flown-config; AEPS: 12.5 kW, Isp ≈2,600 s, ≈590 mN, η≈0.57–0.6; 300 kW-class SEP cargo tugs studied by NASA GRC | T2 SEP freighter |
+| **NASA Gateway PPE + AEPS/HERMeS Hall thrusters** | 60 kW-class SEP flown-config; AEPS/HERMeS as canonized by 02's HALL-12 string: 12.5 kW, Isp 2,800 s, 590 mN, η 0.65 (HERMeS high-Isp throttle point; flight AEPS literature quotes ≈2,600 s — 02 owns the game value); 300 kW-class SEP cargo tugs studied by NASA GRC | T2 SEP freighter |
 | **NERVA / DRA 5.0 Pewee-class NTR** | Isp ~900 s, 111 kN (25 klbf) engines, ~3.3 t each | T2–T3 NTR freighter (per 02) |
 | **ISS maintenance & ORU practice** | Orbital Replacement Unit architecture; of order 1% of station mass per year flies as maintenance hardware in benign LEO; station-wide preventive+corrective maintenance ≈2–4 crew-h/day | Spares economy coefficients |
-| **EMU spacesuit ops** | ~6.5 h sorties, ~3.9 kg feedwater sublimated per sortie, ~12 crew-h prep/post per 2-person EVA, ~25 sorties between depot-level overhauls (extended ISS interval) | Manual-EVA labor cost |
+| **EMU spacesuit ops** | ~6.5 h sorties, ~12 crew-h prep/post per 2-person EVA, ~25 sorties between depot-level overhauls (extended ISS interval); suit consumable rates are canonized by 08 §3.11 — 0.09 kg O2/h, 0.40 kg cooling water/h (revised down from the legacy EMU ~3.9 kg/sortie sublimator figure) | Manual-EVA labor cost |
 | **Wright/aerospace learning curve** | 80–85% learning curve typical | Blueprint learning-curve formula |
 
 Deliberate abstractions (stated honestly):
@@ -104,6 +104,12 @@ Three intermediates are genuinely needed to express the production chain demande
 Spares are **not** a new resource: maintenance consumes `MachineParts` (mechanical),
 `Electronics` (avionics/control), `StructuralParts` (structure), `Polymers` (seals/filters/soft goods).
 
+Two life-support consumables are also manufactured here without extending this list: `FoodRations`
+(canonical; produced from `Biomass` by the §4.2 `ration_pack` recipe — 08 §4.3 names 05 the owner
+of production rates and defines rations as dry-equivalent kg) and `MedSupplies` (declared by 08
+§4.6 as that document's single resource extension; 05 owns the finalized manufacturing recipe,
+§4.2 `medsupplies_std`). Both run on the consumables line (§4.1 `fab_consumables`).
+
 ### 3.1 The production chain
 
 ```
@@ -114,7 +120,7 @@ Spares are **not** a new resource: maintenance consumes `MachineParts` (mechanic
  Copper    ─┘                        │                          ▲                  vehicles, spares
                                      └────────► WAAM/MILL ──► StructuralParts ──►
  Methane+Oxygen ─► CHEMICAL PLANT ─► Polymers ──────────────────┤
- Silicon (semi-grade) ─► WAFER FAB [T3] ─► Wafers ─► ELECTRONICS ASSEMBLY ─► Electronics
+ Silicon (solar-grade) ─► WAFER FAB [T3] ─► Wafers ─► ELECTRONICS ASSEMBLY ─► Electronics
  Glass, BasaltFiber, RareEarths ────────────────────────────────┘
                        (until T3: Wafers and/or finished Electronics IMPORTED FROM EARTH)
 ```
@@ -208,7 +214,7 @@ per kg of `Wafers`** (game value, total fab energy incl. the ~56% facility overh
 1.00 t `Wafers` (run in kg in practice):
 
 ```
-1.60 t Silicon (semiconductor-grade, 04) + 2.0 t Polymers (resists/organics) + 0.10 t Copper
+1.60 t Silicon (solar-grade flag per 04 §4.5; RX-16 output) + 2.0 t Polymers (resists/organics) + 0.10 t Copper
 + 30 t Nitrogen + 60 t Water  (gross draws)
 → 1.00 t Wafers + byproducts 24 t Nitrogen (80% recovered to storage) + 54 t Water (90% UPW-loop
 recovery to storage) + 14.7 t loss (vented/waste)
@@ -229,7 +235,23 @@ energy 3,000 kWh/t (SMT placement is cheap; environmental test & burn-in dominat
 ```
 The line itself is T1 (SMT pick-and-place is mature tech) — **but until T3 the `Wafers` input must
 be imported from Earth**, and before any line exists, finished `Electronics` are imported. This is
-the intended Act 1–3 umbilical to Earth (economy: 12-gameplay-economy-ui.md).
+the intended Act 1–4 umbilical to Earth (economy: 12-gameplay-economy-ui.md; Silicon Independence
+is 12's Act 4 exit milestone).
+
+**FoodRations & MedSupplies (consumables line).** Per 1.00 t `FoodRations` (dry-equivalent kg, 08
+§4.3 convention):
+
+```
+2.10 t Biomass + 0.05 t Polymers (retort/vacuum packaging) → 1.00 t FoodRations
++ 1.10 t Water (drying condensate, recovered to the 08 loop) + 0.05 t loss
+energy 1,800 kWh/t (freeze-dry/retort: ≈1.5 kWh per kg of water removed, plus packaging)
+```
+
+Per 1.00 t `MedSupplies` (08 §4.6's resource extension; this recipe finalizes 08's placeholder
+basket exactly): `0.50 t Polymers + 0.30 t Electronics + 0.20 t Biomass → 1.00 t MedSupplies`,
+2,500 kWh/t (synthesis, sterilization, and QA dominate — pharma is deliberately the most
+crew-labor-intensive recipe in §4.2). Both run on the consumables line (§4.1 `fab_consumables`);
+until that line and a Biomass source exist, both are Earth imports priced by 12.
 
 ### 3.4 Automation ladder
 
@@ -257,7 +279,9 @@ the intended Act 1–3 umbilical to Earth (economy: 12-gameplay-economy-ui.md).
   exception-handling rule below replaces supervision.
 
 **EVA cost rule (A0):** one EVA sortie = 2 crew × 6.5 h outside; +12 crew-h prep/post; consumes
-per suit-sortie: 0.65 kg Oxygen, 3.9 kg Water (sublimator, lost). Net efficiency: 13 productive
+per suit-sortie 0.59 kg Oxygen and 2.6 kg Water (sublimator, lost) — computed from 08 §3.11's
+canonical suit rates (0.09 kg O2/h, 0.40 kg cooling water/h × 6.5 h) so the two ledgers cannot
+double-count; airlock gas and prebreathe O2 for prep/post stay on 08's ledger. Net efficiency: 13 productive
 hours per 25 crew-h spent → **η_EVA = 0.52**. Suits take 1 wear unit per sortie; overhaul at 25
 sorties (50 kg MachineParts + 10 kg Polymers + 40 crew-h). EVA work rate on assembly tasks:
 1.0× (humans are still the best field hands in 2049).
@@ -360,19 +384,20 @@ Worked examples (engine values per 02; Δv per 01's example map):
 
 | Trip | Freighter | v_e (m/s) | Δv used (m/s) | Propellant | Cargo | G | Time |
 |---|---|---|---|---|---|---|---|
-| LEO→LLO one-way | Pallet chem tug (dry 4.5 t) | 3,530 (Isp 360) | 4,200 | 24.0 t (full tanks) | 6.0 t | 0.25 | 4 d |
-| LEO→LLO one-way | Drayage SEP (dry 8 t) | 25,497 (Isp 2,600) | 8,400 (low-thrust) | 10.9 t Xenon | 20 t | 1.83 | ~230 d |
+| LEO→LLO one-way | Pallet chem tug (dry 4.5 t) | 3,727 (Isp 380, MV-2530) | 4,200 | 21.9 t | 6.0 t | 0.27 | 4 d |
+| LEO→LLO one-way | Drayage SEP (dry 8 t) | 27,459 (Isp 2,800, HALL-12) | 8,400 (low-thrust) | 10.0 t Xenon | 20 t | 2.0 | ~227 d |
 | LEO→LMO (propulsive capture) | Longhaul NTR (dry 22 t) | 8,826 (Isp 900) | 5,720 | 56.5 t Hydrogen | 40 t | 0.71 | 259 d |
 
 (Drayage check, shown so a programmer can validate the implementation: thrust 24×0.59 N = 14.2 N,
-ṁ = F/v_e = 48 kg/day; 8,400 m/s at average 33 t → ~230 days, 10.9–12 t Xenon. Consistent with
-F = 2ηP/v_e at η = 0.6, P = 300 kWe.)
+ṁ = F/v_e = 44.6 kg/day; 8,400 m/s at average 33 t → ~227 days, 10.0–10.2 t Xenon. Consistent with
+F = 2ηP/v_e at η = 0.65, P = 300 kWe — HALL-12 string values per 02 §4.4.)
 
 Worked-example conventions (so the table validates against F-3 exactly): the Δv column already
 includes the ×1.05 margin; the 2% residual hold-back is **excluded** from the propellant figures
 shown — the planner adds it when sizing tank loads, so flyable cargo runs ~2% under these values.
-Pallet check: m_prop = (4.5 + 6.0) × (e^(4200/3530) − 1) = 24.0 t — the tug arrives at LLO with
-dry tanks and cannot return without the LLO depot (§3.9). Longhaul check: the row closes only
+Pallet check: m_prop = (4.5 + 6.0) × (e^(4200/3726.5) − 1) = 21.9 t — the tug arrives at LLO with
+≈1.6 t of usable propellant (24 t tanks × 0.98 − 21.9; worth ~1,100 m/s empty against a ~4.2 km/s
+return leg) and cannot return without the LLO depot (§3.9). Longhaul check: the row closes only
 because of its ZBO cryocooler (§3.9, §4.4); at the passive F-6 rate (0.10%/day) the 259-day leg
 would lose 1 − 0.999²⁵⁹ ≈ 23% of stored Hydrogen and the mission would not close.
 
@@ -397,8 +422,12 @@ Dragon, Orbital Express 2007). T0–T1 freighters require a comm link at node-op
 irrelevant: ops are autonomous, link is for go/no-go); T2+ freighters are fully independent.
 Ops rates: cargo handling 20 t/day at any node whose catalog row carries `cargo_equipped: true`
 (yard_drydock, both depot classes in §4.5, and any 07 base module with a cargo crane); 5 t/day at
-all other nodes; propellant transfer 5 t/h settled (small ullage thrust or pump-fed, per ULA
-settled-transfer studies).
+all other nodes. Propellant transfer rates are owned by 02 §3.13 (transfer-hardware canon) and
+adopted here per docked coupler: PTC-200 — cryogens 5 kg/s = 18 t/h (settled: ullage acceleration
+≥ 0.0005 m/s², ~50 N per 100 t stack, per ULA settled-transfer studies), storables 20 kg/s =
+72 t/h, gases 0.5 kg/s = 1.8 t/h; PTC-300L LAD couplers move cryogens unsettled at 60% of the
+PTC-200 cryo rate (10.8 t/h). Node transfer throughput = rate × installed coupler count (§4.5
+rows list counts).
 
 ### 3.7 Surface-to-orbit lift loops
 
@@ -408,24 +437,28 @@ lander and changes the cycle math:** lunar Pelicans top up at the LLO depot befo
 (so descent carries ascent propellant; the depot is stocked by dedicated propellant-lift sorties
 — the "6 t up only" tanker run below); the Mars Pelican-M refuels on the surface (Sabatier ISRU,
 04), so ascent carries the next descent's propellant. Worked example, **Pelican** lunar lander
-(dry 9 t, methalox Isp 360, tanks 31 t,
-Δv: descent 2,000 m/s, ascent 1,900 m/s incl. margins on the 1.87 km/s ideal):
+(dry 9 t, methalox — ML-24 cluster per 02, Isp 320 vac — tanks 39 t,
+Δv quoted from 01 Table 4.2 with the F-3 ×1.05 margin applied explicitly:
+descent M3 1,900 → 1,995 m/s; ascent M4 1,850 → 1,943 m/s):
 
 ```
-6 t down + 6 t up:  ascent prop 10.7 t, descent prop 19.6 t → 30.3 t/cycle, G = 12/30.3 = 0.40
-12 t down only:     ascent prop  6.4 t, descent prop 20.9 t → 27.3 t/cycle
-6 t up only:        25.7 t/cycle → 4.3 t propellant per t lifted to LLO
+6 t down + 6 t up:  ascent prop 12.86 t, descent prop 24.75 t → 37.6 t/cycle, G = 12/37.6 = 0.32
+12 t down only:     ascent prop  7.72 t, descent prop 25.51 t → 33.2 t/cycle
+6 t up only:        32.3 t/cycle → 5.4 t propellant per t lifted to LLO
 ```
 Cycle time 1.5 days (load 0.5 + hops 0.2 + unload 0.5 + refuel 0.3) → ~4 t/day net down-mass per
-lander. Variant **Pelican-H** (hydrolox Isp 450, dry 9.0 t, PSR-water ISRU): 21.3 t/cycle for 6/6 — better
+lander. Variant **Pelican-H** (hydrolox — HL-67 per 02, Isp 445 vac — dry 9.0 t, tanks 28 t,
+PSR-water ISRU): 22.0 t/cycle for 6/6 — better
 gear ratio, worse boiloff logistics. Honest chemistry note: lunar methalox needs carbon, which the
 Moon mostly lacks outside cold-trap CO/CO2 (LCROSS detections, per 03/04) — early lunar loops run
 hydrolox or import Methane.
 
-Mars (**Pelican-M**, dry 10 t incl. heatshield, tanks 38 t, **surface refuel**): descent is mostly
-aerodynamic (powered terminal ~700 m/s), ascent 4,100 m/s; because refueling happens on the
-surface, the ascent also carries the next descent's propellant → 6 t down + 2 t up costs
-37.6 t/cycle (F-3: descent 3.51 t + ascent 34.04 t; the tanks hold the full load at liftoff).
+Mars (**Pelican-M**, dry 10 t incl. heatshield, ML-24 cluster per 02 — Isp 320 vac — tanks 52 t,
+**surface refuel**): descent is mostly aerodynamic (powered terminal ~700 m/s map figure → 735 m/s
+with the F-3 ×1.05 margin); ascent quotes 01 Table 4.2 R4 (Mars surface → LMO, incl. losses) =
+4,000 m/s → 4,200 m/s with the ×1.05 margin. Because refueling happens on the surface, the ascent
+also carries the next descent's propellant → 6 t down + 2 t up costs
+49.9 t/cycle (F-3: descent 4.22 t + ascent 45.63 t; the tanks hold the full 49.9 t load at liftoff).
 Mars ascent is brutal; the asymmetry (easy down, hard up) is real and shapes base economics.
 
 ### 3.8 Mass drivers (T3) — bulk cargo without propellant
@@ -438,15 +471,17 @@ energy per kg  E = v² / (2η)               [J/kg], η = 0.6 end-to-end electri
 ```
 Lunar baseline (v = 2,500 m/s ≈ escape 2,380 + trim): a = 100 g → L = 3.2 km;
 E = 5.2 MJ/kg = **1.45 kWh/kg**. Honest comparison with the lander loop: **zero propellant per kg
-thrown**; 1.45 kWh/kg of electricity versus 4.3 t of methalox per delivered tonne by lander
-(≈43 GJ of chemical energy per tonne delivered, plus the ISRU energy to make that propellant —
+thrown**; 1.45 kWh/kg of electricity versus 5.4 t of methalox per delivered tonne by lander
+(≈54 GJ of chemical energy per tonne delivered, plus the ISRU energy to make that propellant —
 itself ~10 kWh/kg-class) — paid in 850 t of track mass and grid power. Baseline throughput:
 10 kg slugs, 1 per 20 s → 43.2 t/day. Pulse power (interface to 09): energy per shot 52 MJ
 delivered over t = v/a = 2.55 s → shot-average 20.4 MW; because power rises linearly with
 velocity at constant acceleration, the instantaneous electrical peak at the muzzle is
 F·v/η = 9.81 kN × 2,500 m/s / 0.6 ≈ **41 MW**; duty-cycle average 2.6 MW. Size the
 flywheel/capacitor bank for 52 MJ per 20 s cycle. Payload forms: sintered Regolith slugs or
-canisters of refined bulk; 2% miss rate at the orbital **catcher** (a crewless funnel-and-bag
+canisters of refined bulk — both formed by the **pelletizer** (§4.5 `log_pelletizer`, unlocked
+together with the driver by 11 IN-12; 04's M-8 tailings are the default Regolith feed); 2% miss
+rate at the orbital **catcher** (a crewless funnel-and-bag
 craft + retrieval tug); misses are lost mass.
 
 **Cargo rating (per-resource manifest validation):** mass-driver-safe — `Regolith`, `IronSteel`,
@@ -459,7 +494,7 @@ launches — Excalibur-class guided-artillery fuzes are the anchor); it is the c
 delicate assemblies. Canisterized finished goods with padding/deceleration overhead are
 deliberately out of v1 scope — finished goods fly on landers.
 
-### 3.9 Propellant depots (T1 storable/methalox, T3 LH2 ZBO)
+### 3.9 Propellant depots (T1 storable/methalox, T2 LH2 ZBO)
 
 Depot = node module with storage, transfer gear, thermal control. Boiloff rule per commodity:
 
@@ -470,7 +505,10 @@ Hydrogen passive (advanced MLI + sunshield) 0.10 ; Hydrogen ZBO 0.0 (12 kW per 2
 cryocooler ≥100 W/W + 90 K shield)                                              (F-6)
 ```
 Anchors: legacy cryo stages ~2%/day LH2; ULA/NASA advanced passive studies 0.1–0.5%/day; MLI leak
-0.5–1.5 W/m².
+0.5–1.5 W/m². Tier note: LH2 ZBO is a **T2** capability — 02 catalogs DEP-600 "Reservoir" (T2)
+with a 150 t net-zero-boiloff LH2 mode, unlocked by 11 PR-15 "Heavy Depot Infrastructure";
+log_depot_h (§4.5) carries the same T2 tag. The T2 Longhaul NTR's 60 t Hydrogen logistics and
+12's Act 3 NTR era both assume it.
 
 **Vehicle tanks in flight obey the same F-6 rates** (passive rows) unless the vehicle's §4.4 row
 lists ZBO hardware. Route-planner integration: for each leg i the planner adds
@@ -481,7 +519,8 @@ hold-back. The Longhaul NTR mounts a 4 kW 20 K-class ZBO cryocooler (F-6 scaling
 → 0%/day Hydrogen loss in flight. Pelican-H is passive (0.10%/day, loitering or in flight).
 
 Depots make the chemical-tug economy work (the LEO→LLO Pallet example in §3.6 arrives at LLO
-with dry tanks — its return leg is infeasible without a refuel stop at the LLO depot) and are
+with ≈1.6 t of usable propellant — its ~4.2 km/s return leg is infeasible without a refuel stop
+at the LLO depot) and are
 the natural first "infrastructure" purchase of Act 2.
 
 ### 3.10 Maintenance economy
@@ -559,6 +598,25 @@ if a foundry is co-sited with a 04 thermal-ISRU module and flagged `heat_cascade
 receiving module's electrical demand is reduced by `min(0.20 × foundry heat output, 0.15 ×
 receiving module's demand)`, and the site radiator load drops by the same amount.
 
+### 3.13 In-situ derate (ISRU-fabricated hardware mass penalty)
+
+Locally manufactured equivalents of imported, launch-qualified precision hardware — most
+prominently 09-power-thermal.md's catalog items (arrays, radiators, power electronics), which
+cite this rule as 05 §"in-situ derate" — install at a mass penalty for the same rated
+performance:
+
+```
+m_installed = k_insitu × m_catalog ;  k_insitu = 4 (T2, first local fabrication),
+              3 (T3), 2 (T4)                                                            (F-13)
+```
+
+Rationale (honest): local fabrication lacks the aerospace-grade alloys, thin-film deposition
+lines, and QA depth behind flight-qualified specific masses; NASA CP-2255 assumed the same for
+its lunar factory. The derated item consumes its *derated* installed mass through the §4.1
+construction parts bill, and its Electronics content remains imported until T3 (§3.3). The rule
+does **not** apply to hardware already specified as ISRU-built in a sibling catalog (e.g.
+struct_basalt structures, 07's sintered habs) — those masses are already local-process-honest.
+
 ---
 
 ## 4. Content Catalog
@@ -578,7 +636,9 @@ StructuralParts + 7.5 t MachineParts + 2.0 t Electronics + 1.75 t Polymers). Ove
 fab_wafer_fab 25/25/40/10; robots (§4.3) 25/45/25/5; depots 70/20/5/5; log_massdriver 60/30/8/2.
 Erection labor is owned by this document: orbital items assemble at the dry dock under the §3.5
 job classes and rates; surface items run the same job classes (FABWELD/OUTFIT/COMMISSION) from
-07's construction pad at the same rates (07 owns the pad building itself).
+07's construction pad at the same rates (07 owns the pad building itself). ISRU-fabricated
+stand-ins for imported 09-catalog hardware additionally take the §3.13 in-situ derate (×2–4
+installed mass by tier).
 
 | ID | Module | Tier | Env | Mass (t) | P_hotel (kWe) | Power (kWe) | Throughput | Labor /day | Anchor |
 |---|---|---|---|---|---|---|---|---|---|
@@ -588,9 +648,13 @@ job classes and rates; surface items run the same job classes (FABWELD/OUTFIT/CO
 | fab_foundry_mill | Foundry & mill | T1 | S | 25.0 | 14 | 160 (300 pk) | 5 t/day MetalStock | 2 crew-h + 12 robot-h | Induction melt 560 kWh/t + rolling |
 | fab_chem_plant | Chemical plant (parts feedstock) | T1 | S/V | 15.0 | 15 | 140 | 2 t/day Polymers | 1 crew-h + 6 robot-h | Methane-to-olefins industrial route (04 co-owns) |
 | fab_elec_assy | Electronics assembly line | T1 | P | 10.0 | 7.5 | 20 | 100 kg/day Electronics | 4 crew-h + 8 robot-h | SMT pick-and-place lines |
+| fab_consumables | Consumables line (ration packing + med supplies) | T1 | P | 6.0 | 4 | 42 (rations) / 9 (med) | 0.5 t/day FoodRations or 50 kg/day MedSupplies | 1 crew-h + 3 robot-h (rations); 1.5 + 1.5 (med) | ISS food system, retort/freeze-dry practice; pharma compounding |
 | fab_workshop | Pressurized workshop module | T1 | P | 13.0 | 12 | 12 | hosts 2 small fab modules + repair bay (+25% repair speed) | — | ISS Destiny lab (14.5 t) |
 | fab_waam | Large-format WAAM/DED cell | T2 | P/V | 12.0 | 2.5 | 40 | 150 kg/day StructuralParts or Components(large) | 0.15 crew-h + 1.8 robot-h (A2+) | WAAM 1–10 kg/h, CMT 2–3 kg/h |
 | fab_assembly_hall | Parts assembly hall | T2 | P | 20.0 | 10 | 35 | 2 t/day MachineParts or StructuralParts finishing | 8 crew-h + 32 robot-h | Industrial assembly practice |
+| fab_sinter_printer | Regolith sinter printer | T2 | S | 12.0 | 5 | 47 | 2 t/day sintered-regolith structure, in place (07 B-2 DEPLOY rate) | 0.5 crew-h + 8 robot-h (A2+) | Taylor & Meek microwave sintering; ESA/ICON Olympus-class regolith printing |
+| fab_filament_winder | Basalt filament winder | T2 | S | 4.0 | 2 | 6 | 0.5 t/day wound BasaltFiber+Polymers shell, in place (07 B-2 DEPLOY rate) | 0.2 crew-h + 4 robot-h (A2+) | industrial filament winding; basalt-fiber composites (04 RX-17 feed) |
+| fab_ice_caster | Ice casting rig | T2 | S | 3.0 | 2 | 8 | 5 m³/day cast ice structure ≈ 4.6 t/day, in place (07 B-2 DEPLOY rate) | 0.1 crew-h + 4 robot-h (A2+) | ice-construction practice; Titan ambient 94 K + 07's F-15 (<150 K) rule |
 | yard_drydock | Orbital dry dock | T2 | V | 85.0 | 30 | 30 (180 pk, job-driven) | §3.5 job rates; 2 arm pairs, 3 gang slots; cargo_equipped | per job (§3.5) | ISS truss assembly, Canadarm2 |
 | fab_wafer_fab | Wafer fab (Minimal-Fab line) | T3 | P | 45.0 | 33 | 700 (900 pk) | 2 kg/day Wafers | 4 crew-h + 40 robot-h (min 10% crew) | AIST Minimal Fab; fab energy surveys |
 | fab_auto_complex | Autonomous factory complex | T3 | S | 120.0 | 398 (handling, robot charging, 04 pre-processing) | 600 | bundled at A3/A4: 5 t/day MetalStock + 0.5 t/day Components + 2 t/day MachineParts; kit closure χ = 0.90 (§3.4) | 1 crew-h (exceptions) | NASA CP-2255 (1980) |
@@ -600,6 +664,13 @@ Size-class rule: "small" = installed mass ≤ 3 t (fab_printer_poly and fab_prin
 anything larger needs its own pressurized volume from 07. The autonomous complex's 600 kWe =
 398 P_hotel (materials handling, robot-fleet charging, 04 pre-processing) + 202 kWe of bundled
 §4.2 recipe process power (foundry 146 + machine shop 31 + assembly hall 25).
+
+The three surface-construction machines (sinter printer, filament winder, ice caster) output
+*in-place structure*, not catalog resources: 07's B-2 DEPLOY stage consumes their throughput
+directly (the machine rates quoted in 07 §3.2 are these rows), so they carry no §4.2 recipes —
+07 owns the build recipes, 05 owns the machines. Their Power figures use process energies of
+500 kWh/t (microwave sinter), 150 kWh/t (winding; fiber drawing is upstream in 04 RX-17), and
+30 kWh/m³ (ice casting — mold handling at cryogenic ambient), plus the listed P_hotel.
 
 ### 4.2 Recipes (normalized per 1.00 t primary output; energy in kWh/t)
 
@@ -618,6 +689,8 @@ anything larger needs its own pressurized volume from 07. The autonomous complex
 | polymers_mto | fab_chem_plant | T1 | Methane 1.20, Oxygen 1.20 | Polymers 1.00; byp: Water 1.22, CO2 0.16, Hydrogen 0.02 | 0.00 | 1,500 | 0.5 / 3 |
 | wafers_min | fab_wafer_fab | T3 | Silicon 1.60, Polymers 2.0, Copper 0.10, Nitrogen 30, Water 60 (gross draws) | Wafers 1.00; byp: Nitrogen 24 (recovered to storage), Water 54 (UPW loop, recovered to storage) | 14.7 | 8,000,000 | 2,000 / 20,000 |
 | electronics_std | fab_elec_assy | T1 | Copper 0.35, Polymers 0.30, Aluminum 0.19, Glass 0.11, IronSteel 0.07, RareEarths 0.02, Wafers 0.01 | Electronics 1.00 | 0.05 | 3,000 | 40 / 80 |
+| ration_pack | fab_consumables | T1 | Biomass 2.10, Polymers 0.05 | FoodRations 1.00; byp: Water 1.10 (drying condensate, recovered to 08 loop) | 0.05 | 1,800 | 2 / 6 |
+| medsupplies_std | fab_consumables | T2 | Polymers 0.50, Electronics 0.30, Biomass 0.20 | MedSupplies 1.00 (08 §4.6 resource; finalizes 08's placeholder basket) | 0.00 | 2,500 | 30 / 30 |
 
 (Recipes for habitats' pressure vessels, tanks, radiators etc. are 06/07 blueprints *composed of*
 these parts — they do not get separate factory recipes. Factory and logistics modules themselves
@@ -644,20 +717,21 @@ Robot upkeep: L_wear 2,000 h (×0.6 in dust), spares split 70% MachineParts / 30
 | ID | Vehicle | Tier | Dry (t) | Propellant | Isp (s) | Payload | Notes |
 |---|---|---|---|---|---|---|---|
 | frt_capsule | "Carrack" cargo capsule | T0 | 6.0 | 2 t storable biprop (per 02) | 300 | 3–6 t | Kosmos-186/188→ATV→Dragon lineage; Earth-launched to the LEO node via purchased launches (12); automated docking; Δv 0.45 km/s at 6 t cargo — LEO-vicinity legs only. Act 1's import carrier |
-| frt_pallet | "Pallet" chemical tug | T1 | 4.5 | 24 t Methane+Oxygen | 360 | to 14 t (short legs) | Δv by load (F-3): 2.9 km/s at 14 t → 4.2 km/s at 6 t → 6.5 km/s empty; needs depots for lunar runs |
-| frt_drayage | "Drayage" SEP freighter | T2 | 8.0 (incl. 300 kWe array) | 12 t Xenon | 2,600 | 20 t | 24× AEPS-class Hall (12.5 kW, 0.59 N); slow, superb gear ratio; Argon variant (T3): +15% Isp but −25% thrust at the same power (η ≈ 0.45, higher ionization cost — longer trips); Argon is cheap and ISRU-available |
+| frt_pallet | "Pallet" chemical tug | T1 | 4.5 | 24 t Methane+Oxygen | 380 | to 14 t (short legs) | MV-2530-class vacuum methalox (per 02); Δv by load (F-3): 3.1 km/s at 14 t → 4.4 km/s at 6 t → 6.9 km/s empty; needs depots for lunar runs |
+| frt_drayage | "Drayage" SEP freighter | T2 | 8.0 (incl. 300 kWe array) | 12 t Xenon | 2,800 | 20 t | 24× HALL-12 (12.5 kW, 0.59 N, η 0.65; per 02 §4.4); slow, superb gear ratio; Argon variant (T2 — the EN-HALL-AR string, 06 §4 / 02 HALL-12A): Isp 2,400 s, 0.48 N per string at the same 12.5 kW (η ≈ 0.45, higher ionization cost — longer trips); Argon is cheap and ISRU-available |
 | frt_longhaul | "Longhaul" NTR freighter | T2/T3 | 22 (incl. 4 kW 20 K ZBO cryocooler + 6 kWe array) | 60 t Hydrogen | 900 | 40 t | 3× Pewee-class 111 kN (per 02); zero Hydrogen boiloff in flight (§3.9); orbital-only, never lands |
-| lndr_pelican | "Pelican" lunar lander | T2 | 9 | 31 t Methane+Oxygen | 360 | 6 t down + 6 t up | §3.7 cycle math (refuels at the LLO depot); 100 sortie airframe life |
-| lndr_pelican_h | "Pelican-H" hydrolox variant | T2 | 9.0 | 28 t Hydrogen+Oxygen | 450 | 6 t + 6 t at 21.3 t/cycle | PSR-water ISRU; passive boiloff per F-6 (0.10 %/day, no ZBO) |
-| lndr_pelican_m | "Pelican-M" Mars lander | T2 | 10 (incl. TPS) | 38 t Methane+Oxygen | 360 | 6 t down + 2 t up | Aero descent, 4.1 km/s ascent; surface refuel — ascent carries the next descent's propellant: 37.6 t/cycle (§3.7) |
+| lndr_pelican | "Pelican" lunar lander | T2 | 9 | 39 t Methane+Oxygen | 320 | 6 t down + 6 t up | ML-24 cluster (per 02); §3.7 cycle math, 37.6 t/cycle (refuels at the LLO depot); 100 sortie airframe life |
+| lndr_pelican_h | "Pelican-H" hydrolox variant | T2 | 9.0 | 28 t Hydrogen+Oxygen | 445 | 6 t + 6 t at 22.0 t/cycle | HL-67 cluster (per 02); PSR-water ISRU; passive boiloff per F-6 (0.10 %/day, no ZBO) |
+| lndr_pelican_m | "Pelican-M" Mars lander | T2 | 10 (incl. TPS) | 52 t Methane+Oxygen | 320 | 6 t down + 2 t up | ML-24 cluster (per 02); aero descent, ascent 4.2 km/s (01 R4 4,000 m/s × the F-3 1.05 margin); surface refuel — ascent carries the next descent's propellant: 49.9 t/cycle (§3.7) |
 | frt_torch | Fusion-torch bulk freighter | T4 [SPECULATIVE] | per 02 | per 02 | per 02 | 500 t class | Endgame only; obeys F-3 like everything else |
 
 ### 4.5 Logistics infrastructure
 
 | ID | Item | Tier | Mass | Power | Function / numbers |
 |---|---|---|---|---|---|
-| log_depot_s | Depot, storable/methalox | T1 | 20 t dry | 6 kW | 200 t storage; boiloff per F-6; transfer 5 t/h; cargo_equipped |
-| log_depot_h | Depot, LH2 ZBO | T3 | 28 t dry | 14 kW | 200 t LH2, zero boiloff; 12 kW cryocoolers (20 K, ≥100 W/W); cargo_equipped |
+| log_depot_s | Depot, storable/methalox | T1 | 20 t dry | 6 kW | 200 t storage; boiloff per F-6; 2× PTC-200 couplers (02 §3.13: 18 t/h cryo / 72 t/h storable each); cargo_equipped |
+| log_depot_h | Depot, LH2 ZBO | T2 | 28 t dry | 14 kW | 200 t LH2, zero boiloff; 12 kW cryocoolers (20 K, ≥100 W/W); 2× PTC-200 couplers (02 §3.13: 18 t/h cryo each); tier per 02 DEP-600 "Reservoir" (T2), unlocked by 11 PR-15; cargo_equipped |
+| log_pelletizer | Regolith pelletizer | T3 | 10 t | 100 kW | Presses/sinters Regolith (04 M-8 tailings feed) or canisterizes mass-driver-safe refined bulk into 10 kg slugs; 50 t/day at ~45 kWh/t (covers one Slinger's 43.2 t/day baseline with margin); unlocked with the mass driver by 11 IN-12 |
 | log_massdriver | Mass driver "Slinger" | T3 | 850 t installed (track 3.2 km, 100 g) | 2.6 MW avg (41 MW pk at muzzle; 52 MJ/shot from flywheel/capacitor bank, §3.8) | 43.2 t/day rough cargo at 1.45 kWh/kg; cargo whitelist per §3.8; surface-built: 510 t StructuralParts + 255 t MachineParts + 68 t Electronics + 17 t Polymers (override split 60/30/8/2) |
 | log_catcher | Orbital catcher | T3 | 60 t | 40 kW | Catches slugs, 2% loss; feeds orbital foundry or depot; station-keeping: 0.5 t Xenon SEP budget = ~60 m/s/yr + 0.2 kg Xenon per caught slug-tonne (momentum cancellation), refuelable per §3.6; miss rate 10% when Xenon is empty (§8.7) |
 | log_skyhook | Momentum-exchange tether | T4 [SPECULATIVE] | 1,200 t | 200 kW | Boeing HASTOL-class concept; tip Δv 2.4 km/s per catch, max catch mass 20 t; momentum ledger unit = t·(km/s): each up-boost debits catch mass × 2.4, repaid 1:1 by down-mass catches (equal credit) or electrodynamic/SEP reboost (SEP propellant via F-3 against the 1,200 t tether; orbit bookkeeping via 01) |
@@ -672,11 +746,13 @@ Robot upkeep: L_wear 2,000 h (×0.6 in dust), spares split 70% MachineParts / 30
 | Foundry & mill | 2,500 | 12,000 | 750 | 40 kg MachineParts + 10 kg Polymers, 8 robot-h | 60/15/20/5 |
 | Chemical plant | 3,500 | 15,000 | 1,000 | 25 kg MachineParts + 15 kg Polymers, 6 robot-h | 50/20/10/20 |
 | Electronics assembly | 2,000 | 10,000 | 500 | 5 kg MachineParts + 5 kg Electronics, 3 crew-h | 30/60/0/10 |
+| Consumables line | 2,500 | 12,000 | 750 | 10 kg MachineParts + 5 kg Polymers, 3 crew-h | 50/20/10/20 |
+| Surface build machines (sinter/winder/ice) | 1,800 (×0.6 dust) | 8,000 | 500 | 10 kg MachineParts, 4 robot-h | 60/25/10/5 |
 | Wafer fab | 400 (!) | 20,000 | 168 | 2 kg Electronics + 5 kg Polymers, 12 crew-h | 15/65/0/20 |
 | Dry dock & arms | 5,000 | 25,000 | 2,000 | 30 kg MachineParts, 12 robot-h | 65/25/10/0 |
 | Robots (all) | 2,000 (×0.6 dust) | 2,000 | 250 | 3 kg MachineParts, 1 crew-h | 70/30/0/0 |
 | Depots | 8,000 | 30,000 | 2,000 | 10 kg MachineParts + 5 kg Polymers | 50/30/5/15 |
-| Mass driver | 900 | 10,000 | 168 | 50 kg MachineParts + 10 kg Electronics | 55/30/10/5 |
+| Mass driver & pelletizer | 900 | 10,000 | 168 | 50 kg MachineParts + 10 kg Electronics | 55/30/10/5 |
 | Assembly hall | 2,000 | 10,000 | 500 | 10 kg MachineParts, 4 crew-h | 60/20/10/10 |
 | Workshop | 5,000 | 20,000 | 1,000 | 5 kg MachineParts, 2 crew-h | 50/20/10/20 |
 | Orbital catcher | 4,000 | 20,000 | 1,000 | 10 kg MachineParts, 8 robot-h | 60/30/10/0 |
@@ -725,8 +801,8 @@ and large maintenance staffs — owning one is a commitment, not a checkbox.
 |---|---|---|
 | **T0** (2049 baseline) | Act 1 | Polymer printer farm; manual EVA (A0); automated docking cargo capsules ("Carrack" frt_capsule, §4.4 — Kosmos-186/188→Dragon lineage); everything else imported from Earth at launch prices (12). The player learns that `Electronics` and `MachineParts` come from Earth, full stop. |
 | **T1** | Act 1→2 | Machine shop, foundry & mill, chemical plant, electronics assembly (imported `Wafers`), pressurized workshop; berthing arm + dexterous unit (A1); Pallet tug; storable/methalox depot. First closed loop: lunar `MetalStock` → `Components` → repairs without Earth. |
-| **T2** | Act 2→3 | WAAM cell, assembly hall, **orbital dry dock**; worker robots + teleoperation (A2 — and the crew-in-orbit-drives-surface-robots trick); Pelican lander lift loops; Drayage SEP freighter; Longhaul NTR freighter; first never-lands ship built in lunar orbit. |
-| **T3** | Act 3→4 | **Wafer fab** (the umbilical to Earth is finally cut — campaign milestone "Silicon Independence"); supervised autonomy (A3) and autonomous factory complexes (χ = 0.90); mass driver + catcher; trusselator robots; LH2 ZBO depots; belt logistics with multi-year SEP routes. |
+| **T2** | Act 2→3 | WAAM cell, assembly hall, **orbital dry dock**; worker robots + teleoperation (A2 — and the crew-in-orbit-drives-surface-robots trick); Pelican lander lift loops; Drayage SEP freighter; Longhaul NTR freighter; LH2 ZBO depots (per 02's DEP-600 "Reservoir", unlocked by 11 PR-15 — the Longhaul's 60 t Hydrogen logistics depend on them); surface-construction machines (sinter printer, filament winder, ice caster — 07's ISRU habs); first never-lands ship built in lunar orbit. |
+| **T3** | Act 4→5 | **Wafer fab** (the umbilical to Earth is finally cut — campaign milestone "Silicon Independence", 12's Act 4 exit milestone); supervised autonomy (A3) and autonomous factory complexes (χ = 0.90); mass driver + pelletizer + catcher (11 IN-12); trusselator robots; belt logistics with multi-year SEP routes. |
 | **T4** [SPECULATIVE] | Act 5→Endgame | Self-expanding industry seed (χ = 0.98); skyhook logistics; fusion-torch bulk freighters (02); He3 handling chains (04). Endgame megaprojects (interstellar precursor) are blueprints whose parts lists only a T4 industrial base can satisfy. |
 
 Pacing rule of thumb the numbers enforce: each tier of industry cuts the Earth-import mass
@@ -739,16 +815,20 @@ only at the margin) → ~0% (T4).
 
 **Consumes:**
 - 01-orbital-mechanics.md — Δv node-graph (impulsive + low-thrust variants), porkchop/window
-  tables, transfer times; on-rails coast states for freighters.
+  tables, transfer times; Table 4.2 catalog legs (M3/M4, R4) for the §3.7 lander cycles; on-rails
+  coast states for freighters.
 - 02-propulsion.md — engine stats (Isp, thrust, mass, propellant types) for Pallet/Drayage/
-  Longhaul/Pelican classes; boiloff-relevant propellant properties.
+  Longhaul/Pelican classes (MV-2530, HALL-12 + the Argon Hall string, Pewee-class NTR, ML-24,
+  HL-67); PTC-200/300L coupler transfer rates (§3.6 ops model); boiloff-relevant propellant
+  properties.
 - 03-solar-system.md — body/site properties, distances → light-time for teleoperation, dust
   environment flags (k_env), resource availability context.
 - 04-resources-isru.md — all refined inputs: IronSteel, Aluminum, Titanium, Copper, Silicon
-  (semiconductor grade), Glass, BasaltFiber, RareEarths, Polymers feedstocks (Methane, Oxygen),
-  propellants for the logistics network.
-- 08-life-support-crew.md — crew-hours supply, EVA consumables accounting, crew transport demand
-  on logistics routes.
+  (solar-grade flag per 04 §4.5, RX-16 output), Glass, BasaltFiber, RareEarths, Polymers
+  feedstocks (Methane, Oxygen), propellants for the logistics network.
+- 08-life-support-crew.md — crew-hours supply, EVA suit consumable rates (§3.4 charges 08 §3.11's
+  0.09 kg O2/h + 0.40 kg cooling water/h), Biomass supply for the §4.2 ration/medical recipes,
+  crew transport demand on logistics routes.
 - 09-power-thermal.md — electrical supply (kWe) and heat-rejection capacity per site; pulse-power
   storage for mass drivers.
 - 11-research-tech.md — tier gates for every module/robot/route capability named here.
@@ -759,12 +839,16 @@ only at the margin) → ~0% (T4).
 **Provides:**
 - 06-ships-stations.md — MachineParts/StructuralParts/Electronics supply; dry-dock assembly jobs
   and rates; the 0.65× orbital-structure mass multiplier; commissioning rules.
-- 07-bases-habitats.md — same parts supply for surface construction; factory modules as base
-  buildings (mass/power/heat/labor rows); maintenance economy for all base hardware.
+- 07-bases-habitats.md — same parts supply for surface construction; the B-2 DEPLOY build
+  machines (sinter printer 2 t/day, filament winder 0.5 t/day, ice caster 5 m³/day — §4.1);
+  factory modules as base buildings (mass/power/heat/labor rows); maintenance economy for all
+  base hardware.
 - 10-vehicles.md — parts + spares for rovers/landers; lander lift-loop scheduling.
-- 08-life-support-crew.md — spares for ECLSS hardware (drawn via §4.6 splits); workshop repair-bay
-  bonus.
-- 09-power-thermal.md — factory demand/heat-load table (§4.1) as grid sizing input.
+- 08-life-support-crew.md — FoodRations and MedSupplies manufacturing rates (§4.1
+  fab_consumables; §4.2 ration_pack / medsupplies_std, finalizing 08 §4.6's placeholder basket);
+  spares for ECLSS hardware (drawn via §4.6 splits); workshop repair-bay bonus.
+- 09-power-thermal.md — factory demand/heat-load table (§4.1) as grid sizing input; the §3.13
+  in-situ mass derate for locally-built 09-catalog radiators/arrays.
 - 12-gameplay-economy-ui.md — gear ratios, route costs, and production costs as the physical basis
   of the price model.
 

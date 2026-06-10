@@ -400,7 +400,7 @@ Eclipse rule (binding for 09-power-thermal.md solar arrays and 05 comms): a craf
 
 ## 4. Content Catalog
 
-### 4.1 Canonical SOI table (computed from r_SOI = a·(m/M)^(2/5); masses/axes per NASA fact sheets — 03-solar-system.md must use these exact values)
+### 4.1 Canonical SOI table (computed from r_SOI = a·(m/M)^(2/5); orbit semi-major axes a are 03-solar-system.md §4.2/§4.3 canonical ephemerides verbatim — 03 owns body data — masses per NASA fact sheets; the r_SOI column is computed here in one pass from those inputs and 03 republishes it verbatim, never recomputing independently)
 
 | Body | Parent | a (km) | Mass (kg) | r_SOI (km) | Notes |
 |---|---|---|---|---|---|
@@ -408,22 +408,22 @@ Eclipse rule (binding for 09-power-thermal.md solar arrays and 05 comms): a craf
 | Venus | Sun | 108.21e6 | 4.867e24 | **616,200** | |
 | Earth | Sun | 149.60e6 | 5.972e24 | **924,500** | often quoted 924,000–929,000 (distance-dependent); we fix the a-based value |
 | Moon | Earth | 384,400 | 7.342e22 | **66,200** | commonly quoted 66,100 |
-| Mars | Sun | 227.92e6 | 6.417e23 | **577,100** | |
+| Mars | Sun | 227.94e6 | 6.417e23 | **577,200** | |
 | Phobos | Mars | 9,376 | 1.066e16 | (7) → **none** | SOI floor rule: 7 km < 1.5×11 km radius — rendezvous object |
 | Deimos | Mars | 23,463 | 1.476e15 | (8) → **none** | rendezvous object |
-| Vesta | Sun | 353.4e6 | 2.59e20 | **39,300** | |
-| Ceres | Sun | 414.0e6 | 9.38e20 | **77,000** | |
-| Psyche | Sun | 437.0e6 | 2.29e19 | **18,400** | metal-asteroid content per 04 |
+| Vesta | Sun | 353.3e6 | 2.59e20 | **39,300** | |
+| Ceres | Sun | 413.8e6 | 9.38e20 | **77,000** | |
+| Psyche | Sun | 437.4e6 | 2.29e19 | **18,400** | metal-asteroid content per 04 |
 | Jupiter | Sun | 778.57e6 | 1.898e27 | **48,200,000** | |
-| Io | Jupiter | 421,700 | 8.932e22 | **7,840** | |
-| Europa | Jupiter | 671,034 | 4.800e22 | **9,730** | |
+| Io | Jupiter | 421,800 | 8.932e22 | **7,840** | |
+| Europa | Jupiter | 671,100 | 4.800e22 | **9,730** | |
 | Ganymede | Jupiter | 1,070,400 | 1.4819e23 | **24,350** | |
 | Callisto | Jupiter | 1,882,700 | 1.0759e23 | **37,700** | preferred crew staging (radiation, per 03/08) |
 | Saturn | Sun | 1,433.5e6 | 5.683e26 | **54,800,000** | |
 | Enceladus | Saturn | 237,948 | 1.080e20 | **490** | passes floor rule (1.5×252 = 378 km) — barely; periapsis ops are tight and fun |
 | Titan | Saturn | 1,221,870 | 1.3452e23 | **43,300** | |
-| Uranus | Sun | 2,872.5e6 | 8.681e25 | **51,800,000** | |
-| Neptune | Sun | 4,495.1e6 | 1.024e26 | **86,600,000** | |
+| Uranus | Sun | 2,870.7e6 | 8.681e25 | **51,800,000** | |
+| Neptune | Sun | 4,498.4e6 | 1.024e26 | **86,600,000** | |
 | Triton | Neptune | 354,759 | 2.139e22 | **12,000** | retrograde around Neptune — representable in 2D (s = −1), kept |
 | Pluto | Sun | 5,906.4e6 | 1.303e22 | **3,150,000** | flavor/endgame probe target |
 
@@ -505,7 +505,7 @@ Reading rules: legs chain additively (e.g., LEO→Moon surface = M1+M2+M3 = 5,84
 | Body | Surface P (kPa) | Surface ρ (kg/m³) | Scale height H (km) | Interface altitude (km) | Main gas | Anchor |
 |---|---|---|---|---|---|---|
 | Earth | 101.3 | 1.225 | 8.5 | **140** | N2/O2 | US Std 1976 |
-| Mars | 0.61 | 0.020 | 11.1 | **125** | CO2 | Viking / MCD |
+| Mars | 0.61 | 0.016 | 11.1 | **125** | CO2 | Viking / MCD; ρ0 follows the ideal gas law from 03's canonical datum (P0 = 0.61 kPa, T0 = 210 K, μ = 43.34 g/mol → ρ = P·μ/(R·T) ≈ 0.0151 kg/m³), displayed as 0.016 to match 03 S-5b and 04 M-3e verbatim |
 | Venus | 9,200 | 65.0 | 15.9 | **180** | CO2 | VIRA; 50-km level is ~1 atm (1.066 atm), ~348 K (75 °C) — aerostat country (HAVOC itself quotes 75 °C at 50 km); the temperate 293–310 K band sits higher, at 52.5–54 km and ~0.6–0.8 atm |
 | Titan | 146.7 | 5.28 | 21 (lower) / ~50 (upper) | **850** | N2/CH4 | Huygens HASI |
 | Jupiter | 100 (1-bar datum) | 0.16 at datum | 27 | **1,000 above datum** | H2/He | NASA fact sheet |
@@ -518,7 +518,7 @@ Reading rules: legs chain additively (e.g., LEO→Moon surface = M1+M2+M3 = 5,84
 | Body | Breakpoints (h km : ρ) |
 |---|---|
 | Earth | 0:1.225 · 25:4.0e-2 · 50:1.03e-3 · 75:4.0e-5 · 100:5.6e-7 · 120:2.2e-8 · 140:3.9e-9 (interface) |
-| Mars | 0:2.0e-2 · 25:2.5e-3 · 50:2.8e-4 · 75:1.6e-5 · 100:1.0e-7 · 125:6e-9 (interface) |
+| Mars | 0:1.5e-2 · 25:2.5e-3 · 50:2.8e-4 · 75:1.6e-5 · 100:1.0e-7 · 125:6e-9 (interface; 0-km anchor 1.5e-2 = the gas-law value from 03's canonical P0/T0/μ — consistent with 03 S-5b and 04 M-3e, NOT the older fact-sheet 2.0e-2) |
 | Venus | 0:65 · 50:1.6 · 70:9.2e-2 · 100:5e-5 · 130:1e-7 · 180:2e-9 (interface) |
 | Titan | 0:5.28 · 75:1.5e-1 · 300:1.7e-3 · 600:4e-6 · 850:7e-8 (interface) |
 | Jupiter | −100:0.6 · 0:0.16 · 200:9e-5 · 500:1.3e-9 · 1000:1e-13 (interface; datum = 1 bar) |
