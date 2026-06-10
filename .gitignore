@@ -8,3 +8,4 @@ build/
 dist/
 saves/
 *.log
+demo_*.png

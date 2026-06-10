@@ -22,7 +22,7 @@ Act mapping at a glance: Act 1 flies kerolox/hydrolox/solids and learns reuse + 
 - **Hypergolics (NTO/MMH)**: Space Shuttle OMS engine AJ10-190 (26.7 kN, Isp 316 s, 118 kg), Apollo Service Propulsion System AJ10-137 (91 kN, Isp 314 s, 293 kg; real SPS burned NTO/Aerozine-50 — the game simplifies all hypergolics to the NTO/MMH pair at O/F 1.65, the OMS ratio). SpaceX Draco (400 N, Isp 300 s) and SuperDraco (71 kN, deep throttle) for RCS and landers. Hypergolics ignite on contact: no igniter, near-unlimited restarts, storable at room temperature — but NTO freezes at 262 K and the pair is toxic and lower-Isp.
 - **Kerolox**: SpaceX Merlin 1D (845 kN SL / 914 kN vac, Isp 282 s SL / 311 s vac, ~470 kg, gas-generator cycle, T/W ≈ 180) and Merlin Vacuum (981 kN, Isp 348 s). O/F ≈ 2.36. RP-1 is dense and storable but cokes engines and cannot be made off-Earth cheaply (no convenient ISRU route) — which is exactly why the game pushes players off kerolox after Act 1.
 - **Hydrolox**: the RL10 family — best flying vacuum Isp of any chemical engine (RL10B-2 reached 465.5 s on Delta IV; current C-variants fly ≈450–454 s); the game's H-102 uses RL10C-1 numbers (101.8 kN, Isp 449.7 s, 190 kg, expander cycle); CECE (RL10-derivative Common Extensible Cryogenic Engine, deep throttle demonstrated to 5.9% of rated thrust); RS-25/SSME (1,860 kN SL / 2,279 kN vac, Isp 366/452 s, 3,177 kg, staged combustion, T/W ≈ 73, originally certified for 7.5 h / 55 starts). O/F game-standard 6.0 (real RL10 5.5–5.88, RS-25 6.03). LH2 at 70.8 kg/m³ makes tanks enormous and boiloff brutal — modeled.
-- **Methalox**: SpaceX Raptor 2 (full-flow staged combustion; 230 tf = 2,256 kN SL, Isp 327 s SL / 347 s vac, 1,630 kg — figures from SpaceX's published Raptor comparison), Raptor Vacuum (≈2,530 kN, Isp ≈380 s `[est]`). O/F game-standard 3.6 (Raptor flies ≈3.5–3.8). Methane is the ISRU propellant: Sabatier from CO2 + H2 (Mars, anywhere with carbon and water) — see `04-resources-isru.md`. NASA Project Morpheus flew a 24 kN pressure-fed methalox deep-throttle lander engine — our small-lander anchor.
+- **Methalox**: SpaceX Raptor 2 (full-flow staged combustion; 230 tf = 2,256 kN SL, Isp 327 s SL / 347 s vac, 1,630 kg — figures from SpaceX's published Raptor comparison), Raptor Vacuum (≈2,530 kN, Isp ≈380 s `[est]`). O/F game-standard 3.6 (Raptor flies ≈3.5–3.8). Methane is the ISRU propellant: Sabatier from CO2 + H2 (Mars, anywhere with carbon and water) — see `04-resources-isru.md`. NASA Project Morpheus flew a 24 kN pressure-fed methalox deep-throttle lander engine — our small-lander anchor. **Rocket Lab Archimedes** (Neutron; oxidizer-rich staged combustion, ~733 kN SL class, first hot-fired 2024, deliberately run below its stress limits for reuse) anchors the compact reusable methalox class (M-733/MV-815 "Bantam" pair). **Masten Broadsword 25K** (DARPA XS-1 program; ~111 kN LOX/LCH4 turbopump engine, ground-development hardware from the company whose VTVL landers flew hundreds of flights) anchors the pump-fed methalox lander row (ML-111).
 
 **Pressure-fed vs pump-fed** (this tradeoff is a real game mechanic, §3.16):
 
@@ -282,11 +282,11 @@ Environment factor `q_env` (W/m², game-calibrated to CPST-class studies). Evalu
 | Surface | q_env | T_amb |
 |---|---|---|
 | Lunar surface, day | 2.0 | 390 K |
-| Lunar surface, night / permanently shadowed crater | 0.05 | 100 K (PSR ~40 K) |
+| Lunar surface, night / permanently shadowed crater | 0.05 | 95 K (PSR ~40 K) |
 | Mars surface (diurnal avg) | 0.6 | 210 K |
 | Titan surface | 0.3 | 94 K |
 
-2. **Else, heliocentric r < 1.5 AU** (any orbit or atmospheric flight): `q_env = (1 AU / r)²`, capped at 3.0 — sunlit LEO = 1.0, Venus transfer/orbit at 0.72 AU = 1.93, Mercury capped at 3.0. Multiply by ×0.25 if a sunshield is deployed (§4.8 SUN series).
+2. **Else, heliocentric r < 1.5 AU** (any orbit or atmospheric flight): `q_env = (1 AU / r)²`, capped at 3.0 — sunlit LEO = 1.0, Venus transfer/orbit at 0.7233 AU = 1.91, Mercury capped at 3.0. Multiply by ×0.25 if a sunshield is deployed (§4.8 SUN series).
 3. **Else, 1.5 AU ≤ r < 3 AU**: q_env = 0.4; or 0.10 if a sunshield is deployed or the tank is permanently shadowed.
 4. **Else (r ≥ 3 AU)**: q_env = 0.03.
 
@@ -366,6 +366,8 @@ Failure outcome roll (chemical/NTR): 70% benign shutdown (one restart attempt al
 
 **Maintenance**: a workshop (`05-industry-logistics.md` module) with crew or robot arm can refurbish an engine for 20% of its MachineParts build cost: resets counters to 20% of rated (w → 0.2). An engine past w = 2.0 cannot be refurbished — scrap for 50% material recovery. All RNG draws come from the deterministic mission seed (13 interface).
 
+**Unified wear model (DECISIONS A5 — interface rule):** an engine instance's total reliability state is the product of exactly three orthogonal factors, each owned by one doc: (1) **this doc's per-ignition/wear base** — w, p_base, λ0 and the (1 + 9·w²) multiplier above; (2) **11's type-maturity factor** — the Mature ÷4 on p_base/λ0 (published in this section, owned by 11's research progression); (3) **05's spares/MTBF consumption** — the scheduled-maintenance and MachineParts ledger of 05 §3.10 F-9 (k_env). The three multiply and no doc restates another's factor — no double counting (05's spares ledger never modifies p_base/λ0; the refurbishment rule above is the only point where wear and the spares ledger meet). Ships (06) and vehicles (10) consume the composed value, never re-derive it. This composition ships as an explicit Phase-1 interface test.
+
 ### 3.15 RCS
 
 RCS blocks are modules with 4 nozzles in a cross; the flight computer fires them for torque/translation (13 owns allocation). Propellant draw `ṁ = F/(g0·Isp)` per firing nozzle; pulses < 0.1 s pay Isp ×0.9. RCS provides ullage and settling thrust (§3.5, §3.13). Sizing rule shown in builder: angular acceleration `α = Σ(F_nozzle · L_i) / I_stack ≥ 0.02 rad/s²` about the worst axis for a "responsive" rating, where L_i is each nozzle's lever arm and I_stack is the stack moment of inertia (provided by `06-ships-stations.md`, §7).
@@ -411,11 +413,32 @@ Depots (DEP-60/DEP-600) have no recipe of their own: they are assembled from the
 
 **Cost classes** (monetary mapping owned by `12-gameplay-economy-ui.md`): **A** consumable/cheap; **B** mass-produced engine (T1 factory); **C** precision aerospace (Earth import or T2 orbital fab); **D** nuclear/exotic (Earth import + regulatory event, or T3 fab; consumes Uranium license); **E** megaproject (Endgame chain only).
 
+### 3.17 Plume–surface scouring (landing-site hazard)
+
+IN per DECISIONS C23 — deliberately a **simple cone/threshold model only**, no plume gas dynamics. The plume is an axisymmetric cone of half-angle 15°; mean plume pressure on the surface under a burning engine:
+
+```
+p_plume = F(p_amb) · x / (π · (h · tan 15°)²)      [Pa]   (h = nozzle height above terrain, m)
+```
+
+Scouring is **active** whenever p_plume > p_crit of the surface class directly below:
+
+| Surface class | p_crit | Note |
+|---|---|---|
+| Loose regolith / dust (default: Moon, Mars, asteroids) | 1 kPa | Apollo-descent / Surveyor-erosion anchor |
+| Compacted / graded site (10's site-prep task) | 10 kPa | |
+| Bare rock / exposed ice (survey-identified cells) | 30 kPa | |
+| Sintered / paved landing pad (07 build item) | 300 kPa | the designed fix; rated for landing-throttle touchdown of M-2256-class — a full-throttle surface *launch* still wants 07's flame-trench pad option |
+
+Equivalently, each engine has a scour-onset height `h_scour = √(F·x / (π · p_crit)) / tan 15°`. Worked anchors: ML-24 at full thrust starts scouring loose regolith below ≈10 m (compacted ≈3.3 m, pad ≈0.6 m); an M-2256 scours loose regolith from ≈100 m up but a pad only below ≈6 m — gear-contact height, i.e. effectively never at landing throttle. Heavy landers get pads or get distance.
+
+Effects while scouring: (1) the burning engine accrues wear at **×2** (self-ejecta FOD ingestion — this doc's only damage term); (2) an ejecta sheet is emitted — **all third-party consequences are owned by the consumers per C23**: `10-vehicles.md` §3.6.3's plume-ejecta rule (abrasion events within 200 m, severe rolls within 50 m, plume-exclusion circles in the hop UI — Apollo 12 → Surveyor 3 anchor) and `07-bases-habitats.md`'s Landing Pad catalog item and no-pad dust/damage ledger. Dense atmospheres brake the ballistic sheet: 10 scales its damage radii ×1 airless, ×0.5 Mars, ×0.1 Titan. The 2D world makes the cone a pure height test — one comparison per burning engine per tick.
+
 ## 4. Content Catalog
 
 ### 4.1 Propellant properties (resource extensions declared here)
 
-This document extends the canonical resource list with three genuinely-needed propellants: **RP1**, **NTO**, **MMH** (Earth-import at T0–T1; possible late synthesis routes are an open question for `04-resources-isru.md`). Solid propellant is NOT a resource (sealed parts).
+This document extends the canonical resource list with three genuinely-needed propellants: **RP1**, **NTO**, **MMH**. RP1 stays Earth-only (no convenient ISRU route, §2.1). NTO and MMH are Earth-import until T3: per DECISIONS B11 they gain **T3 ISRU synthesis routes** — Ammonia→MMH (Raschig-type), Nitrogen+Oxygen→NTO (HNO3-oxidation chain) — as chem-plant recipes **owned by `04-resources-isru.md`**; hypergolics never age out and storables keep their niche. Solid propellant is NOT a resource (sealed parts).
 
 | Resource | State as stored | Density (kg/m³) | Store T (K) | Cryo? | Notes |
 |---|---|---|---|---|---|
@@ -450,9 +473,14 @@ Columns: dry mass; thrust SL/vac; Isp SL/vac; min throttle x_min; gimbal; rated 
 | H-2280 "Shire" | RS-25 | T1 | staged-comb. hydrolox | LOX/LH2 (6.0) | 3,177 | 1,860 / 2,279 | 366 / 452 | 0.67 | ±10.5° | 55 | 27,000 | 101 | C |
 | M-2256 "Drayhorse" | Raptor 2 | T1 | FFSC methalox | LOX/LCH4 (3.6) | 1,630 | 2,256 / 2,394 | 327 / 347 | 0.40 | ±15° | 50 | 5,000 | 101 | B |
 | MV-2530 "Drayhorse-V" | Raptor Vacuum | T1 | FFSC methalox | LOX/LCH4 (3.6) | 2,100 `[est]` | — / 2,530 `[est]` | 100† / 380 `[est]` | 0.40 | ±3° | 50 | 5,000 | 40 | B |
+| M-733 "Bantam" | Rocket Lab Archimedes (Neutron) | T1 | ORSC pump-fed methalox | LOX/LCH4 (3.6) | 750 `[est]` | 733 / 765 `[est]` | 315 / 329 `[est]` | 0.40 | ±5° | 20 | 2,500 | 101 | B |
+| MV-815 "Bantam-V" | Archimedes vacuum variant | T1 | ORSC pump-fed methalox | LOX/LCH4 (3.6) | 900 `[est]` | — / 815 `[est]` | 95† / 367 `[est]` | 0.50 | ±3° | 10 | 1,500 | 30 | B |
 | ML-24 "Gopher" | NASA Project Morpheus HD | T2 | pressure-fed methalox lander | LOX/LCH4 (3.6) | 80 `[est]` | 22 / 24 | 295 / 320 `[est]` | 0.25 | ±5° | 500 | 3,000 | 101 | B |
+| ML-111 "Badger" | Masten Broadsword 25K (DARPA XS-1 program), deep-throttle lander derivative | T2 | GG pump-fed methalox lander | LOX/LCH4 (3.6) | 240 `[est]` | 95 / 111 | 300 / 355 `[est]` | 0.15 | ±8° | 250 | 4,000 | 101 | B |
 
-Notes: Merlin SL/vac thrust pair implies ṁ = 914,000/(9.80665·311) = 299.7 kg/s; the model derives F_SL from Isp_SL per §3.3 (small rounding vs the listed real figure is accepted). T/W sanity anchors: Merlin ≈183, Raptor 2 ≈141, RS-25 ≈73, RL10C ≈55 — all match published values.
+Notes: Merlin SL/vac thrust pair implies ṁ = 914,000/(9.80665·311) = 299.7 kg/s; the model derives F_SL from Isp_SL per §3.3 (small rounding vs the listed real figure is accepted). T/W sanity anchors: Merlin ≈183, Raptor 2 ≈141, RS-25 ≈73, RL10C ≈55 — all match published values; Bantam ≈100 (Archimedes' deliberately low-stress reusability margin) and ML-111 ≈47 (lander class) are `[est]`-consistent.
+
+**Registrations (DECISIONS A8) — all three sibling-doc registrations accepted and published:** the **Bantam SL/vac pair** above (06 Q1's compact-T1-launcher request, Archimedes/Neutron anchor, ~800 kN class); the **HALL-12A "Harrier-A" Argon Hall string** (§4.4 — 06's EN-HALL-AR / 05's Drayage Argon variant); and the **ML-111 pump-fed methalox lander row** (10 Q10's HOP-P range-target request — Isp 355 s vs Gopher's 320 buys 10's crewed hopper its longer hops).
 
 ### 4.3 Nuclear-thermal engines (T2 unless noted; cost class D; H2 baseline, alternates per §3.10)
 
@@ -560,27 +588,27 @@ A consumable · B mass-produced · C precision aerospace · D nuclear/exotic (re
 | Tier | Unlocks (this doc) | Act usage |
 |---|---|---|
 | T0 (2049 baseline) | SRM-2, SRM-49, OMS-27, SPS-91, K-845, KV-981, H-102, ION-2, HALL-1, RCS-N10, RCS-D400, basic tanks | Act 1: expendable launch, LEO ops, first GEO/lunar probes |
-| T1 | M-2256 + MV-2530 (methalox reuse — the cost-curve breaker), LND-71, HL-67, H-2280, depots DEP-60/600 + PTC-200 + ZBO line + SUN-series sunshields + PMD, ION-7, HALL-12, RCS-M2K, SAIL-86, "Mature engine" reliability upgrades | Act 1→2: reusable lift, LEO depot, lunar landings |
-| T2 | NTR-73, NTR-246, LANTR option, ML-24 ISRU landers, NTR alternate propellants, HALL-12A Argon Hall string (06's EN-HALL-AR / 05's Drayage Argon variant), SAIL-1650, depot-grade insulation everywhere | Act 2–3: lunar LOX economy, NEA mining tugs |
+| T1 | M-2256 + MV-2530 (methalox reuse — the cost-curve breaker), M-733 + MV-815 Bantam pair (A8 — compact launchers under 11's PR-02), LND-71, HL-67, H-2280, depots DEP-60/600 + PTC-200 + ZBO line + SUN-series sunshields + PMD, ION-7, HALL-12, RCS-M2K, SAIL-86, "Mature engine" reliability upgrades | Act 1→2: reusable lift, LEO depot, lunar landings |
+| T2 | NTR-73, NTR-246, LANTR option, ML-24 ISRU landers, ML-111 pump-fed lander (A8 — 10's HOP-P class), NTR alternate propellants, HALL-12A Argon Hall string (06's EN-HALL-AR / 05's Drayage Argon variant), SAIL-1650, depot-grade insulation everywhere | Act 2–3: lunar LOX economy, NEA mining tugs |
 | T3 | HALL-100, MPD-200, VAS-200, NTR-111B bimodal NTR, SAIL-10K, NTR refurbishment-in-space, PTC-300L LAD couplers | Act 4–5: Mars cyclers (architecture node SH-07 in `11-research-tech.md`), belt freighters, Venus aerostat support, Jupiter/Saturn tugs |
 | T4 `[SPECULATIVE]` | DFD-5, FFR-43, PULSE-D megaproject | Act 5 + Endgame: outer-system clippers, interstellar precursor |
 
 Research costs/prereq graph lives in `11-research-tech.md`; the intended spine is: methalox reuse → cryo depots → ISRU methalox (with 04) → NTR → high-power EP (gated by 09's reactors) → T4.
 
-Reliability progression: each engine *type*, in every engine class, graduates to "Mature" (p_base and λ0 ÷4, §3.14) after 25 program-wide successful ignitions — flying cheap uncrewed missions first is mechanically rewarded.
+Reliability progression: each engine *type*, in every engine class, graduates to "Mature" (p_base and λ0 ÷4, §3.14) after 25 program-wide successful ignitions — flying cheap uncrewed missions first is mechanically rewarded. (The 25-ignition threshold is a [PLAYTEST] balance placeholder per DECISIONS E; tune only at the named gate, owner per README §7.31.)
 
 ## 7. Cross-System Interfaces
 
 - **01-orbital-mechanics.md** — *provides to 01*: per-engine F(p_amb), ṁ, Isp(x), sail force vector law, NTR cooldown trickle accel, EP thrust under warp. *Consumes*: p_amb at vehicle, heliocentric r, g_local, T_orbit, finite-burn integration, burn-splitting planner, Earth pad→LEO budget 9,400 m/s (locked).
 - **03-solar-system.md** — *consumes*: body g, atmosphere pressure profiles (Venus 50–55 km aerostat band, Titan 147 kPa), solar flux vs r, surface thermal environments for q_env calibration, Titan ambient 94 K.
-- **04-resources-isru.md** — *consumes*: production of LOX, LCH4, LH2, Water, Ammonia, CO2, Xenon, Argon, Nitrogen, Uranium/HALEU, He3 [SPECULATIVE]. *Provides*: locked O/F ratios (3.6 methalox / 6.0 hydrolox / 2.36 kerolox / 1.65 hypergol), demand: ISRU must supply 3.6 kg O2 per kg CH4 (Sabatier alone yields 2.0 — remainder via water or CO2 electrolysis, MOXIE/SOEC anchor); declares new resources RP1, NTO, MMH (Earth-import).
-- **05-industry-logistics.md** — *provides*: build recipes (§3.16), refurbishment costs (20% MachineParts, workshop required), solid-motor fab restriction (Earth/T3 chem plant). *Consumes*: fabrication, workshops, scrap recovery (50%).
+- **04-resources-isru.md** — *consumes*: production of LOX, LCH4, LH2, Water, Ammonia, CO2, Xenon, Argon, Nitrogen, Uranium/HALEU, He3 [SPECULATIVE]. *Provides*: locked O/F ratios (3.6 methalox / 6.0 hydrolox / 2.36 kerolox / 1.65 hypergol), demand: ISRU must supply 3.6 kg O2 per kg CH4 (Sabatier alone yields 2.0 — remainder via water or CO2 electrolysis, MOXIE/SOEC anchor); declares new resources RP1, NTO, MMH (RP1 Earth-only; NTO/MMH Earth-import until 04's T3 synthesis routes — DECISIONS B11: Ammonia→MMH, Nitrogen+Oxygen→NTO, chem-plant recipes owned by 04, §4.1).
+- **05-industry-logistics.md** — *provides*: build recipes (§3.16), refurbishment costs (20% MachineParts, workshop required), solid-motor fab restriction (Earth/T3 chem plant). *Consumes*: fabrication, workshops, scrap recovery (50%). Wear-model composition per DECISIONS A5 (§3.14): 05's spares/MTBF ledger multiplies — never restates — this doc's wear base; Phase-1 interface test.
 - **06-ships-stations.md** — *provides*: all engine/tank/RCS/depot module stats, gimbal authority, energetic-failure adjacency damage trigger, shadow-shield cone geometry. *Consumes*: stack structure, CoM/lever arms, stack moment of inertia I_stack (RCS responsiveness check §3.15), docking couplers, module damage model, staging.
-- **07-bases-habitats.md** — *provides*: surface refueling plumbing specs (PTC rates apply), pad boiloff environments (lunar day/night, Mars). *Consumes*: base power for heaters/ZBO/pumping.
+- **07-bases-habitats.md** — *provides*: surface refueling plumbing specs (PTC rates apply), pad boiloff environments (lunar day/night, Mars), plume-scour trigger law §3.17 (cone/threshold + p_crit surface classes — 07's Landing Pad raises p_crit to 300 kPa and owns the no-pad dust/damage ledger; DECISIONS C23). *Consumes*: base power for heaters/ZBO/pumping.
 - **08-life-support-crew.md** — *provides*: NTR dose rate law (D = 1×10⁴ Sv/h × (P_t/367 MWt) × throttle × (25 m/r)² off-cone; 0.1 mSv/h in-cone at full power, same P_t/throttle scaling — §3.10). *Consumes*: crew dose limits, crew availability for maintenance.
 - **09-power-thermal.md** — *consumes*: bus electrical power for EP (P_in per string), ZBO (0.75/2.0 kWe units), tank heaters (50 W/t), pumping (0.1 kWe). *Provides*: waste heat loads — EP per family (ion/Hall 10%, VASIMR 15%, MPD 30% of P_in — §3.9), cryocoolers P_in + Q_lift, NTR-111B bimodal idle export +25 kWe (§3.10; self-rejects its ≈90 kWt Brayton waste heat via the integral engine radiator), DFD-5 exports 1 MWe.
-- **10-vehicles.md** — *provides*: small engines for hoppers/landers (ML-24, LND-71, RCS blocks), NIMF-style CO2-fed NTR hopper option (§3.10 table).
-- **11-research-tech.md** — *provides*: unlock list per tier (§6), Mature-engine usage-based upgrade rule. *Consumes*: research gating, T4 [SPECULATIVE] placement.
+- **10-vehicles.md** — *provides*: small engines for hoppers/landers (ML-24, ML-111 pump-fed lander per A8, LND-71, RCS blocks), NIMF-style CO2-fed NTR hopper option (§3.10 table), plume-scour trigger law §3.17 (10 §3.6.3's ejecta rule and hop-UI exclusion circles consume it; atmospheric radius scaling ×1/×0.5/×0.1 — DECISIONS C23).
+- **11-research-tech.md** — *provides*: unlock list per tier (§6), Mature-engine usage-based upgrade rule. *Consumes*: research gating, T4 [SPECULATIVE] placement. The maturity factor (Mature ÷4) is 11's slot in the A5 unified wear model (§3.14) — orthogonal to this doc's wear base and 05's spares ledger.
 - **12-gameplay-economy-ui.md** — *provides*: cost classes A–E, depot propellant as standard tradable good, regulatory event hooks (NTR class D, no NTR < 60 km Earth). *Consumes*: prices, contracts, Δv-map presentation.
 - **13-architecture.md** — *consumes/provides*: analytic boiloff under warp (linear drain + empty events), deterministic RNG seed for failure rolls, flight-computer control allocation (gimbal/diff-throttle/RCS), warp limits during burns.
 
@@ -604,16 +632,17 @@ Reliability progression: each engine *type*, in every engine class, graduates to
 16. **Depot power loss**: ZBO offline → passive boiloff resumes per §3.12 (the sunshield is passive and keeps working); a dead DEP-600 in its 150 t LH2 configuration reverts to ≈0.2%/month (≈290 kg/month: 0.25 shield × 0.25 depot MLI × 798 m² ≈ 50 W at 20 K) — slow leak, loud alarm.
 17. **Transfer into warm tank**: 1.5% chilldown vent loss; repeated small transfers into warm tanks are punished vs one big settled transfer (correct incentive).
 18. **Numerical edge**: throttle commands below x_min clamp to 0 (engine off) — no sub-idle hover cheese; thrust during the 5 s chilldown is exactly 0.
+19. **Plume scouring** (DECISIONS C23): any burn below h_scour over an unprepared surface sandblasts the neighborhood — trigger law §3.17; damage radii and exclusion circles per 10 §3.6.3; pads per 07. The burning engine itself accrues ×2 wear (self-ejecta FOD). Pads are not optional decor.
 
 ## 9. Open Questions
 
-1. Should NTO/MMH be merged into a single "Hypergols" resource at fixed 1.65 ratio to cut tank micro-management, or kept separate for realism? (Lean: merge; 04 to decide.)
-2. Late-game ISRU synthesis of MMH (from Ammonia + Methane) and NTO (from Nitrogen + Oxygen) — real chemistry exists (Raschig-type routes, HNO3 oxidation); is it worth a T3 chem-plant recipe or do hypergolics simply age out of the meta?
-3. Plume–surface interaction (regolith scouring during lunar landings, pad damage): model as a landing-site hazard (07/10) or ignore in v1?
+1. **RESOLVED (DECISIONS A1/B11).** Kept separate — no merged "Hypergols" SKU: A1 gives NTO and MMH their own 12 §4.3 price rows, B11 gives each its own T3 synthesis route (04 recipes). 06 §9.2 already conforms.
+2. **RESOLVED (DECISIONS B11).** Yes — T3 chem-plant recipes exist (Ammonia→MMH Raschig-type; Nitrogen+Oxygen→NTO via HNO3 oxidation), owned by 04. Hypergolics never age out; storables keep their niche. Declared at §4.1.
+3. **RESOLVED (DECISIONS C23).** Modeled — IN as a simple landing-site hazard, cone/threshold model only (§3.17); consequences consumed by 10 §3.6.3 and 07's pad catalog. Drives landing-pad construction gameplay.
 4. Spin-stabilization for solid kick stages (no gimbal): do we model spin-up RCS cost or hand-wave guidance for SRM-2 class motors?
 5. Depot station-keeping budget: LEO drag makeup for DEP-600 (interface with 01 drag model) — included in depot power/propellant overhead or a separate Hall-thruster module requirement?
-6. EP mega-clusters (Act 5 freighters may want 50+ strings): UI grouping and a per-string vs per-bank failure bookkeeping decision for 13's performance budget.
+6. **RESOLVED (DECISIONS C25).** Per-bank bookkeeping (not per-string) for EP mega-clusters; UI grouping follows the banks. 13's performance budget gets one failure ledger per bank.
 7. LANTR-style augmentation for NTR-246, and an open-cycle "afterburning" mode tradespace — worth a second mode or is one augmented engine enough?
 8. Aerospike/SSTO-flavored engines were excluded (no strong flight anchor); revisit if Act 1 launch gameplay needs more variety?
 9. Does H-2280 (RS-25-class) earn its slot once methalox unlocks, or should it become a premium "hydrolox sustainer" contract-unlock only? (Balance question for 11/12.)
-10. Exact Mature-engine threshold (25 program-wide ignitions) needs playtest tuning against Act 1 mission cadence.
+10. **RESOLVED (DECISIONS E).** The 25-ignition Mature threshold stays as written, tagged [PLAYTEST] (§6); tune only at the named playtest gate against Act 1 mission cadence, owner per README §7.31.

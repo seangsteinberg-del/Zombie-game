@@ -1,6 +1,6 @@
 # 12 — Gameplay Loop, Campaign, Economy & UI
 
-**Owner:** Gameplay/Economy/UI domain. **Status:** v1 design-complete draft.
+**Owner:** Gameplay/Economy/UI domain. **Status:** v1 design-complete draft; incorporates DECISIONS.md rulings A1, A7, C18, C19, C25, F33 (Director, 2026-06).
 **This document owns:** the four play modes and mode-switching, the session loop and campaign arc, all money (prices, contracts, milestones, investors, insurance, salaries), the Prestige/reputation economy, the self-sufficiency metric and the money→mass transition, difficulty/realism toggles, failure-as-content (rescues, aborts, stand-downs), the alert/notification bus and its time-warp interrupt rules, every major screen, the color/iconography language, keybindings, onboarding, the Chronicle, and photo mode.
 **This document does NOT own:** physics (01), engines (02), bodies (03), ISRU chemistry (04), production rates (05), part stats (06/07), crew biology (08), power (09), vehicles (10), research-tree costs (11), engine architecture (13). Where a sibling exposes a screen's *content* (e.g., the Life-Support Sankey, 08 §5), this document owns the *frame* it appears in.
 
@@ -17,7 +17,7 @@ Aphelion is played as one continuous program, 2049 → ~2090+, through four *len
 - **Planner (F3)** — the system map: transfers, logistics routes, contracts, alarms. Hours-to-years decisions.
 - **Base (F4)** — colony management: construction, industry, life support, power, crew. Days decisions.
 
-The macro-structure is the five-act campaign fixed by project conventions (Act 1 Earth+LEO … Act 5 outer planets, then megaproject endgame). The economic arc is the game's signature: **Acts 1–2 are about money** (contracts, milestones, investors — a cash-starved private program clawing off Earth), **Act 3 is the hinge**, and **Acts 4–5 are about mass** — money fades into a side-tab as logistics becomes the economy, measured by the **Self-Sufficiency Index (SSI)**. The campaign ends in one or both megaprojects: the **Interstellar Precursor probe** and the **Foundation Audit** (self-sufficient off-Earth civilization).
+The macro-structure is the five-act campaign fixed by project conventions (Act 1 Earth+LEO … Act 5 outer planets, then megaproject endgame). The economic arc is the game's signature: **Acts 1–2 are about money** (contracts, milestones, investors — a cash-starved private program clawing off Earth), **Act 3 is the hinge**, and **Acts 4–5 are about mass** — money fades into a side-tab as logistics becomes the economy, measured by the **Self-Sufficiency Index (SSI)**. The campaign ends in one or both megaprojects: the **Interstellar Precursor probe** and the **Foundation Audit** (self-sufficient off-Earth civilization — industrial *and*, per DECISIONS C19, biological continuity).
 
 Failure is content, not a fail state: aborts, rescues, insurance claims, accident stand-downs, and dead crew all become entries in **the Chronicle**, the auto-generated history of the program that is itself the endgame artifact.
 
@@ -27,7 +27,7 @@ Failure is content, not a fail state: aborts, rescues, insurance claims, acciden
 - **Combat**, weapons, piracy, military contracts.
 - **Aliens / extant extraterrestrial life** as actors. Biosignature science (e.g., Enceladus organics) is flavor text and SurveyData only; no discovery-of-life storyline.
 - **Terraforming** (planetary-scale engineering beyond single bases/aerostats).
-- AI competitor space programs with simulated market share (the market is a static-curve abstraction, §3.8).
+- AI competitor space programs with simulated market share (the market is a static-curve abstraction, §3.8). The purely **cosmetic rival program** — news ticker only, zero market effects — is IN per DECISIONS F33; see E-30.
 - Earth-side politics simulation (elections, wars). The Earth economy is a stable backdrop with scripted price curves and rare supply-shock events.
 - Modding API, localization beyond English, VR, controller-first UI (keyboard+mouse primary; pad mappings best-effort).
 - Procedural narrative characters beyond the Flight Director advisor and crew trait system (08).
@@ -69,7 +69,7 @@ Rules are numbered **G-x** (modes/time), **E-x** (economy), **D-x** (difficulty)
 ### 3.1 Modes and switching (G-1…G-6)
 
 - **G-1 (lenses, not rooms).** The four modes are camera+UI configurations over one live world. Switching is instant (≤ 1 frame; perf contract with 13). Sim time runs in all modes and is pausable in all modes.
-- **G-2 (switch inputs).** `F1` Pilot, `F2` Engineer, `F3` Planner (alias `M`), `F4` Base, `` ` `` Program HQ overlay, `Esc` pause menu. Double-clicking any owned object anywhere jumps to its native mode (ship → Pilot, blueprint/dock job → Engineer, route/transfer → Planner, base → Base). `Tab`/`Shift+Tab` cycles owned controllable craft within Pilot.
+- **G-2 (switch inputs).** `F1` Pilot, `F2` Engineer, `F3` Planner (alias `M`; F3 = Planner confirmed by DECISIONS A7 — the developer perf HUD relocates to `Ctrl+F3`, 13/90-14), `F4` Base, `` ` `` Program HQ overlay, `Esc` pause menu. Double-clicking any owned object anywhere jumps to its native mode (ship → Pilot, blueprint/dock job → Engineer, route/transfer → Planner, base → Base). `Tab`/`Shift+Tab` cycles owned controllable craft within Pilot.
 - **G-3 (context preservation).** Each mode keeps its own camera, selection, and scroll state; returning restores it exactly.
 - **G-4 (control focus).** Exactly one craft is "under the player's hand" (receives key input) at a time — the *helm*. All other craft fly their queued programs (01 autopilot programs, 05 routes). Taking the helm of a craft mid-program shows a confirm ("Disengage Node-Execute?").
 - **G-5 (Engineer contexts).** Engineer mode has two tabs: **Designer** (vehicle/blueprint editing; content rules from 06 §3 and 05 blueprint studio) and **Works** (maintenance queue, EVA work orders, inspections; content from 05 §5, 08 EVA planner). Design *editing* is free and instant; construction/repair consumes sim time and resources per 05/06.
@@ -81,7 +81,7 @@ Rules are numbered **G-x** (modes/time), **E-x** (economy), **D-x** (difficulty)
 |---|---|---|
 | Pilot | 0.1 s – minutes | orient (A/D, hold modes) → throttle (Shift/Ctrl/Z/X) → execute node or manual burn → monitor tapes (alt/vel/AP/PE, prop, dv) → stage (`Space`) → set next alarm → warp (`.`) |
 | Engineer | minutes | read requirement (contract payload, failure report) → place/edit parts on the 06 cell grid → watch live Δv/TWR/cost/mass readouts → run validation checks (06) → optionally pay for a Simulation run (§3.10) → commit to build queue |
-| Planner | hours–years | scan Next-Events rail and demand list → open transfer dialog (01 Hohmann/porkchop data) → drop nodes / create standing route (05) → set alarms → contract board pass (accept/decline) → warp to next event |
+| Planner | hours–years | scan Next-Events rail and demand list → open transfer dialog (window-bar default per DECISIONS C25; 01 Hohmann/porkchop data) → drop nodes / create standing route (05) → set alarms → contract board pass (accept/decline) → warp to next event |
 | Base | days | read dashboards (stocklines, Sankeys, power margin) → adjust policies (08), recipes/priorities (05), build orders (07) → resolve maintenance queue → review site alerts → warp |
 
 ### 3.2 Time, the ledger tick, and the session loop (G-7…G-11)
@@ -126,7 +126,7 @@ Rules are numbered **G-x** (modes/time), **E-x** (economy), **D-x** (difficulty)
 
 - **E-17 (rounds).** Funding rounds are milestone-gated grants with a promise attached (equity is abstracted away; see §9-Q1). Table §4.5. Raising requires Prestige ≥ gate and a chosen **promise**: one §4.2 milestone to deliver within 36 months. Deliver → round fully vests (cash was paid up front; no clawback). Fail → **Prestige −100**, no further rounds for 5 years, and overhead +10% for 2 years (board oversight).
 - **E-18 (bridge loan).** One revolving instrument: borrow up to `25% × trailing-12-month revenue`, **APR 12%** (venture-debt anchor 8–15%), term 24 months, auto-drawn at Cash < 0 (§8.4). Mechanics: interest accrues monthly as a G-9 cost rate (1% of outstanding principal per month); principal is a **bullet due at 24 months**, auto-repaid earlier whenever `Cash > 2 × principal`; failure to repay at term triggers the §8 ¶1 Liquidation flow; **one loan outstanding at a time** (revolving = re-borrowable only after full repayment).
-- **E-19 (money fade trigger).** When `SSI_program ≥ 0.8` sustained 730 d (§3.9), the HQ default tab switches from the **$ Ledger** to the **Mass Ledger** (t/day by category, SSI bars); money collapses to a side-tab (player-reversible). Mechanically money never turns off — it just stops being the binding constraint, by design.
+- **E-19 (money fade trigger).** When `SSI_program ≥ 0.8` sustained 730 d (§3.9), the HQ default tab switches from the **$ Ledger** to the **Mass Ledger** (t/day by category, SSI bars); money collapses to a side-tab (player-reversible). Mechanically money never turns off — it just stops being the binding constraint, by design. **Post-fade board (DECISIONS F33):** when the same trigger fires, the investor board converts to **advisory** — any outstanding E-17 promise loses its penalty clauses (it becomes an advisory goal; delivering it still pays its Prestige and a Chronicle entry), board-oversight overhead riders (E-17/F-4) end, and no further rounds are offered or needed. Board commentary persists as news/Chronicle flavor. Together with the rival ticker (E-30) and crew pensions (§4.4), this is how the money endgame is staged to read as *triumph* — the program outgrew its investors — not as a dead system.
 
 ### 3.7 Insurance & accidents (E-20…E-23)
 
@@ -135,17 +135,18 @@ Rules are numbered **G-x** (modes/time), **E-x** (economy), **D-x** (difficulty)
 - **E-22 (claims).** Payout = insured value on total loss; 50% on recoverable-but-crippled (assessor event, 7 d). **Player-commanded destruction or scuttling voids coverage** (fraud guard, §8.6): claims require a failure event originating in the reliability systems (02 §engine failures, 05 MTBF, 06 damage model).
 - **E-23 (stand-downs).** Any crewed fatality: mandatory investigation freezing crewed launches — **30 d** (uncrewed-vehicle fatality, e.g., pad worker), **90 d** (in-flight, cause found quickly), **180 d** (in-flight, founder or multiple deaths). Anchored to real stand-downs (≈4.5–32 months, §2) but game-compressed; Ironman uses 2× durations. During stand-down: crewed contracts pause deadlines (force majeure), Prestige decays −5/month. Uncrewed flights continue.
 
-### 3.8 Earth market & saturation (E-24…E-25)
+### 3.8 Earth market & saturation (E-24…E-25, E-30)
 
 - **E-24 (price model).** Earth buy prices per §4.3, constant except scripted tier declines (Electronics/Wafers fall 5%/yr as Earth's industry advances) and **supply-shock events**. Shock generator: each listed shock is an independent Poisson event with mean one occurrence per **15 sim-years**, at most one active per commodity at a time, duration drawn uniformly from its listed range — Xenon ×3 for 1–2 yr (2022 anchor); Pu238 unavailable for 1 yr; HALEU ×2 for 1 yr. Each shock is a Chronicle event and an ISRU nudge.
 - **E-25 (sell saturation).** Pricing is **marginal**: each kg sold while the trailing-12-month sold volume stands at `q` receives price multiplier `exp(−q/Q_sat)` (per-commodity Q_sat, §4.3); a block sale of quantity Q starting from trailing volume q₀ therefore averages multiplier `(Q_sat/Q) × (e^(−q₀/Q_sat) − e^(−(q₀+Q)/Q_sat))`. This kills "dump asteroid platinum, retire" exploits honestly: markets saturate. Worked example: He3 Q_sat = 100 kg/yr; selling 100 kg in a year from q₀ = 0 earns `0.4 × $15M × (1−e⁻¹) ≈ $3.8M/kg` average, not $6M/kg.
+- **E-30 (cosmetic rival program — DECISIONS F33).** One named rival program (procedurally named at campaign start; the working example remains *OrbitalX*) exists as **pure news texture**: a ticker/Chronicle-ambient feed of rival milestones ("OrbitalX lands crew at Nobile") paced off the world tier and the E-2 cost-decline curve, so the falling $/kg feels inhabited. Strictly cosmetic: no market share, no contract competition, no launch-window contention (§1's no-AI-competitors scope stands). Rival events surface as Class-4 Advisories and as optional `RIVAL_NEWS` Chronicle entries (§4.9); they never gate, devalue, or pay §4.2 milestones — Firsts are *program* firsts (E-13's COTS framing: tranches pay for **your** demonstrated capability, not world novelty).
 
 ### 3.9 The material economy, SSI, and endgame audits (E-26…E-29)
 
 - **E-26 (SSI definition).** Over a trailing 365 d window, for every off-Earth site and vessel, classify consumed mass into category c ∈ {**Propellant**, **LifeSupport**, **Structure**, **Parts**, **Electronics**, **Nuclear**} by **consuming subsystem, not by resource species** (dual-use species — Oxygen, Water, Hydrogen, Methane — would otherwise be misclassified): mass drawn by engine/RCS/pressurant systems (02/06) → **Propellant** regardless of species (LOX burned as oxidizer is Propellant, not LifeSupport); mass drawn by ECLSS/crew systems (08) → **LifeSupport**; consumed by construction (07) → **Structure**; by maintenance/spares (05) → **Parts**; by avionics/fab installation (05) → **Electronics**; by reactor/RTG fueling (09) → **Nuclear**. Only for ambiguous or unmetered sinks, fall back to the default species mapping (subsystem attribution always takes precedence): LifeSupport (Water, Oxygen, Nitrogen, FoodRations, MedSupplies), Structure (StructuralParts, IronSteel, Aluminum, Titanium, BasaltFiber, Glass, Regolith-derived), Parts (MachineParts), Electronics (Electronics, Wafers), Nuclear (Uranium, Thorium, Pu238); Propellant deliberately has **no** species list — it is always subsystem-attributed. Then
   `SSI_c = 1 − m_imported_from_Earth,c / m_consumed,c` and `SSI_program = 1 − Σ_c m_imported,c / Σ_c m_consumed,c` (mass-weighted). Displayed as the **Umbilical gauge** (Earth with a cord; per-category bars). Per-site SSI computed identically per site.
 - **E-27 (expected trajectory).** Mirrors 05 §6's import-fraction ladder: T0 ≈ 0 → T1 ≈ 0.4 → T2 ≈ 0.75 → T3 ≈ 0.95 → T4 ≈ 1.0. Electronics is the designed long pole (05 wafer fab at T3 = "Silicon Independence").
-- **E-28 (Foundation Audit — civilization win).** Passed when ALL hold simultaneously for **24 consecutive months**: (a) ≥ **50 crew** permanently resident off-Earth across ≥ 2 bodies; (b) `SSI_program ≥ 0.98` AND every category `SSI_c ≥ 0.95` (FoodRations ≥ 0.99); (c) **zero Earth cargo manifests** (crew transfers permitted); (d) kit-closure **χ ≥ 0.90 at ≥ 2 industrial sites** (05 A3/A4 metric); (e) every crewed site medically covered (medbay + Medic ≥ 2, 08) and mean morale ≥ 60; (f) settlement score `Σ_sites (occupied_berths × SSI_site) ≥ 50` (07's berths-×-closure metric; since `SSI_site ≤ 1` and an occupied berth = one resident crew, this is (a)'s 50-crew count discounted by site closure — (a) additionally enforces the ≥ 2-body spread). Passing fires the **Foundation Day** Chronicle chapter and the credits; the sandbox continues.
+- **E-28 (Foundation Audit — civilization win).** Passed when ALL hold simultaneously for **24 consecutive months**: (a) ≥ **50 crew** permanently resident off-Earth across ≥ 2 bodies; (b) `SSI_program ≥ 0.98` AND every category `SSI_c ≥ 0.95` (FoodRations ≥ 0.99); (c) **zero Earth cargo manifests** (crew transfers permitted); (d) kit-closure **χ ≥ 0.90 at ≥ 2 industrial sites** (05 A3/A4 metric); (e) every crewed site medically covered (medbay + Medic ≥ 2, 08) and mean morale ≥ 60; (f) settlement score `Σ_sites (occupied_berths × SSI_site) ≥ 50` (07's berths-×-closure metric; since `SSI_site ≤ 1` and an occupied berth = one resident crew, this is (a)'s 50-crew count discounted by site closure — (a) additionally enforces the ≥ 2-body spread); (g) **demographic pillar (DECISIONS C19)** — biological continuity per 08's demographics & reproduction systems: births and generations are modeled, and partial-gravity reproduction is researched as an *uncertainty* (centrifuge studies → mammalian trials → human protocols; gravity-threshold discoveries; spin-habitat prescriptions — systems owned by 08, research arc by 11). The audit criteria for this pillar (birth count, generational health, gravity-prescription compliance) are **08-owned** and land with 08's Pass-2 demographics expansion (implementation Phase 6+); this clause binds the Foundation Audit to include them, and the §4.2 Firsts ladder gains demographic entries in the same pass. Passing fires the **Foundation Day** Chronicle chapter and the credits; the sandbox continues.
 - **E-29 (Interstellar Precursor — probe win).** The precursor program **is** 11's **SH-09 Interstellar Precursor Program** megaproject (T4 [SPECULATIVE], 12,000 SCI, prereqs `(PR-21 | PR-22) + IN-14` per 11 §4.6): researching SH-09 unlocks the project screen, so the T4 research investment — including one T4 propulsion node (PR-21 fission-fragment or PR-22 fusion torch) and the IN-14 self-expanding industry seed — is mandatory for this win **regardless of which propulsion architecture flies**. Then build and launch an uncrewed probe that **crosses 100 AU within 10 years of departure** (sustained ≥ 10 AU/yr ≈ 47.4 km/s). Honesty ladder shown in the project screen: Voyager 1 managed 3.6 AU/yr; the best studied chemical/Oberth architecture (APL Interstellar Probe, 2021) ~7 AU/yr; ≥ 10 AU/yr therefore demands the T4 program (11 §4.13). Two flight architectures satisfy it: the 02 fusion stage [SPECULATIVE] (PR-22 hardware), or a staged solar-Oberth + multi-MW EP stack whose propulsion *hardware* is assembled from T3 parts (PR-17/PR-18 thrusters on PW-08 reactor cores) — on that route the T4 propulsion node is researched but never flown; it does **not** waive the SH-09 research gate. Optional stretch flag at 550 AU (solar-gravity-lens focal region) for the post-credits Chronicle epilogue. Probe must carry the science payload kit (Electronics 2 t + 50 kWe-class power, 09) — a fitting final demand on the T4 industrial base.
 
 ### 3.10 Difficulty & realism toggles (D-1…D-6)
@@ -200,13 +201,13 @@ Rules are numbered **G-x** (modes/time), **E-x** (economy), **D-x** (difficulty)
 - **C-1 (record schema).** Append-only log; entry = `(t_sim, type, class, subjects[], location, numbers{}, autoshot_id, seed)`. Types in §4.9. Every FIRST, death, disaster, rescue, contract landmark, audit, anomaly visit, accepted Class-1 risk, and act transition writes an entry. Target volume: 200–800 entries per campaign.
 - **C-2 (auto-shot).** Each entry captures a **vector scene snapshot** (scene graph, not pixels — re-renderable at any resolution later; cheap for the CPU renderer, 13 owns the buffer format). Entries render as cards with deterministic text from a template grammar (dry mission-report tone: *"2053-08-14 — PELICAN-3 set down at Shackleton Rim. First crewed lunar landing of the program. Crew: Vasquez, Okafor. Margin at touchdown: 4.1% propellant."*).
 - **C-3 (chapters).** Act transitions and audits generate **chapter cards** with auto-computed statistics (launches, t to orbit, fatalities, $ and t flows, firsts). The endgame export — **"The Program, 2049–20XX"** — is a scrollable HTML file + PNG poster timeline rendered from vector snapshots. This export is the intended trophy of a campaign.
-- **C-4 (epitaphs & patches).** Dead crew get permanent memorial entries (name, role, hours, missions, cause) and appear on a Memorial wall in HQ. Every named mission auto-generates a small **vector mission patch** (procedural emblem seeded by mission name/body/vehicle) used on its Chronicle cards.
+- **C-4 (epitaphs & patches).** Dead crew get permanent memorial entries (name, role, hours, missions, cause) and appear on a Memorial wall in HQ. Retired crew (08 career-dose/age retirement; pensions per §4.4, DECISIONS F33) keep their roster cards and appear in the Chronicle epilogue alongside the Memorial wall. Every named mission auto-generates a small **vector mission patch** (procedural emblem seeded by mission name/body/vehicle) used on its Chronicle cards.
 - **C-5 (photo mode).** `F10`: pauses (sim-safe in Ironman), free camera, UI hide, line-weight boost, palette filters (Blueprint, Mission-Patch, Archival-Print), annotation stamps (date, craft name, velocity vector), export PNG at up to 4× window resolution via vector re-render. Any photo can be pinned to the Chronicle as a manual entry.
 
 ### 3.15 Onboarding & tutorial gating (T-1…T-4)
 
 - **T-1 (diegetic tutorials).** Tutorials are **contracts** from the "Program Charter" chain (a patient seed investor), not modal popups. Each charter contract constrains scope, pre-supplies a blueprint where needed, and pays per the §5.8 table (charters are **deadline-free and penalty-free** — E-9/E-10 do not apply; a failed charter simply re-offers). Skippable wholesale for veterans: a single checkbox grants the four charters' summed payouts — **$50M** — as additional starting capital and unlocks the full UI.
-- **T-2 (progressive disclosure).** UI modules unlock on first relevance: Finance tab after first contract; Planner porkchop after first orbit; Base mode at first surface/station asset; Industry dashboards at first fab module; SSI gauge at first off-Earth production. Locked modules are visible but greyed with a one-line "unlocks when…" (no hidden screens — depth is visible from hour zero).
+- **T-2 (progressive disclosure).** UI modules unlock on first relevance: Finance tab after first contract; Planner transfer dialog (window-bar default, Advanced porkchop with it — C25) after first orbit; Base mode at first surface/station asset; Industry dashboards at first fab module; SSI gauge at first off-Earth production. Locked modules are visible but greyed with a one-line "unlocks when…" (no hidden screens — depth is visible from hour zero).
 - **T-3 (Flight Director).** An optional advisor persona delivering context hints (max 1 per 5 min, never repeats an acknowledged hint, hard-off toggle). All hints reference the Encyclopedia article they summarize.
 - **T-4 (Encyclopedia).** In-game manual where every mechanic page carries its real-world anchor paragraph (the design bible's §2 sections, abridged). Every UI number hover-links to its page ("readout honesty" extends to teaching: the UI is the documentation, per 08 §5).
 - The scripted first two hours: §5.8 beat sheet.
@@ -245,6 +246,7 @@ Rates decline 8%/yr per E-11; values below are 2049–2052 openings. `[A#]` = ac
 | CT-22 | Outer-planet science package hosting | A5 | $80M + $0.1M/GB | window-locked | hosted-payload market, extrapolated |
 | CT-23 | Heritage documentation (Apollo sites etc.) | A2+ | $20M/site, no-touch rules (E-16) | 1 yr | heritage-protection protocols |
 | CT-24 | Stranded-asset salvage for owner | A2+ | 30% of asset value | 2 yr | commercial salvage practice, GEO servicing |
+| CT-25 | Sun–Earth L1/L2 science station (anchor slot per DECISIONS C18) | A1–2 | $60M deploy + $0.1M/GB SurveyData while hosted | 2 yr | SOHO/ACE/DSCOVR at SE-L1, JWST at SE-L2; the cheap on-rails L1/L2 slots (01/03) make this an early Act 1–2 stretch destination |
 
 ### 4.2 Milestones — the "Firsts" ladder (payout, Prestige, target hours)
 
@@ -301,10 +303,12 @@ Money values stop mattering before Act 5 by design (E-19); late payouts exist mo
 | Oxygen (LOX) | 0.20 | — | industrial bulk LOX ≈ $0.15–0.3/kg |
 | Hydrogen (LH2) | 6 | — | KSC LH2 procurement ≈ $4–6/kg |
 | Methane (LCH4) | 1 | — | LNG ≈ $0.6/kg + launch-grade liquefaction |
-| RP-1 (propellant, 02 list) | 3 | — | RP-1 ≈ $2–3/kg historical |
+| RP1 (propellant, 02 list) | 3 | — | real-world RP-1 grade ≈ $2–3/kg historical; ID spelled `RP1` per DECISIONS A1 |
 | Nitrogen | 0.3 | — | industrial LN2 |
 | CO2 | 0.1 | — | industrial |
 | Ammonia | 0.6 | — | anhydrous NH3 ≈ $400–800/t |
+| NTO (storable oxidizer, 02 list) | 12 | — | N2O4 ≈ $5/lb (≈$11/kg) shuttle-era procurement; thin modern market [est.]; T3 ISRU route per 04 (B11) |
+| MMH (storable fuel, 02 list) | 100 | — | hydrazine-family fuels ≈ $30–150/kg procurement history, rising as demand thins [est.]; T3 ISRU route per 04 (B11) |
 | Argon | 1.5 | — | liquid argon industrial |
 | Xenon | 1,200 | 60 | ≈$1,200/kg baseline; 2022 shock ×3+ (E-24 event); world prod. ~50–70 t/yr |
 | Regolith | n/a | — | not traded |
@@ -330,7 +334,7 @@ Money values stop mattering before Act 5 by design (E-19); late payouts exist mo
 | Biomass | not traded | — | — |
 | He3 [SPECULATIVE] | sell-only 15,000,000 | 0.1 | post-2009 shortage ≈ $2,000+/L ≈ $15M/kg; T4 only |
 
-Delivered-to-orbit price = buy + E-2 lift (destination-scaled). Propellant catalog beyond this list is 02's; prices follow the closest entry here. **Q_sat "—"** = effectively unsaturable at player scales: treat as `Q_sat = ∞` (E-25 multiplier ≡ 1; §8 ¶7's transaction-size refusal does not apply). **Canonical-resource extensions registered by this doc:** `RP-1` (owned by 02), `Wafers` (05), `MedSupplies` (08), `SurveyData` (03/05; intangible, tracked in GB not kg) — extensions per the project convention ("only when genuinely needed"); all 13 docs must use exactly these spellings (verification: §9-Q11).
+Delivered-to-orbit price = buy + E-2 lift (destination-scaled). Propellant catalog beyond this list is 02's; prices follow the closest entry here. **Q_sat "—"** = effectively unsaturable at player scales: treat as `Q_sat = ∞` (E-25 multiplier ≡ 1; §8 ¶7's transaction-size refusal does not apply). **Canonical-resource extensions registered by this doc:** `RP1` (owned by 02; spelling ratified by DECISIONS A1 — no punctuation in resource IDs, matching 02's `RP1`/`NTO`/`MMH` declarations), `Wafers` (05), `MedSupplies` (08), `SurveyData` (03/05; intangible, tracked in GB not kg) — extensions per the project convention ("only when genuinely needed"); all 13 docs must use exactly these spellings (verification: §9-Q11).
 
 ### 4.4 Salaries, staffing, crew market (owns 08's pointers)
 
@@ -341,6 +345,7 @@ Delivered-to-orbit price = buy + E-2 lift (destination-scaled). Propellant catal
 | Signing bonus (08 archetype cost low/mid/high) | $2M / $5M / $12M | test-pilot & flight-surgeon markets |
 | Training, per skill-level attempt (08 mechanics) | $2M + 90 d | astronaut training pipeline scale |
 | Death benefit (F-4) | $10M | program liability [game value] |
+| Pension, retired crew (career-dose/age retirement per 08) | $0.1M/yr per retiree | DECISIONS F33: IN as flavor-cost; enters E-4's Σ salaries as a G-9 rate; retirees appear in the Chronicle epilogue (C-4) |
 | Recruitment pool refresh | 4 candidates/quarter; quality per E-15 | — |
 | Mission-control ops staff | inside E-4 overhead | small-sat ops team costs $2–5M/yr |
 
@@ -373,7 +378,7 @@ Delivered-to-orbit price = buy + E-2 lift (destination-scaled). Propellant catal
 |---|---|---|---|---|
 | S-01 | Flight HUD | Pilot | 01/02/06 data | layout, tapes, alert strip |
 | S-02 | System Map / Planner | Planner | 01/03 | frame, filters, Next-Events rail |
-| S-03 | Transfer dialog + porkchop | Planner | 01 | dialog UX |
+| S-03 | Transfer dialog (window bar default; porkchop behind Advanced, DECISIONS C25) | Planner | 01 | dialog UX |
 | S-04 | Logistics routes | Planner | 05 | frame |
 | S-05 | Contract board | Planner/HQ | this doc | all |
 | S-06 | Vehicle Designer | Engineer | 06 (rules), 02 (engines) | frame, ledger strip, sim button |
@@ -394,7 +399,7 @@ Delivered-to-orbit price = buy + E-2 lift (destination-scaled). Propellant catal
 
 ### 4.9 Chronicle event types (C-1)
 
-`FIRST_*` (one per §4.2 row) · `LAUNCH` · `LANDING` · `DOCKING` · `SOI_ARRIVAL` · `CONTRACT_WON/DONE/FAILED` · `ROUND_RAISED` · `DEATH` (epitaph card) · `RESCUE` · `DISASTER` (Class-1 with loss) · `RISK_ACCEPTED` (A-2) · `STANDDOWN` · `ANOMALY` (03 visits) · `WONDER` (fires on completion of an 07-flagged megaproject — e.g., Europa ocean bore relay, first mass driver, Venus aerostat — or of the E-29 precursor vehicle) · `HERITAGE_VIOLATION` · `BANKRUPTCY_NEAR` · `AUDIT_PASS/FAIL` · `ACT_CHAPTER` · `SETTINGS_CHANGED` (D-3) · `PHOTO` (pinned) · `EPILOGUE`.
+`FIRST_*` (one per §4.2 row) · `LAUNCH` · `LANDING` · `DOCKING` · `SOI_ARRIVAL` · `CONTRACT_WON/DONE/FAILED` · `ROUND_RAISED` · `DEATH` (epitaph card) · `RESCUE` · `DISASTER` (Class-1 with loss) · `RISK_ACCEPTED` (A-2) · `STANDDOWN` · `ANOMALY` (03 visits) · `WONDER` (fires on completion of an 07-flagged megaproject — e.g., Europa ocean bore relay, first mass driver, Venus aerostat — or of the E-29 precursor vehicle) · `HERITAGE_VIOLATION` · `BANKRUPTCY_NEAR` · `AUDIT_PASS/FAIL` · `ACT_CHAPTER` · `SETTINGS_CHANGED` (D-3) · `PHOTO` (pinned) · `RIVAL_NEWS` (E-30 ambient, cosmetic, optional) · `EPILOGUE`.
 
 ---
 
@@ -439,7 +444,7 @@ Every mode shares: (top) **status bar** — date/warp widget, cash or mass-ledge
 |   impact/landing point)        | LS 41 d | PWR +2.1 kW | DOSE 0.3 mSv/d  |
 |                                | ABORT PLAN: ballistic return (covered)  |
 +--------------------------------+-----------------------------------------+
-| [C] LH2 boiloff 0.4%/d   [A] Harvest complete, Site CER-1    [MASTER ALM]|
+| [C] LH2 boiloff 0.15%/d  [A] Harvest complete, Site CER-1    [MASTER ALM]|
 +--------------------------------------------------------------------------+
 ```
 
@@ -454,7 +459,7 @@ Tapes/dials switch automatically by regime (ascent / orbit / approach / landed);
 |                                            | TRANSFER  LEO -> Moon       |
 |        SYSTEM MAP                          | window 2053-09-02 (18d)     |
 |  (sun- or body-centered; SOI circles,      | dv 3,930 m/s  t 4.3 d       |
-|   conics, route arcs with window           | [porkchop heatmap]          |
+|   conics, route arcs with window           | [window bar ▁▃█▅▂] [ADV]    |
 |   countdowns, closest-approach flags,      | [create nodes][set alarm]   |
 |   contract destination badges)             +-----------------------------+
 |                                            | NEXT EVENTS                 |
@@ -464,6 +469,8 @@ Tapes/dials switch automatically by regime (ascent / orbit / approach / landed);
 |                                            |  10-01 ledger: lease due    |
 +--------------------------------------------+-----------------------------+
 ```
+
+**Transfer dialog (DECISIONS C25 — resolved).** The default presentation is a **1D window bar**: Δv (color) and trip time vs departure date along the active transfer family, with the next windows flagged and countdown-labelled — it answers the 90% question (*when do I leave, what does it cost*) at a glance. The full **2-axis porkchop heatmap** (departure × arrival date, 01's data) sits behind an **Advanced** toggle in the same dialog (sticky per save) for mission designers hunting off-nominal arrivals or split windows. The T-2/§5.8 "transfer dialog" unlock covers the whole dialog; the Advanced toggle ships unlocked with it.
 
 Contract board is a Planner tab: cards with payout, deadline, feasibility hint (planner cross-checks Δv/window against your fleet and flags "no current capability" honestly). Logistics tab = 05's node-graph overlay with gear-ratio and propellant bills.
 
@@ -528,7 +535,7 @@ Palette (vector style, near-black field): background `#0A0E14`, grid `#18202B`, 
 | 0:00–0:08 | Cold open: sounding rocket fueled on pad; 3 actions to fly (throttle, launch, stage) | Pilot HUD, staging, warp `,`/`.` | — | — |
 | 0:08–0:20 | Charter 1: recover the capsule (parachute, landing marker) | aborts, recovery value (E-3) | Finance tab | **$5M** |
 | 0:20–0:40 | Charter 2: assemble provided orbital launcher in Designer; pay-and-learn Simulation of ascent | Engineer mode, Δv/TWR readouts, sim (D-5) | Designer full palette | **$10M** |
-| 0:40–1:00 | Charter 3: **first orbit** (guided ascent, node to circularize, deorbit, reenter) | Planner basics, nodes, event-guard warp | Planner porkchop | **$20M** |
+| 0:40–1:00 | Charter 3: **first orbit** (guided ascent, node to circularize, deorbit, reenter) | Planner basics, nodes, event-guard warp | Planner transfer dialog (C25) | **$20M** |
 | 1:00–1:20 | CT-02 smallsat contract (first real money), fairings | contracts, payload integration, insurance quote | Contract board full | per CT-02 (standard E-9…E-11 terms) |
 | 1:20–1:45 | Charter 4: rendezvous + **first docking** with autodock unlock at the end (01 T1) | phasing, target markers, RCS IJKL+HN | station assembly | **$15M** |
 | 1:45–2:00 | Vista beat: station core docked; Flight Director points at the Moon; Series A pitch screen (promise selection) | investors, Prestige, the campaign map | Act 2 contract teasers | — |
@@ -542,6 +549,7 @@ Philosophy: (1) **mouse-complete** — every action is reachable by pointer; key
 | Key | Action | Note |
 |---|---|---|
 | `F1–F4` | modes | G-2 |
+| `Ctrl+F3` | developer perf HUD (13/90-14) | DECISIONS A7: F3 stays Planner; perf HUD relocated here |
 | `M` | Planner (alias) | KSP muscle memory |
 | `` ` `` | HQ overlay | |
 | `,` / `.` | warp down/up; `Alt+,/.` physics warp | 01 canon |
@@ -594,7 +602,7 @@ Research costs and the tech tree are 11's; this doc supplies 11 with the **per-a
 - `05-industry-logistics.md` — route costs/gear ratios as the physical basis of the mass economy; kit-closure χ for E-28; maintenance/spares projections feeding Class-3 alerts; production costs anchoring §4.3 sanity.
 - `06-ships-stations.md` — part catalog prices ($M) and the $1,500/kg 2049 lift canon (this doc owns its evolution, E-2); designer rules behind S-06; damage model for claims.
 - `07-bases-habitats.md` — base builder content (S-08); settlement berths × closure for E-28(f); base alert definitions registered into A-1 classes.
-- `08-life-support-crew.md` — days-of-LS headline stat; death/morale events (F-4 adopts 08 §3.13 verbatim); crew archetypes for the recruitment market (§4.4); LS panel content (S-10).
+- `08-life-support-crew.md` — days-of-LS headline stat; death/morale events (F-4 adopts 08 §3.13 verbatim); crew archetypes for the recruitment market (§4.4); LS panel content (S-10); demographic-pillar criteria for E-28(g) (births/generations systems per DECISIONS C19 — 08's Pass-2 expansion).
 - `09-power-thermal.md` — power-margin headline for Base mode; reactor casualty events (Class 1/2); Pu238/HALEU demand context for §4.3.
 - `10-vehicles.md` — vehicle panels under the Base/VEH tab; teleoperation UX constraints (light-lag toggle D-2).
 - `11-research-tech.md` — tier unlock events (drive E-2 price steps, contract pools, T-2 disclosures); research spend rates drawn from the $ ledger.
@@ -631,14 +639,14 @@ Research costs and the tech tree are 11's; this doc supplies 11 with the **per-a
 
 ## 9. Open Questions
 
-1. **Investor equity teeth.** Rounds are grants-with-promises (E-17). Should later rounds carry board mechanics (forced milestone choices, veto on Ironman-risk launches)? Leaning no for v1 — antagonist is physics, not shareholders — but the Series-D promise feels light for $4B.
-2. **Money endgame.** After E-19, should the $ ledger eventually freeze entirely (Earth economy becomes scenery), or persist for Earth-side flavor purchases forever? Current design: persists, irrelevant. Needs playtest confirmation that irrelevance reads as *triumph*, not as a broken system.
+1. **Investor equity teeth.** Rounds are grants-with-promises (E-17). Should later rounds carry board mechanics (forced milestone choices, veto on Ironman-risk launches)? Leaning no for v1 — antagonist is physics, not shareholders — but the Series-D promise feels light for $4B. *Update (DECISIONS F33):* partially resolved — post-self-sufficiency the board becomes **advisory** (E-19); whether pre-fade rounds gain teeth remains open for v1 (still leaning no).
+2. **[RESOLVED — DECISIONS F33] Money endgame.** After E-19, should the $ ledger eventually freeze entirely (Earth economy becomes scenery), or persist for Earth-side flavor purchases forever? Current design: persists, irrelevant. Needs playtest confirmation that irrelevance reads as *triumph*, not as a broken system. *Ruling:* the $ ledger persists and fades, and the triumph reading is now **staged**, not hoped-for — advisory-board conversion (E-19), cosmetic rival ticker (E-30), and crew pensions (§4.4). Playtest now confirms tone only, not the design.
 3. **Reserve-collateral finance (04's pointer).** 04 suggests borrowing against proven ISRU reserves. Adds simulationist depth in Acts 3–4 exactly when money is fading — include as a Series-C alternative, or cut? Leaning cut for v1.
-4. **Contract authorship ratio.** Current plan: ~24 procedural templates + ~10 hand-authored uniques (CT-09/17/21 class). Is that enough texture for 80 h of Acts 1–3? May need a second pass of authored "campaign" contracts with light narrative.
+4. **Contract authorship ratio.** Current plan: ~25 procedural templates (CT-25 added per DECISIONS C18) + ~10 hand-authored uniques (CT-09/17/21 class). Is that enough texture for 80 h of Acts 1–3? May need a second pass of authored "campaign" contracts with light narrative.
 5. **Hour-target confidence.** §4.2 hour targets are designer estimates with zero playtest data; the G-12 calibration rule needs a telemetry plan (opt-in) in 13.
-6. **Second program presence.** A purely cosmetic rival (news ticker: "OrbitalX lands crew at Nobile") would make the cost-decline curve (E-2) feel inhabited without simulating competition. Cheap win or scope creep?
+6. **[RESOLVED — DECISIONS F33] Second program presence.** A purely cosmetic rival (news ticker: "OrbitalX lands crew at Nobile") would make the cost-decline curve (E-2) feel inhabited without simulating competition. Cheap win or scope creep? *Ruling:* cheap win — IN, strictly cosmetic; implemented as E-30.
 7. **Chronicle text generation depth.** Template grammar (C-2) vs. richer procedural prose. How many templates per event type before repetition shows in a 600-entry campaign? Budget: ~8 variants × 25 types.
-8. **Crew retirement & pensions.** 08 models career dose retirement; do retired crew cost pensions ($0.1M/yr?) and appear in the Chronicle epilogue? Flavorful, trivial cost — leaning yes.
+8. **[RESOLVED — DECISIONS F33] Crew retirement & pensions.** 08 models career dose retirement; do retired crew cost pensions ($0.1M/yr?) and appear in the Chronicle epilogue? Flavorful, trivial cost — leaning yes. *Ruling:* yes — $0.1M/yr pension row added to §4.4; retirees appear in the Chronicle epilogue (C-4).
 9. **Pause-anywhere vs. Ironman purism.** Should Ironman forbid pausing during Class-1 emergencies (forcing real-time response)? Current answer: no — 2D schematic clarity, not reflexes, is the game's skill. Revisit after playtests.
 10. **Mission-patch generator scope.** Procedural vector emblems (C-4) are pure charm; if art budget tightens, first thing cut. Decide at vertical-slice review.
-11. **Resource-name extensions (registration).** §4.3 registers `RP-1` (02), `Wafers` (05), `MedSupplies` (08), and `SurveyData` (03 — defined in 03 §4.5–4.6 with the co-signed 2 SCI/GB anomaly conversion; 05 only transports it) as canonical-resource-list extensions. The integration pass must verify the owning docs define and spell them identically (or fold `MedSupplies` into an existing 08 consumable) before these names become load-bearing in code — they already bind E-12, E-26's SSI fallback mapping, and the §4.3 price table.
+11. **Resource-name extensions (registration).** §4.3 registers `RP1` (02), `Wafers` (05), `MedSupplies` (08), and `SurveyData` (03 — defined in 03 §4.5–4.6 with the co-signed 2 SCI/GB anomaly conversion; 05 only transports it) as canonical-resource-list extensions. *Update (DECISIONS A1):* spelling ratified as `RP1` (no punctuation in resource IDs) and the missing `NTO`/`MMH` price rows added to §4.3; the cross-doc define-and-spell verification below remains for the A1/A2 cleanup pass. The integration pass must verify the owning docs define and spell them identically (or fold `MedSupplies` into an existing 08 consumable) before these names become load-bearing in code — they already bind E-12, E-26's SSI fallback mapping, and the §4.3 price table.

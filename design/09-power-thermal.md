@@ -57,7 +57,7 @@ Named anchors used throughout (hostile fact-checkers start here):
 - ISS External Active Thermal Control System: two pumped ammonia loops, six deployable radiator ORUs (~23 m × 3.4 m, ≈1.1 t each), rejecting up to ~70 kW total near 275 K → ~13 kg/m². Two kg/kW numbers, both stated so the catalog basis is traceable: **~95 kg/kW at flight operating conditions** (Earth-view sink, as flown) and **~24 kg/kW under the 0 K-sink rating convention** used by H-9 and the §4.5 catalog.
 - Ammonia coolant freezes at 195.4 K (why ISS uses it externally); water freezes at 273 K (internal loops only); NaK and sodium heat pipes serve 500–900+ K (SP-100, Kilopower heritage).
 - Liquid droplet radiators: 1980s NASA Lewis/AFRL ground and reduced-gravity demonstrations, projected <2 kg/m² — T3.
-- Lunar thermal environment: equatorial noon regolith ~390 K, night ~95 K; permanently shadowed craters ~40 K (Diviner). Mercury: noon ~700 K, night ~100 K, solar day 176 Earth days. Titan: 93.7 K, 146.7 kPa N2 — convection works. Venus: 737 K / 9,200 kPa at the surface (Venera probes survived ~2 h); ~300 K / ~50–100 kPa at the 52–56 km aerostat band (NASA HAVOC).
+- Lunar thermal environment: equatorial noon regolith ~390 K, night ~95 K; permanently shadowed craters ~40 K (Diviner). Mercury: noon ~700 K, night ~100 K, solar day 176 Earth days. Titan: 93.7 K, 146.7 kPa N2 — convection works. Venus: 737 K / 9,200 kPa at the surface (Venera probes survived ~2 h); 293–330 K / 45–81 kPa at the 52–56 km aerostat band (NASA HAVOC; canonical lookup in `03-solar-system.md` §4.4.2).
 - Li-ion: modern NCA/NMC cells 250–300 Wh/kg cell-level; integrated EV/automotive packs (with BMS/thermal) ~130–180 Wh/kg — the anchor for our 150 Wh/kg T0 pack. (The ISS Li-ion ORUs are far heavier: 30 GS Yuasa LSE134 cells, ~14.9 kWh in a ~197 kg unit ≈ 75–80 Wh/kg — structural/EVA-handling overhead, not cell chemistry.) Li-ion cannot be charged below 0 °C (lithium plating) — battery heaters are real and modeled.
 - H2/O2 regenerative fuel cells: Shuttle PC17C alkaline stack 12 kWe peak / 7 kWe continuous at 118 kg; PEM electrolysis ~50 kWh/kg H2 (per `04-resources-isru.md` canon); round-trip ~36–45% — NASA Glenn RFC studies for lunar night.
 - Flywheels: NASA G2 / Beacon Power class, ~25–50 Wh/kg system, >10⁵ cycles, high self-discharge — LEO cycling niche.
@@ -141,13 +141,13 @@ Edges carry **net flow only**: circular flow around a ring is forbidden — the 
 
 | Body / region | d (AU) | S multiplier | S (W/m²) | Notes |
 |---|---|---|---|---|
-| Mercury | 0.387 (0.307–0.467) | 6.68× | 9,087 (6,241–14,440) | flux is not the problem; heat is (§3.8) |
+| Mercury | 0.387 (0.307–0.467) | ≈6.7× | 9,119 (6,270–14,450) | flux is not the problem; heat is (§3.8); range per 03 §3.3 S-4a |
 | Venus (aerostat band) | 0.723 | 1.91× | 2,604 top-of-atmosphere | §3.8 cloud rules |
 | Earth / Moon / LEO | 1.000 | 1.00× | 1,361 | baseline |
 | Mars | 1.524 (1.381–1.666) | 0.431× | 586 (490–715) | + atmosphere & dust factors |
 | Vesta | 2.36 | 0.179× | 244 | |
 | Ceres | 2.77 | 0.131× | 178 | solar still viable with big arrays |
-| Jupiter / Europa | 5.204 | 0.0369× | 50.3 | Juno proved solar *possible*; rarely *wise* (§3.8) |
+| Jupiter / Europa | 5.204 | 0.0369× | 50 | Juno proved solar *possible*; rarely *wise* (§3.8); 03 §4.4.9 canon |
 | Saturn / Titan | 9.583 | 0.0109× | 14.8 | top-of-atmosphere; Titan surface §3.8 |
 | Uranus | 19.19 | 0.0027× | 3.7 | nuclear only |
 | Neptune | 30.07 | 0.0011× | 1.5 | nuclear only |
@@ -166,7 +166,7 @@ P_e = S(d) · A · η_cell · f_temp · f_dust · f_degr · f_atm · cosθ · L
 ```
 T_p = [ S_abs · (α − η_cell) / (2 ε_p σ) ]^0.25      S_abs = S·cosθ
 ```
-with absorptance α = 0.90, panel emissivity ε_p = 0.85. At 1 AU: T_p ≈ 303 K. At Mars: ≈ 246 K. At Mercury normal-incidence: ≈ 488 K — **above the 425 K damage limit of standard panels** (panel takes 1% condition damage per hour per 10 K over limit). Mercury-rated OSR panels (T1, MESSENGER anchor) devote 2/3 of panel area to OSR mirrors — only 1/3 active cells, so ~1/3 of a standard wing's output per m² of panel — but tolerate 575 K and run sun-normal at Mercury (SOL-OSR catalog row). Standard panels survive by tilting; the rule is the **condition, not a fixed angle**: auto-tilt to hold `S_abs = S(d)·cosθ ≤ 5,240 W/m²` (→ T_p ≤ 425 K), which is θ ≈ 55° at Mercury mean distance and θ ≈ 69° at perihelion (S = 14,440 W/m²) — solved continuously from P-5.
+with absorptance α = 0.90, panel emissivity ε_p = 0.85. At 1 AU: T_p ≈ 303 K. At Mars: ≈ 246 K. At Mercury normal-incidence: ≈ 488 K — **above the 425 K damage limit of standard panels** (panel takes 1% condition damage per hour per 10 K over limit). Mercury-rated OSR panels (T1, MESSENGER anchor) devote 2/3 of panel area to OSR mirrors — only 1/3 active cells, so ~1/3 of a standard wing's output per m² of panel — but tolerate 575 K and run sun-normal at Mercury (SOL-OSR catalog row). Standard panels survive by tilting; the rule is the **condition, not a fixed angle**: auto-tilt to hold `S_abs = S(d)·cosθ ≤ 5,240 W/m²` (→ T_p ≤ 425 K), which is θ ≈ 55° at Mercury mean distance and θ ≈ 69° at perihelion (S = 14,450 W/m²) — solved continuously from P-5.
 
 **Temperature derate (P-6):** `f_temp = 1 − 0.0022·(T_p − 298 K)` (triple-junction coefficient ≈ −0.06%/°C absolute ≈ −0.22%/°C relative). Cold panels over-perform: at Mars f_temp ≈ 1.11; at Jupiter ≈ 1.3 but a LILT penalty ×0.85 applies beyond 4 AU (low-intensity low-temperature flat-band losses, Juno-informed).
 
@@ -320,7 +320,7 @@ Q_conv = h · A · (T_surf − T_atm)        [W]
 |---|---|---|---|
 | Mars (0.61 kPa CO2) | 0.5 | 1.5 | ~210 K |
 | Titan (146.7 kPa N2, 5.3 kg/m³) | 5 | 15 | 93.7 K |
-| Venus aerostat 52–56 km | 8 | 25 | 290–340 K |
+| Venus aerostat 52–56 km | 8 | 25 | 293–330 K |
 | Venus surface (9.2 MPa CO2) | 30 | 60 | 737 K — heats *you* |
 | Earth (reference) | 10 | 30 | 288 K |
 
@@ -366,7 +366,7 @@ Process-heat consumers in 04 (ovens at 900–1300 K, Sabatier exotherm at 600 K,
 
 ### 3.8 Per-environment quirk rules
 
-**Mercury.** S = 6.2–14.4 kW/m²; energy is free, survival is thermal. Standard panels auto-tilt per P-5's `S_abs ≤ 5,240 W/m²` condition (≈55° at mean distance, ≈69° at perihelion); OSR panels (T1) run flat. Dayside radiators see T_sink 590 K → industry runs on heat-pump lifts or at night (88 Earth days each). The intended colony pattern: **polar/PSR-rim sites** — perpetual low-angle sun on vertical panels, 40 K crater sinks next door (radiator paradise), water ice in the PSRs (04). Equatorial bases are a self-imposed hard mode.
+**Mercury.** S = 6.27–14.45 kW/m²; energy is free, survival is thermal. Standard panels auto-tilt per P-5's `S_abs ≤ 5,240 W/m²` condition (≈55° at mean distance, ≈69° at perihelion); OSR panels (T1) run flat. Dayside radiators see T_sink 590 K → industry runs on heat-pump lifts or at night (88 Earth days each). The intended colony pattern: **polar/PSR-rim sites** — perpetual low-angle sun on vertical panels, ~50 K crater sinks next door (radiator paradise; Mercury PSR floor per 03 §4.1), water ice in the PSRs (04). Equatorial bases are a self-imposed hard mode.
 
 **Venus aerostat (48–62 km cloud bands; V-HAVOC design band 50–52 km).** T_atm ≈ 263–366 K, ~17–135 kPa across the bands — Earthlike thermal engineering, convection available. Solar: per-band attenuation from `03-solar-system.md` §4.4.2's canonical f_atm column — **V-Cloud-Low (48–50 km) 0.30, V-HAVOC (50–52 km) 0.45, V-Temperate (52–56 km) 0.55, V-Cloud-Top (56–62 km) 0.70** — entering P-4 as `f_atm` against S = 2,604 W/m² top-of-atmosphere; **two-sided arrays add the canonical +0.15 below-cloud albedo bonus** (S-6a; the cloud deck below bounces flux onto down-facing cells — Venus Bond albedo 0.75 — so a two-sided array flies at `f_atm + 0.15`, e.g. 0.60 effective in V-HAVOC). Super-rotation (S-5b canon: w = 66 m/s, Vega balloon anchor) circumnavigates in ≈6 Earth days → day/night ≈ **3 days light / 3 days dark (≈72 h / 72 h)** regardless of the 116.8-day solar day; batteries/RFC size to ≈72 h of night, not ~1,400 h. Acid film: f_dust analog 0.1%/h on exposed panels, washed by station-keeping pitch maneuver (free, 1/day).
 
@@ -374,7 +374,7 @@ Process-heat consumers in 04 (ovens at 900–1300 K, Sabatier exotherm at 600 K,
 
 **Moon.** The 354 h night (§3.4 worked problem); lunar-noon sink trap (H-2); PSR mining powered by rim solar + GRD-HELIO or buried Kilopower; thermal wadis keep night rovers alive (§4.4).
 
-**Europa (Jupiter system).** S = 50.3 W/m²: solar *works* (Juno proof) at 27× the array area per kWe vs 1 AU — viable for probes, not bases. **Radiation tax:** unhardened Electronics-bearing parts take MTBF ×0.05 on Europa's surface; rad-hard build flag costs ×3 Electronics + 15% mass (cross-ref 05 recipes, 11 unlock). Solar degrades per P-7 Jupiter rates. Crewed ops need ≥3 m ice/Regolith burial (dose model in 08). Eclipse: Europa passes through Jupiter's shadow ~2.8 h per 85.2 h orbit (f_ecl ≈ 3.3%). Practical doctrine: Kilopower under ice berms.
+**Europa (Jupiter system).** S = 50 W/m² (03 §4.4.9): solar *works* (Juno proof) at 27× the array area per kWe vs 1 AU — viable for probes, not bases. **Radiation tax:** unhardened Electronics-bearing parts take MTBF ×0.05 on Europa's surface; rad-hard build flag costs ×3 Electronics + 15% mass (cross-ref 05 recipes, 11 unlock). Solar degrades per P-7 Jupiter rates. Crewed ops need ≥3 m ice/Regolith burial (dose model in 08). Eclipse: Europa passes through Jupiter's shadow ~2.9 h per 85.2 h orbit (f_ecl = 0.034, 03 canon). Practical doctrine: Kilopower under ice berms.
 
 **Titan.** TOA flux 14.8 W/m² (1.09% of Earth); the haze passes only ~10% to the surface → ≤1.5 W/m² diffuse, ~0.1% of Earth-surface noon sun (Huygens-confirmed gloom). Solar is dead; nuclear is mandatory. The flip side: 5.3 kg/m³ of 94 K nitrogen makes every fin a superb radiator (H-3) — *and every habitat wall a 1 kW/m² leak if uninsulated* (h=5 × ΔT≈200 K). Insulation rule: habitats/vehicles declare aerogel thickness; U = 0.2 W/m²·K per 10 cm; waste heat becomes the heating budget (an 8-crew hab's 26 kWt of internal waste heat comfortably heats 300 m² of 10 cm-aerogel shell losing 12 kWt). RTG/reactor waste heat is Titan's most valuable byproduct. Wind turbines are NOT modeled v1 (near-surface winds ~0.3 m/s, too weak — honest omission; see §9).
 
@@ -556,5 +556,5 @@ Milestone beats: first night survived (Act 1 tutorial, LEO eclipse); first lunar
 6. **Pu238 economy depth:** is the Oak Ridge-style purchase trickle (12) + T3 breeding line (04/05) enough of an arc, or does Pu238 scarcity need a dedicated contract storyline? Coordinate with 12.
 7. **Mercury polar sites** may trivialize the "overheating planet" identity (perpetual terminator sun + 40 K sinks). Possible friction: PSR-rim real estate as a scarce site resource (03 owns site definitions).
 8. **Laser-link griefing/exploits:** can players beam power to dodge the cable-mass cost everywhere? Current 25% efficiency + range cap seems sufficient tax; verify in economy balance (12).
-9. **Node-count budget** (≤40/base) vs megabase ambitions in Act 5 — may need hierarchical thermal aggregation (sub-networks solved at coarser dt). Decide with 13 after profiling.
-10. **Fusion specific mass:** we chose 6 kg/kWe against PFRC's claimed ~1 kg/kWe. If endgame pacing feels slow, this is the knob — document any change as [SPECULATIVE] tuning, not physics.
+9. **RESOLVED (DECISIONS D27 — DEFAULTED).** The ≤40 nodes/base budget stands; hierarchical thermal aggregation is deferred until a real Act 5 megabase exceeds the budget — overturn only with profiling data, with 13, at the Phase 5 gate.
+10. **RESOLVED (DECISIONS E).** Stays 6 kg/kWe as written ([PLAYTEST] balance placeholder); He3/fusion pacing is revisited at the Phase 6 gate together with this knob — any change documented as [SPECULATIVE] tuning, not physics.

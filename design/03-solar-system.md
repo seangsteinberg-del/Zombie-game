@@ -10,7 +10,7 @@ This document is the canonical environment database of the game: every celestial
 - The **2D orbital parameter set** (semi-major axis, eccentricity, period) used by the on-rails Kepler propagator in `01-orbital-mechanics.md`.
 - The **environment field models**: solar flux vs distance, atmosphere density profiles, diurnal temperature cycles, radiation dose-rate fields (GCR, solar particle events, planetary belts), Mars dust seasons, comet activity.
 - The **surface representation**: how each landable body decomposes into 2D top-down regions (sectors), what differentiates regions, and how many each body gets.
-- The **discovery layer**: anomaly sites — real derelict probes, lava tubes, polar cold traps, geological wonders. No aliens, no artifacts; the wonder budget is spent on real places and real human hardware.
+- The **discovery layer**: anomaly sites — real derelict probes, lava tubes, polar cold traps, geological wonders. No aliens, no artifacts; the wonder budget is spent on real places and real human hardware. Which 2026–2049 missions exist in-world (Artemis surface assets, the stranded MSR cache at Jezero, Dragonfly silent at Selk…) is fixed by the canonical future-history timeline in **Appendix A** (DECISIONS F32).
 
 Design intent: the solar system is the antagonist. Each body is a boss fight against a different combination of gravity, distance, temperature, pressure, radiation, and dust — and each body's *reward* is a different resource column in `04-resources-isru.md`. Mercury is a thermal puzzle with near-free energy (6.7× Earth solar flux orbit-averaged, 10.6× at perihelion) and an iron-poor crust — the forge that imports its ore. Venus is a floating city in acid. The Moon is logistics school. Mars is the first true colony. Jupiter is a radiation maze with one safe corner (Callisto). Titan is a cryogenic paradise where everything burns except the air.
 
@@ -71,7 +71,7 @@ The isothermal-H exponential is a deliberate compression of real multilayer atmo
 1. **Venus is two-layer**: H = 15.9 km below the 30-km break, H = 5.5 km above it (anchored to a 60-km datum). The surface-fit 15.9 km alone would be ~4× too dense in the 50–52 km aerostat band and ~5 orders of magnitude too dense at 100 km — fatal for the aerocapture sims `01` builds on ρ(h). Venus additionally stores the §4.4.2 lookup table, extended at data-entry to cover the full entry corridor (45 km → entry interface), which overrides the exponential wherever defined.
 2. **Hot extended thermospheres**: above the single-H cutoff `H·ln(P0/P_cut)` (P_cut = 10^-7 kPa) but below the stored per-body **h_atm override** (§4.1b), ρ(h) follows a second exospheric scale height H_upper. This is what makes the real drag environments exist: Earth h_atm = 600 km (so 400-km LEO stations DO decay and must station-keep), Titan h_atm = 1,400 km (Cassini-measured extended thermosphere whose scale height grows to 50+ km aloft). The bare exponential alone would give Earth ≈ 176 km and Titan ≈ 422 km — no LEO decay, no Titan parking-orbit drag, contradicting the realism doctrine.
 
-Drag and aerocapture consume ρ(h) (owned by `01`); intake mining consumes ρ and composition (owned by `04`, M-3e — datum values there MUST match §4.1).
+Drag and aerocapture consume ρ(h) (owned by `01`); intake mining consumes ρ and composition (owned by `04`, M-3e — datum values there MUST match §4.1). **Mars only**: ρ(h) is further modulated by the S-9a climate multiplier f_climate (±50% with season/dust — DECISIONS C24).
 
 **S-5b (winds).** Single **canonical** scalar per body/band (tabulated in §4.1b; the gust model needs one deterministic w): mean horizontal wind `w` [m/s] for drift of balloons/parachutes, plus gust model `w_gust = w·(1 + 0.5·sin(2πt/τ_g))`, τ_g = 600 s. Canonical values: Venus aerostat band w = 66 (super-rotation; Vega balloons measured ~66 m/s — full circumnavigation ≈ 6 Earth days, which moves an aerostat between day and night sides on that cycle); Mars surface w = 7 clear / 25 in storm-flagged sectors (real range 2–10 / 30+, kept as flavor — at ρ ≈ 0.016 kg/m³ the dynamic pressure is tiny; dust storms threaten power, not structures); Titan surface w = 0.5; Earth w = 8; Triton w = 5.
 
@@ -145,18 +145,22 @@ This file owns the **environmental field**; biological/shielding response is own
 
 **S-8c (planetary belts).** Earth: Van Allen dose field, expressed as **effective dose behind a nominal 5 g/cm² hull [SIMPLIFIED from AP8/AE8]** — truly unshielded skin dose at the inner-belt peak is Gy/day-class, one to two orders higher; `08` applies habitat shielding on top of this hull baseline. Piecewise in geocentric radius r [R_E]: 0 below 1.1; linear rise to **150 mSv/day peak at 1.6 R_E** (inner proton belt); fall to 10 at 2.5; second hump **50 mSv/day at 4.5 R_E** (outer electron belt); → 0 at 8 R_E. A chemical transit spends hours in the belts (~1–5 mSv/pass); an electric-propulsion spiral spends weeks (Sv-class — the real reason SEP cargo tugs fly uncrewed; gameplay teeth for `02`/`08`).
 
-Jupiter: anchored exponential in jovicentric radius r [R_J = 71,492 km]:
+Jupiter: **piecewise-exact log-linear interpolation through the four mission-literature anchors**, in jovicentric radius r [R_J = 71,492 km] (DECISIONS A4: piecewise-exact anchors, not a smooth fudge — honesty doctrine outranks elegance; the anchors are the data, the segments are only interpolation):
 
 ```
-D_jup(r) = 5,400 · exp(−(r − 9.4)/1.6)  mSv/day   for 6 ≤ r ≤ 30, clamped to ≤ 36,000 at r ≤ 6; D_jup := 0 for r > 30
+D_jup(r) [mSv/day] =  36,000                            for r ≤ 5.9          (Io clamp)
+                      36,000 · exp(−(r − 5.9)/1.845)    for 5.9 < r ≤ 9.4    (Io → Europa segment)
+                       5,400 · exp(−(r − 9.4)/1.591)    for 9.4 < r ≤ 15.0   (Europa → Ganymede segment)
+                         160 · exp(−(r − 15.0)/1.605)   for 15.0 < r ≤ 30    (Ganymede → Callisto segment, run out to the cutoff)
+                           0                            for r > 30           (D_jup(30⁻) ≈ 0.014 — the cutoff step is negligible)
 Total jovicentric ambient anywhere in the SOI: D = D_gcr (S-8a) + (r ≤ 30 R_J ? D_jup(r) : 0)
-Anchors reproduced: Io (5.9 R_J) ≈ 36,000 (≈36 Gy/day) · Europa (9.4 R_J) = 5,400 (5.4 Sv/day)
-                    Ganymede (15.0 R_J) ≈ 160 vs cited ~80 (within model honesty band) · Callisto (26.3 R_J) ≈ 0.14
+Anchors reproduced EXACTLY (segments are continuous at every anchor): Io (5.9 R_J) = 36,000 (≈36 Gy/day) ·
+                    Europa (9.4 R_J) = 5,400 (5.4 Sv/day) · Ganymede (15.0 R_J) = 160 ambient · Callisto (26.3 R_J) = 0.14
 ```
 
-Ganymede's intrinsic magnetic field (the only moon with one) halves its ambient value → use 80 mSv/day at Ganymede's surface, matching literature. Saturn's belts are mild and absorbed by the rings: 1.0 mSv/day inside 8 R_S, 0 beyond; Titan (21.0 R_S) is outside entirely. Time-integrated dose bookkeeping is `08`'s job; this field function is evaluated per simulation tick.
+Ganymede's intrinsic magnetic field (the only moon with one) halves its ambient value → the 160 mSv/day ambient becomes the literature's 80 mSv/day at Ganymede's surface, exactly (the 15.0 R_J ambient anchor is *defined* as 2× the published surface value so the field factor lands on it — stated openly, per A4). Saturn's belts are mild and absorbed by the rings: 1.0 mSv/day inside 8 R_S, 0 beyond; Titan (21.0 R_S) is outside entirely. Time-integrated dose bookkeeping is `08`'s job; this field function is evaluated per simulation tick.
 
-### 3.8 Mars dust seasons (S-9)
+### 3.8 Mars dust seasons & climate density curve (S-9, S-9a)
 
 Solar longitude `Ls ∈ [0°, 360°)` is computed from world state as **`Ls = (ν + 251°) mod 360°`**, where ν is Mars's true anomaly [deg] from the on-rails propagator (S-1) and 251° is the real perihelion-to-Ls offset (Mars perihelion occurs at Ls ≈ 251°); Ls(t=0) follows from Mars's §4.2 M0. It advances over the 668.6-sol Mars year (sol = 88,775 s) *non-uniformly*, as it should — e = 0.0934 makes southern spring/summer shorter and hotter (real). Optical depth τ per sector:
 
@@ -172,6 +176,21 @@ Panel soiling: −0.2%/sol output (clear), −2%/sol (storm); restored by crew/r
 ```
 
 Storms also raise EDL dispersion (σ ×2 on the S-7b base landing dispersion) and block surface↔orbit optical scans (survey S-10 paused). Pressure seasonal swing: `P_site(t) = P_datum·(1 + 0.15·sin(2π(Ls−250°)/360°))` [SIMPLIFIED two-term real cycle; anchor VL1 6.8–9.0 hPa] — affects intake mining rate (`04` M-3e) and EDL.
+
+**S-9a (climate density curve — DECISIONS C24; this file owns Mars climate).** The S-5a density profile is a moving target: the whole Mars column breathes with season, dust, and the diurnal thermosphere. Every consumer of ρ_Mars(h) — EDL, aerobraking and aerocapture corridors (`01`), intake mining (`04` M-3e) — applies the climate multiplier:
+
+```
+ρ_Mars(h, t) = ρ_S5a(h) · f_climate(h, t)
+f_climate  = clamp(f_season · f_dustheat · f_diurnal, 0.50, 1.50)   — the ±50% corridor contract (C24)
+f_season   = 1 + 0.15·sin(2π(Ls − 250°)/360°)        (CO2 condensation cycle — the SAME term as P_site above: defined once,
+             applied once; P_site is its h = 0 surface-pressure expression)
+f_dustheat = 1 + 0.05·τ·(0.5 + h/100 km)             (dust absorbs sunlight and inflates the column; the effect GROWS with
+             altitude — MGS/Odyssey/MRO aerobraking all flew through storm-driven density spikes at corridor heights)
+f_diurnal  = 1 − 0.20·(1 − c_sun)·min(1, h/100 km)   (night-side thermospheric contraction; c_sun per S-6a at the
+             sub-vehicle point; no effect at the surface)
+```
+
+Worked envelope: surface, clear sky → ×0.86–1.16 (the real VL1 ±15% pressure swing falls out of f_season alone); 100-km corridor, τ = 9 global storm by day → raw ≈1.6, clamped ×1.50; 100-km corridor, clear aphelion-season night → ≈×0.70. The clamp band **[0.50, 1.50] is the published interface**: corridor planning (`01`) must tolerate the full ±50% band (current constants realize ×0.70–×1.50, leaving tuning headroom that cannot break the interface). Gameplay: aerobraking corridors are live operations from Act 3 (C24) — a global-storm onset mid-transfer both widens EDL dispersion (σ ×2, S-9) and raises corridor density, forcing shallower passes or a wave-off; `01` consumes f_climate at plan time AND at execution, so a storm can invalidate a corridor the player already committed to (the §8 storm-warning rule applies — never spring it silently).
 
 ### 3.9 Survey & discovery (S-10)
 
@@ -376,7 +395,7 @@ All bands additionally take the +0.15 below-cloud-albedo bonus for two-sided arr
 #### 4.4.4 Moon — logistics school
 
 - **Identity**: Act 2 core. Three days away; teaches ISRU, night survival, and export economics (LCROSS/LRO/Artemis data foundation). The Moon's job is to make the player build their first non-Earth supply chain (oxygen, then metals, then propellant to LLO/EML depots — `05`).
-- **Unique mechanics**: (1) 14.77-day night (solar day 29.53 d): power storage or Kilopower fission (`09`) or PEL sites (S-6b canonical duty 0.85 ± 0.05). (2) PSR mining: Cabeus-class floors at 25–40 K hold 5.6±2.9 wt% water ice (LCROSS) but machines need full cryo-rated drivetrains (`04` M-9 dust/cold wear ×2). (3) Dust: electrostatic regolith fines degrade seals/radiators — maintenance tax ×1.5 vs Mars (Apollo anchor; `04` M-9). (4) Mass driver (T3): v_esc 2.38 km/s, the original O'Neill scenario; ships Oxygen/metal to EML depots (`05`).
+- **Unique mechanics**: (1) 14.77-day night (solar day 29.53 d): power storage or Kilopower fission (`09`) or PEL sites (S-6b canonical duty 0.85 ± 0.05). (2) PSR mining: Cabeus-class floors at 25–40 K hold 5.6±2.9 wt% water ice (LCROSS) but machines need full cryo-rated drivetrains (`04` M-9 dust/cold wear ×2). (3) Dust: electrostatic regolith fines degrade seals/radiators — environment maintenance multiplier ×2 vs the orbital baseline (dusty-surface k_env = 0.04, the SAME class as Mars, not harsher — `05` F-9 owns the spares ledger; Apollo seal/radiator anchor; cryo/dust wear details `04` M-9). (4) Mass driver (T3): v_esc 2.38 km/s, the original O'Neill scenario; ships Oxygen/metal to EML depots (`05`).
 - **Hazards**: thermal swing 95–390 K (equipment cycling fatigue, `09`); micrometeoroids (p = 0.001/asset-year damage roll); no SPE warning shelter excuse — 1.37 mSv/day ambient (Chang'e-4 LND) plus events.
 - **Landing/ascent**: class B; ≈1.9 km/s with margins each way; no atmosphere → suicide-burn profiles (`01`), terrain slope checks vs sector slope_sigma.
 - **Base sites**: South-pole rim (PEL power + PSR water 2 km apart — the Artemis logic); Marius Hills lava tube (Kaguya/LRO ~60 m skylight; intact tube = free radiation/thermal/micrometeoroid shelter for a buried base, `07` cost −40%); high-Ti mare for ilmenite O2 plants (`04` RX chain).
@@ -386,7 +405,7 @@ All bands additionally take the +0.15 below-cloud-albedo bonus for two-sided arr
 #### 4.4.5 Mars — the first colony
 
 - **Identity**: Act 3 centerpiece. The only body where full ISRU closure (propellant + plastics + food + steel) is plausible with T2 tech: CO2 atmosphere + mid-latitude ice + iron oxides (Zubrin/Mars Direct + MOXIE anchors). Designed to host the player's first self-sustaining base.
-- **Unique mechanics**: (1) Dust season state machine (S-9) — the defining rhythm: stockpile power before Ls 180. (2) Sabatier economy: intake CO2 + ice Water → Methane/Oxygen (`04` chains, MOXIE/Mars Direct anchors). (3) EDL minigame: aerocapture corridor → chute (only slows to ~Mach 2) → mandatory retropropulsion ≈ 1 km/s (class C teeth; `01`). (4) Seasonal pressure swing ±15% (S-9) modulates intake mining and EDL margins. (5) Hellas depth bonus: P ≈ 1.16 kPa at −7.1 km — best aerobraking/chute margin, worst dust.
+- **Unique mechanics**: (1) Dust season state machine (S-9) — the defining rhythm: stockpile power before Ls 180. (2) Sabatier economy: intake CO2 + ice Water → Methane/Oxygen (`04` chains, MOXIE/Mars Direct anchors). (3) EDL minigame: aerocapture corridor → chute (only slows to ~Mach 2) → mandatory retropropulsion ≈ 1 km/s (class C teeth; `01`). (4) Seasonal pressure swing ±15% (S-9) modulates intake mining and EDL margins — the surface end of the S-9a climate density curve: ρ at aerobraking-corridor altitudes swings ±50% with season and dust (DECISIONS C24), so aerobraking corridors are live operations, not table lookups, from Act 3. (5) Hellas depth bonus: P ≈ 1.16 kPa at −7.1 km — best aerobraking/chute margin, worst dust.
 - **Hazards**: global storms (60–100 sols of f_dust ≈ 0.04–0.17 for τ = 9–4 — solar-only bases die; the 2018-storm/Opportunity lesson is the tutorial text); dust soiling −0.2%/sol; perchlorates in regolith (greenhouse feedstock must be washed, `04`/`08` toxicity rule); 0.67 mSv/day chronic dose (bury habs, `07`).
 - **Landing/ascent**: class C; ascent ≈ 4.0 km/s incl. losses (`01` R4 = 4,000 m/s canon; anchor: MAV studies 4.0–4.3 km/s); descent mostly aero with ≈ 1 km/s propulsive.
 - **Base sites**: Arcadia/Deuteronilus mid-lat ice (SWIM: excess ice 30–90 wt% under <1 m overburden — water without PSR cryo pain); Jezero/Isidis (Perseverance sample cache salvage contract); Valles Marineris floor (pressure +20% vs datum, wind-sheltered, wonder); polar cap edge (seasonal CO2 frost cycle = free dry-ice cold sink, `09`).
@@ -449,7 +468,7 @@ All bands additionally take the +0.15 below-cloud-albedo bonus for two-sided arr
 - **Titan — the gas station with weather**:
   - Surface 146.7 kPa (1.45 atm), 93.7 K (Huygens HASI); N2 ~94.5%/CH4 ~5% near-surface. Atmosphere column P/g ≈ 109 t/m² ≈ 10,900 g/cm² — ten times Earth sea level's 1,033 g/cm² → radiation ≈ 0.01 mSv/day: Titan is the most radiation-safe surface in the game including Earth.
   - **Unique mechanics**: (1) Flight paradise: ρ 5.3 kg/m³ + g 1.35 m/s² → human-powered/electric flight trivial; Dragonfly-class rotorcraft are the default vehicle (`10`). (2) Methane hydrology: Kraken Mare (≈400,000 km²), Ligeia Mare (≈126,000 km²) — Sea Pump intake per `04` M-3f; methane rain events (decadal storms, Cassini-observed) refill polar lakes — modeled as sector weather flag, optics obscured f = 0.5 for U(5,20) d. (3) Inverted combustion: O2 is the scarce/explosive commodity; Methane is ambient. Burn anything = bring oxygen (Water-ice bedrock electrolysis). (4) Chute-only landing (class D, Huygens anchor): descent is free; ascent ≈ 2.4 km/s with severe drag losses (`01` S4 = 2,400 m/s canon; `01`/`02` own the split).
-  - **Hazards**: 94 K cryo-embrittlement (all surface hardware needs T3 cryo rating, `05` maintenance ×1.5 otherwise); solar 1.5 W/m² noon (S-6a f_atm 0.10) — fission mandatory (`09`); CH4/O2 leak combinations (habitat explosion roll, `07`).
+  - **Hazards**: 94 K cryo-embrittlement (all surface hardware needs T3 cryo rating, with wear consequences ruled by `05`; the environment maintenance multiplier itself is ×1.5 vs the orbital baseline — Titan's clean-surface k_env = 0.03, `05` F-9 canon); solar 1.5 W/m² noon (S-6a f_atm 0.10) — fission mandatory (`09`); CH4/O2 leak combinations (habitat explosion roll, `07`).
   - **Sectors (12)**: Kraken Mare (SEA, Ligeia-class roll alt: ethane-richer Kraken-class per `04`) · Ligeia Mare (SEA) · Punga Mare · Shangri-La dune field (organics: Carbon/Polymers feed) · Adiri (Huygens derelict — the most distant human artifact landing, prestige anomaly) · Selk crater (Dragonfly derelict/active heritage ~2034+, anomaly) · Xanadu (water-ice bedrock outcrop) · Sotra Patera (cryovolcano candidate, wonder) · 2× polar lake districts (seasonal) · equatorial plains ×2.
 - **Enceladus — the water fountain**: R 252 km, g 0.113 m/s²; south-polar tiger stripes (Damascus/Baghdad/Cairo/Alexandria sulci) vent ≈ 200 kg/s total (Cassini); stripe-adjacent T up to ~197 K vs 75 K mean. Mechanics: S-11 vent capture ≤ 5 kg/s/collector; lowest-Δv water export in the outer system (0.18 km/s ascent + Saturn-system transfers, `01`). E-ring transit = free hull "snow" accretion (cosmetic). Sectors (6): 4 tiger-stripe vents (each an anomaly wonder) · cratered north · sub-Saturn plains.
 - **Rings**: zone object, not particles: annular fields C (74,658–92,000 km), B (92,000–117,580 km), Cassini Division, A (122,170–136,775 km), >95% Water ice, particle sizes cm–10 m. **Ring mining (T3)**: a harvester ship inside the zone collects Water at `ṁ = 2.0 t/h · ρ_zone` (ρ_zone: B = 1.0, A = 0.6, C = 0.3) with collision micro-damage 0.1%/h hull wear. Honest tag: engineering-extrapolated, no published study mines rings at scale [SPECULATIVE-adjacent but physics-trivial]; B-ring optical depth supports the density ranking (real).
@@ -485,7 +504,7 @@ All bands additionally take the +0.15 below-cloud-albedo bonus for two-sided arr
 
 ### 4.5 Anomaly & discovery catalog (curated)
 
-Classes: DERELICT (real human hardware, fixed location), WONDER (real geological feature), COLDTRAP (PSR/ice lens), TUBE (lava tube/cave), EVENT (timed celestial). Procedural anomalies (S-10) reuse these classes. Rewards: SurveyData [GB] (Science lump = 2 SCI per GB, the canonical §4.6 conversion co-signed with `11` §3.5), salvage mass (→ `04`/`05` ledgers), Prestige (→ `12` reputation economy). No aliens anywhere; the emotional payload is real history and real geology.
+Classes: DERELICT (real human hardware, fixed location), WONDER (real geological feature), COLDTRAP (PSR/ice lens), TUBE (lava tube/cave), EVENT (timed celestial). Procedural anomalies (S-10) reuse these classes. Rewards: SurveyData [GB] (Science lump = 2 SCI per GB, the canonical §4.6 conversion co-signed with `11` §3.5), salvage mass (→ `04`/`05` ledgers), Prestige (→ `12` reputation economy). No aliens anywhere; the emotional payload is real history and real geology. Future-history entries (post-2026 hardware: AN-07, AN-11, AN-24, AN-39 and the §4.4 survey notes) are governed by the canonical **Appendix A** timeline (DECISIONS F32); this table remains the mechanical implementation of record, and Appendix A entries without an AN row receive one at data entry.
 
 | ID | Body/Sector | Class | What it really is | Reward |
 |---|---|---|---|---|
@@ -619,7 +638,7 @@ Design rule: each Act's flagship body teaches the mechanic the next Act assumes 
 ## 7. Cross-System Interfaces
 
 **Provides →**
-- `01-orbital-mechanics.md`: all GM, R, r_SOI, orbital elements (§4.1–4.3), dir flags, atmosphere ρ(h)/h_atm for drag-aerocapture (S-5a), rotation v_rot launch bonus (S-3), synodic/event calendar (S-14).
+- `01-orbital-mechanics.md`: all GM, R, r_SOI, orbital elements (§4.1–4.3), dir flags, atmosphere ρ(h)/h_atm for drag-aerocapture (S-5a) with the Mars climate density multiplier f_climate (S-9a — the ±50% corridor contract, C24), rotation v_rot launch bonus (S-3), synodic/event calendar (S-14).
 - `02-propulsion.md`: ambient pressure for nozzle/back-pressure models (S-5a), atmosphere composition for intake propulsion concepts, dust/abrasion environment flags.
 - `04-resources-isru.md`: per-body sector lists with deposit-roll hooks (§4.4 ↔ 04 §4.2 rows MUST stay 1:1), atmosphere/sea datum compositions (§4.1, must equal 04 M-3e/M-3f tables), PSR site tags, asteroid spectral classes & spin states (S-11), solar flux S-4a.
 - `05-industry-logistics.md`: light-lag t(r) for autonomy tiers (S-4b), conjunction blackouts, mass-driver site flags (Mercury/Moon), debris-zone salvage.
@@ -659,12 +678,52 @@ Design rule: each Act's flagship body teaches the mechanic the next Act assumes 
 ## 9. Open Questions
 
 1. **Procedural belt density**: 120 belt objects is a map-readability guess; does the Act 4 economy need more M-types, or does Psyche alone carry the metal endgame? (Blocks `05` freighter sizing.)
-2. **Venus surface tier**: is T3 high-temperature electronics (NASA HOTTech SiC anchor) enough for *crewed* surface sorties, or should crewed Venus surface remain impossible forever (robots only)? Realism reviewers lean "robots only"; gameplay wants the trophy. Decide with `07`/`08`.
+2. **Venus surface tier**: is T3 high-temperature electronics (NASA HOTTech SiC anchor) enough for *crewed* surface sorties, or should crewed Venus surface remain impossible forever (robots only)? Realism reviewers lean "robots only"; gameplay wants the trophy. Decide with `07`/`08`. **RESOLVED (DECISIONS C17): crewed surface sortie is IN — a single short-duration T4 [SPECULATIVE] trophy in a cooled suit-vehicle, endgame achievement tier; `07`/`08`/`10` design the interface at Pass 2; the honest speculation tag is mandatory.**
 3. **Io geothermal taps**: flagged [SPECULATIVE T4 flavor, 100 kWt cap] here — keep, or cut as too handwavy despite tidal-heating physics being sound? (`09` to rule.)
 4. **Ring mining tag**: currently T3 with an honesty note; should it move to T4 [SPECULATIVE] since no engineering study exists at scale? (`11` tier owner to rule; physics is trivial, optics are gamey.)
-5. **2049 future-history canon**: which 2026–2049 missions exist as derelicts (Artemis surface assets, Mars Sample Return state, Dragonfly end-of-mission location at Selk)? Needs a one-page canonical timeline shared with `12` narrative; current §4.5 assumes conservative versions.
+5. **2049 future-history canon**: which 2026–2049 missions exist as derelicts (Artemis surface assets, Mars Sample Return state, Dragonfly end-of-mission location at Selk)? Needs a one-page canonical timeline shared with `12` narrative; current §4.5 assumes conservative versions. **RESOLVED (DECISIONS F32): the canonical one-page timeline is Appendix A below; §4.5's conservative assumptions are confirmed and dated there, and `12` narrative consumes the same page.**
 6. **Pluto atmosphere collapse rate**: the exp(Δr/2.5 AU) freeze-out is a placeholder; New Horizons-era models disagree on full-collapse timing. Does any mechanic actually depend on it, or demote to flavor? 
 7. **Procedural KBO count (8)**: enough for the interstellar-precursor staging gameplay, or does the endgame need a Centaur population (Chiron) between Saturn and Uranus as stepping stones?
 8. **Earth weather/spaceport events**: kept minimal here (p = 0.02 scrub); `12` may want a richer launch-cadence economy — if so, that system should own the model and this file just hosts the sector list.
 9. **Saturn ring zone vs moonlet mining**: would harvesting Saturn's small inner moonlets (Pan, Daphnis-class, not yet rostered) be cleaner than the ring-zone abstraction? Adds bodies but removes the zone-object special case (`13` complexity trade).
-10. **Radiation model honesty band**: S-8c reproduces Ganymede at 160 vs literature ~80 mSv/day before the B-field factor; hostile reviewers may flag the fudge. Alternative: piecewise-linear through all four anchors (uglier code, exact anchors). Decide before implementation freeze.
+10. **Radiation model honesty band**: S-8c reproduces Ganymede at 160 vs literature ~80 mSv/day before the B-field factor; hostile reviewers may flag the fudge. Alternative: piecewise-linear through all four anchors (uglier code, exact anchors). Decide before implementation freeze. **RESOLVED (DECISIONS A4): the piecewise-exact alternative is adopted — S-8c now interpolates log-linearly through all four anchors exactly and retires the single-exponential fit; honesty doctrine outranks elegance.**
+
+## Appendix A — The 2049 Future-History Timeline (canonical; DECISIONS F32)
+
+One page of narrative canon: which real 2026–2049 missions exist in-world, and in what state, when the campaign opens at t = 0 (2049-01-01, S-1). This appendix is the single source for `12`'s narrative and for every future-history anomaly in §4.5; entries below without an AN row receive one at data entry. Doctrine check (F34): everything here is mundane human hardware and budget history — grounded, plausible, no aliens, no mysteries that stay mysterious. Entries dated before 2026 are real history; everything later is world canon, frozen at data entry.
+
+**The Crowded Decade (2024–2035).** Nearly everything funded in the mid-2020s flew — late, over budget, mostly successfully. Artemis put crews back on the lunar south pole; China's program matched it and built the first robotic station; the outer-system flagships (Clipper, JUICE, Dragonfly) all arrived; the two Mars sample-return programs ended in opposite ways — Tianwen-3 triumphant, NASA–ESA MSR cancelled with its cache still on the ground at Jezero.
+
+**The Retrenchment (2036–2045).** A 2037 collision-cascade scare in the 800-km shell (a dead constellation bird and a derelict upper stage; the §4.4.3 debris bands are its monument) coincided with a global fiscal crisis. Exploration budgets collapsed. Programs were not destroyed; they were *orphaned* — stations mothballed, relay constellations left to fail one bird at a time, rovers dead of old age with no successors.
+
+**The Reopening (2046–2049).** Cheap reusable heavy lift matured commercially through the quiet years; Solar Cycle 27 peaked in 2046 (S-14); the player's program is chartered in 2049. Everything below is now salvage, ground truth, heritage, and cautionary tales.
+
+| Year(s) | What | Where | State in 2049 | Gameplay hook |
+|---|---|---|---|---|
+| 1958–2049 | LEO/GEO derelict population + three retired megaconstellation generations | Earth orbit | mostly deorbited per 5-yr rules; the 2037 cascade scare left the 700–900 km shell the dirtiest band | §4.4.3 debris zones; AN-31/32; debris-clearance contracts (`12`) |
+| 2030 | ISS deorbit (USDV) | Point Nemo / LEO remnants | deorbited after 32 years; jettisoned hardware persists in decaying orbits | §4.4.3 graveyard remnants; museum Prestige |
+| 1990–2049 | Hubble | decaying LEO | derelict since gyro death 2032; uncontrolled; re-entry forecast 2050s | Act 1 reboost prestige contract (§4.4.3) — save it or watch it burn |
+| 2027–2038 | Lunar Gateway (PPE + HALO + I-Hab) | NRHO | mothballed 2038 after Artemis VI cancellation; autonomously station-keeping on residual Xenon; cold but intact | the largest salvage prize in cislunar space: reactivation = instant station core (`06`/`07`); Xenon residuals |
+| 2031–2044 | first commercial LEO station | 800-km graveyard orbit | stripped hulk, boosted up at retirement | StructuralParts salvage; early docking-practice target |
+| 2024–2032 | CLPS scatter (Odysseus tipped at Malapert A 2024 — real; Blue Ghost at Mare Crisium 2025 — real; Athena tipped 2025 — real; ~a dozen more through 2032) | Moon, mostly south-polar approaches | dead; several on their sides (the era's running joke) | cheap first-salvage tutorial targets; heritage micro-zones; Electronics scrap |
+| 2028 | VIPER (flown commercially after the real 2024 NASA cancellation) | Nobile rim | died at first PSR-adjacent night; cryo drivetrain intact | drivetrain salvage = `04` M-9 cold-wear ground truth; PSR-night cautionary codex |
+| 2028–2032 | Artemis III–V surface assets | Shackleton / de Gerlache rim | two HLS descent stages standing, LTV rover battery-dead, comm masts, EVA cache | AN-07; LTV refurb = free early rover chassis (`10`); heritage zone |
+| 2030–2031 | China crewed lunar landings (two sorties) | south-polar sites | ascent stages departed; descent stages, flag, experiment pallets remain | heritage zone; Prestige tourism contract (`12`) |
+| 2024–2035 | Chang'e 6 (real, 2024) / 7 / 8 + ILRS robotic core | SPA basin + south pole | Chang'e 6 descent stage; 7/8 ISRU-demo hardware; ILRS core node silent since the 2041 relay failure | AN-50 companion content; ILRS node = largest single lunar salvage; printed regolith test bricks = free `04` M-8 ground truth |
+| 2026–2043 | lunar relay/nav constellation (Queqiao-2/LCRNS/Moonlight generation) | lunar frozen orbits + EML | all dark by 2043 — no replacement launches in the Retrenchment | reactivate one bird = far-side relay head start (`16`); Electronics salvage |
+| 2001–2038 | Mars relay fleet (Odyssey †2025, MRO †2038, MAVEN †2036, TGO †2037, Tianwen-1 orbiter †2033) | Mars orbit | five silent orbiters drifting in stable orbits | refurbish one = day-one Mars relay (`16` link budget); propellant residuals; conjunction-ops flavor |
+| 2018–2031 | Mars surface heritage fleet (InSight †2022 — real; Ingenuity †2024 — real; Perseverance †2029; Curiosity †2031; Zhurong †2022 — real) | per §4.4.5 sectors | dust-covered; the two RTG rovers still warm | AN-08…AN-13; Pu-238 salvage chain (`09`) |
+| 2023–2049 | **NASA–ESA MSR cache — stranded** | Jezero: Three Forks depot (10 tubes, deposited 2023 — real) + 20+ tubes aboard dead Perseverance | program cancelled 2028 after its third restructure; never retrieved | AN-11: the sample-retrieval contract is the Act 3 prestige jackpot — the first thing the player does that "old space" couldn't finish |
+| 2033–2035 | Tianwen-3 (China MSR) | Utopia Planitia | flew late and WORKED: ~500 g returned 2035, the Retrenchment's last triumph; descent stage + ascent launch mount remain | heritage/pilgrimage zone; proof-of-feasibility codex for player sample-return contracts |
+| 2026–2031 | MMX | Phobos, Stickney rim | lander + IDEFIX rover derelict; backup sample canister still clamped to the deck (return capsule reached Earth 2031) | AN-24; canister retrieval mini-contract; Phobos water ground truth (§4.4.6 survey roll) |
+| 2029–2031 | OSIRIS-APEX | alongside Apophis | escort orbiter derelict after the 2029 Earth-flyby campaign (real flyby) | free K2 on Apophis deposits; flyby-anniversary Prestige event |
+| 2026–2028 | Hera + cubesats | Didymos–Dimorphos (procedural NEA roster celebrity) | derelict at the DART impact site | impact-deflection codex; SurveyData cache |
+| 2025–2033 | Tianwen-2 (launched 2025 — real) | Kamoʻoalewa → comet 311P | samples returned 2027; extended-mission bus silent near 311P | drifting heliocentric derelict intercept |
+| 2021–2033 | Lucy (real, in flight) | Jupiter trojan L4 chain → L5 2033 | bus derelict on its trojan-crossing cycler orbit | heritage-corridor overlay; ground-truth pings for the ~20 procedural trojans |
+| 2021–2041 | JWST | Sun–Earth L2 → drifted heliocentric | station-keeping propellant exhausted 2041; slow tumble, sunshield intact | C18 L2 anchor-slot tenant precedent; optics salvage = one-shot telescope-tech boost (`11`); expert rendezvous target |
+| 2025–2029 | BepiColombo (MPO + Mio) | Mercury orbit | MPO derelict in slowly decaying low orbit (impact ~2050s); Mio spinning higher | §4.4.1 survey: salvaged mapping data = partial L1 head start at Mercury; AN-23 companion |
+| 2030–2034 | Europa Clipper (launched 2024 — real) | Europa flybys → Ganymede disposal impact 2034 | impact scar + debris field | §4.4.9 future-history site; rad-hardened-electronics scrap codex |
+| 2031–2035 | JUICE (launched 2023 — real) | Ganymede orbit → surface impact 2035 | second Ganymede scar | paired with the Clipper scar: "the two graves" survey chain |
+| 2028–2039 | **Dragonfly — silent at Selk** | Titan, Selk crater region (arrived 2034) | 47 sorties flown; silent since a 2039 mid-flight comm loss; parked on a dune crest, MMRTG still warm (~⅔ output) | AN-39: rotor/MMRTG salvage → Titan-flyer blueprint discount (`10`); locating it is an Act 5 detective quest (last fix + wind-drift modeling) |
+
+Consistency notes: dates above are binding on §4.5 (AN-07, AN-11, AN-24, AN-39 already conform: Dragonfly arrival 2034, sample-cache contract, Artemis-era hardware, MMX hardware) and on §4.4.3's ISS (~2030) and Hubble entries; `13` serializes nothing from this page as timed events — every entry is world *state* at t = 0.

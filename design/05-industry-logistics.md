@@ -70,7 +70,7 @@ Every module, rate, and rule below names its anchor. Summary table of the load-b
 | **Tethers Unlimited SpiderFab / “Trusselator”** (NIAC); **Archinaut/OSAM-2** (flight project, cancelled 2023 — anchor used honestly as matured ground demo) | On-orbit fabrication of truss from spooled feedstock | T3 truss-fab robots |
 | **Falcon 9 / Starship launch environment** | ~6 g axial design load factor, max-Q ~30–35 kPa, 5.2 m fairing (Starship 9 m); JWST's 6.5 m mirror had to fold into a 5.4 m fairing | Why orbital assembly matters |
 | **O'Neill mass driver studies (Princeton/MIT/NASA Ames 1977)** | Lunar escape 2.38 km/s; KE = 2.83 MJ/kg; prototype accelerators built; studies up to 1,000 g | T3 mass-driver physics |
-| **ULA/NASA cryogenic depot studies** | LH2 boiloff: legacy stages ~2%/day; advanced passive ~0.1–0.5%/day; MLI leak ~0.5–1.5 W/m²; cryocooler specific power ~15–20 W/W at 90 K, ≥100 W/W at 20 K | Depot boiloff & ZBO rules |
+| **ULA/NASA cryogenic depot studies** | LH2 boiloff: legacy stages ~2%/day; advanced passive ~0.1–0.5%/day; MLI leak ~0.5–1.5 W/m²; cryocooler specific power ~15–20 W/W at 90 K, ≥100 W/W at 20 K (literature anchors; the game rates are owned by 02 §3.12's boiloff model: 0.15%/day bare standard-MLI LEO, 0.01%/day sunshielded depot-grade) | Depot boiloff & ZBO rules |
 | **NASA Gateway PPE + AEPS/HERMeS Hall thrusters** | 60 kW-class SEP flown-config; AEPS/HERMeS as canonized by 02's HALL-12 string: 12.5 kW, Isp 2,800 s, 590 mN, η 0.65 (HERMeS high-Isp throttle point; flight AEPS literature quotes ≈2,600 s — 02 owns the game value); 300 kW-class SEP cargo tugs studied by NASA GRC | T2 SEP freighter |
 | **NERVA / DRA 5.0 Pewee-class NTR** | Isp ~900 s, 111 kN (25 klbf) engines, ~3.3 t each | T2–T3 NTR freighter (per 02) |
 | **ISS maintenance & ORU practice** | Orbital Replacement Unit architecture; of order 1% of station mass per year flies as maintenance hardware in benign LEO; station-wide preventive+corrective maintenance ≈2–4 crew-h/day | Spares economy coefficients |
@@ -238,6 +238,16 @@ be imported from Earth**, and before any line exists, finished `Electronics` are
 the intended Act 1–4 umbilical to Earth (economy: 12-gameplay-economy-ui.md; Silicon Independence
 is 12's Act 4 exit milestone).
 
+**Local-electronics mass penalty (DECISIONS B12).** The single `Electronics` SKU stays, but
+`Electronics` built from locally-fabbed (micron-class, Minimal-Fab) `Wafers` install at a
+**×1.3 mass penalty** per function versus Earth-imported high-density electronics: every
+consumer's parts bill charges 1.3 t of local-wafer `Electronics` per 1.0 t specified. The
+`electronics_std` recipe itself is unchanged — the penalty applies at installation time (same
+mechanism as the §3.13 in-situ derate; the two stack where both apply) and is the honest cost of
+~5 µm devices needing more board area, packaging, and redundancy for the same function. It
+retires once the wafer-fab line reaches **T3+ fab maturity** on 11-research-tech.md's maturity
+ladder; Earth-imported `Electronics` never pay it.
+
 **FoodRations & MedSupplies (consumables line).** Per 1.00 t `FoodRations` (dry-equivalent kg, 08
 §4.3 convention):
 
@@ -398,8 +408,10 @@ shown — the planner adds it when sizing tank loads, so flyable cargo runs ~2% 
 Pallet check: m_prop = (4.5 + 6.0) × (e^(4200/3726.5) − 1) = 21.9 t — the tug arrives at LLO with
 ≈1.6 t of usable propellant (24 t tanks × 0.98 − 21.9; worth ~1,100 m/s empty against a ~4.2 km/s
 return leg) and cannot return without the LLO depot (§3.9). Longhaul check: the row closes only
-because of its ZBO cryocooler (§3.9, §4.4); at the passive F-6 rate (0.10%/day) the 259-day leg
-would lose 1 − 0.999²⁵⁹ ≈ 23% of stored Hydrogen and the mission would not close.
+because of its ZBO cryocooler (§3.9, §4.4); at the bare standard-MLI passive F-6 rate (0.15%/day,
+02 §3.12 — an in-flight freighter tank carries no depot-grade sunshield) the 259-day leg would
+lose 1 − 0.9985²⁵⁹ ≈ 32% of stored Hydrogen and the mission would not close (even depot-grade
+sunshielded passive, 0.01%/day, would leak ≈2.6% ≈ 1.5 t).
 
 **Route planner algorithm** (player-facing autopilot; runs at order time and each window):
 
@@ -501,11 +513,14 @@ Depot = node module with storage, transfer gear, thermal control. Boiloff rule p
 ```
 boiloff %/day: storable (Ammonia, etc.) 0.0 ; Oxygen/Methane shielded 0.03 ;
 Oxygen/Methane + 90 K cryocooler 0.0 (ZBO, 4.5 kW per 200 t store: ~300 W leak × 15 W/W) ;
-Hydrogen passive (advanced MLI + sunshield) 0.10 ; Hydrogen ZBO 0.0 (12 kW per 200 t: 20 K
+Hydrogen passive, depot-grade (advanced MLI + sunshield) 0.01 ; Hydrogen passive, bare
+(standard MLI, no sunshield) 0.15 ; Hydrogen ZBO 0.0 (12 kW per 200 t: 20 K
 cryocooler ≥100 W/W + 90 K shield)                                              (F-6)
 ```
 Anchors: legacy cryo stages ~2%/day LH2; ULA/NASA advanced passive studies 0.1–0.5%/day; MLI leak
-0.5–1.5 W/m². Tier note: LH2 ZBO is a **T2** capability — 02 catalogs DEP-600 "Reservoir" (T2)
+0.5–1.5 W/m². The game rates are byte-identical with 02 §3.12's boiloff model, which owns them
+(bare standard-MLI LEO ≈ 4.4%/month ≈ 0.15%/day; sunshield + depot-grade ≈ 0.28%/month ≈
+0.01%/day). Tier note: LH2 ZBO is a **T2** capability — 02 catalogs DEP-600 "Reservoir" (T2)
 with a 150 t net-zero-boiloff LH2 mode, unlocked by 11 PR-15 "Heavy Depot Infrastructure";
 log_depot_h (§4.5) carries the same T2 tag. The T2 Longhaul NTR's 60 t Hydrogen logistics and
 12's Act 3 NTR era both assume it.
@@ -516,7 +531,8 @@ lists ZBO hardware. Route-planner integration: for each leg i the planner adds
 applying F-3, and rejects schedules whose tanks cannot cover burn + boiloff + the 2% residual
 hold-back. The Longhaul NTR mounts a 4 kW 20 K-class ZBO cryocooler (F-6 scaling: 12 kW per
 200 t → ~3.6 kW for its 60 t store), fed by a 6 kWe deployable array carried in its 22 t dry mass
-→ 0%/day Hydrogen loss in flight. Pelican-H is passive (0.10%/day, loitering or in flight).
+→ 0%/day Hydrogen loss in flight. Pelican-H is passive and unshielded (bare F-6 rate 0.15%/day,
+loitering or in flight — landers carry no sunshield).
 
 Depots make the chemical-tug economy work (the LEO→LLO Pallet example in §3.6 arrives at LLO
 with ≈1.6 t of usable propellant — its ~4.2 km/s return leg is infeasible without a refuel stop
@@ -558,6 +574,15 @@ Anchored to ISS practice (~1%/yr of station mass as maintenance hardware in beni
 on-site humans and full Earth logistics; remote/dusty sites are charged 2–4×). Crew maintenance
 labor baseline: ISS-anchored 2–4 crew-h/day per ~400 t of habitat-class hardware; industrial
 modules instead use their catalog labor rows plus failure repairs.
+
+**Recycling (DECISIONS B16).** The **T2 Recycler** (04 §4.5 **RX-22** — 04 owns the machine and
+recipe; 2 t, 19 kWe, 500 kg/day) reclaims **80%** of recipe `loss_t` streams, decommissioned-
+hardware mass, and worn-out parts back to canonical resources (0.9 kWh/kg; the unrecoverable 20%
+converts to Regolith per 04 M-8; Electronics scrap reclaims only as its metal/RareEarths
+fractions). A co-sited Recycler does **not** reduce M_spares (F-9) — parts still wear out — but it
+cuts the site's *net resource draw* for manufacturing those spares and tightens kit closure χ
+(§3.4). This, not invented off-Earth ore (DECISIONS B15), is the sanctioned late-game relief
+valve for scarce inputs such as Copper.
 
 ### 3.11 Blueprints — design once, manufacture many
 
@@ -712,6 +737,9 @@ module's Labor column (A1+/A2+ …; A0 otherwise), `env` = the module's Env colu
 
 Robot upkeep: L_wear 2,000 h (×0.6 in dust), spares split 70% MachineParts / 30% Electronics.
 
+Per DECISIONS A9, `bot_mule` is confirmed as the **single canonical data row** for the "Mule"
+rover-manipulator — 05 owns it; 10-vehicles.md references this row rather than restating stats.
+
 ### 4.4 Freighters & landers (logistics roles; engines and full vehicle sheets in 02/06/10)
 
 | ID | Vehicle | Tier | Dry (t) | Propellant | Isp (s) | Payload | Notes |
@@ -721,7 +749,7 @@ Robot upkeep: L_wear 2,000 h (×0.6 in dust), spares split 70% MachineParts / 30
 | frt_drayage | "Drayage" SEP freighter | T2 | 8.0 (incl. 300 kWe array) | 12 t Xenon | 2,800 | 20 t | 24× HALL-12 (12.5 kW, 0.59 N, η 0.65; per 02 §4.4); slow, superb gear ratio; Argon variant (T2 — the EN-HALL-AR string, 06 §4 / 02 HALL-12A): Isp 2,400 s, 0.48 N per string at the same 12.5 kW (η ≈ 0.45, higher ionization cost — longer trips); Argon is cheap and ISRU-available |
 | frt_longhaul | "Longhaul" NTR freighter | T2/T3 | 22 (incl. 4 kW 20 K ZBO cryocooler + 6 kWe array) | 60 t Hydrogen | 900 | 40 t | 3× Pewee-class 111 kN (per 02); zero Hydrogen boiloff in flight (§3.9); orbital-only, never lands |
 | lndr_pelican | "Pelican" lunar lander | T2 | 9 | 39 t Methane+Oxygen | 320 | 6 t down + 6 t up | ML-24 cluster (per 02); §3.7 cycle math, 37.6 t/cycle (refuels at the LLO depot); 100 sortie airframe life |
-| lndr_pelican_h | "Pelican-H" hydrolox variant | T2 | 9.0 | 28 t Hydrogen+Oxygen | 445 | 6 t + 6 t at 22.0 t/cycle | HL-67 cluster (per 02); PSR-water ISRU; passive boiloff per F-6 (0.10 %/day, no ZBO) |
+| lndr_pelican_h | "Pelican-H" hydrolox variant | T2 | 9.0 | 28 t Hydrogen+Oxygen | 445 | 6 t + 6 t at 22.0 t/cycle | HL-67 cluster (per 02); PSR-water ISRU; passive boiloff per F-6 bare rate (0.15%/day — no ZBO, no sunshield on a lander) |
 | lndr_pelican_m | "Pelican-M" Mars lander | T2 | 10 (incl. TPS) | 52 t Methane+Oxygen | 320 | 6 t down + 2 t up | ML-24 cluster (per 02); aero descent, ascent 4.2 km/s (01 R4 4,000 m/s × the F-3 1.05 margin); surface refuel — ascent carries the next descent's propellant: 49.9 t/cycle (§3.7) |
 | frt_torch | Fusion-torch bulk freighter | T4 [SPECULATIVE] | per 02 | per 02 | per 02 | 500 t class | Endgame only; obeys F-3 like everything else |
 
@@ -734,7 +762,7 @@ Robot upkeep: L_wear 2,000 h (×0.6 in dust), spares split 70% MachineParts / 30
 | log_pelletizer | Regolith pelletizer | T3 | 10 t | 100 kW | Presses/sinters Regolith (04 M-8 tailings feed) or canisterizes mass-driver-safe refined bulk into 10 kg slugs; 50 t/day at ~45 kWh/t (covers one Slinger's 43.2 t/day baseline with margin); unlocked with the mass driver by 11 IN-12 |
 | log_massdriver | Mass driver "Slinger" | T3 | 850 t installed (track 3.2 km, 100 g) | 2.6 MW avg (41 MW pk at muzzle; 52 MJ/shot from flywheel/capacitor bank, §3.8) | 43.2 t/day rough cargo at 1.45 kWh/kg; cargo whitelist per §3.8; surface-built: 510 t StructuralParts + 255 t MachineParts + 68 t Electronics + 17 t Polymers (override split 60/30/8/2) |
 | log_catcher | Orbital catcher | T3 | 60 t | 40 kW | Catches slugs, 2% loss; feeds orbital foundry or depot; station-keeping: 0.5 t Xenon SEP budget = ~60 m/s/yr + 0.2 kg Xenon per caught slug-tonne (momentum cancellation), refuelable per §3.6; miss rate 10% when Xenon is empty (§8.7) |
-| log_skyhook | Momentum-exchange tether | T4 [SPECULATIVE] | 1,200 t | 200 kW | Boeing HASTOL-class concept; tip Δv 2.4 km/s per catch, max catch mass 20 t; momentum ledger unit = t·(km/s): each up-boost debits catch mass × 2.4, repaid 1:1 by down-mass catches (equal credit) or electrodynamic/SEP reboost (SEP propellant via F-3 against the 1,200 t tether; orbit bookkeeping via 01) |
+| log_skyhook | Momentum-exchange tether | T4 [SPECULATIVE] | 1,200 t | 200 kW | Boeing HASTOL-class concept; tip Δv 2.4 km/s per catch, max catch mass 20 t; momentum ledger unit = t·(km/s): each up-boost debits catch mass × 2.4, repaid 1:1 by down-mass catches (equal credit) or electrodynamic/SEP reboost (SEP propellant via F-3 against the 1,200 t tether; orbit bookkeeping via 01). Per DECISIONS A9: the momentum ledger is **owned by this document**; the tether tip is a standard 01 node with a Δv discount — 01 provides orbital state only |
 
 ### 4.6 Maintenance data (per module class)
 
@@ -816,7 +844,8 @@ only at the margin) → ~0% (T4).
 **Consumes:**
 - 01-orbital-mechanics.md — Δv node-graph (impulsive + low-thrust variants), porkchop/window
   tables, transfer times; Table 4.2 catalog legs (M3/M4, R4) for the §3.7 lander cycles; on-rails
-  coast states for freighters.
+  coast states for freighters; skyhook tether-tip state as a standard node with a Δv discount
+  (DECISIONS A9 — the momentum ledger itself stays here, §4.5).
 - 02-propulsion.md — engine stats (Isp, thrust, mass, propellant types) for Pallet/Drayage/
   Longhaul/Pelican classes (MV-2530, HALL-12 + the Argon Hall string, Pewee-class NTR, ML-24,
   HL-67); PTC-200/300L coupler transfer rates (§3.6 ops model); boiloff-relevant propellant
@@ -825,7 +854,9 @@ only at the margin) → ~0% (T4).
   environment flags (k_env), resource availability context.
 - 04-resources-isru.md — all refined inputs: IronSteel, Aluminum, Titanium, Copper, Silicon
   (solar-grade flag per 04 §4.5, RX-16 output), Glass, BasaltFiber, RareEarths, Polymers
-  feedstocks (Methane, Oxygen), propellants for the logistics network.
+  feedstocks (Methane, Oxygen), propellants for the logistics network; the T2 Recycler
+  (04 RX-22, DECISIONS B16) that reclaims 80% of this document's recipe `loss_t` and
+  decommissioned hardware (§3.10).
 - 08-life-support-crew.md — crew-hours supply, EVA suit consumable rates (§3.4 charges 08 §3.11's
   0.09 kg O2/h + 0.40 kg cooling water/h), Biomass supply for the §4.2 ration/medical recipes,
   crew transport demand on logistics routes.
@@ -903,24 +934,28 @@ only at the margin) → ~0% (T4).
 
 ## 9. Open Questions
 
-1. **Granularity of `Components`:** one generic resource (current design) vs. splitting precision
-   vs. bulk components into two SKUs. Current recipes encode precision via *which module* made
-   them; is that legible enough to players?
-2. **Should locally-made (T3, micron-class) `Electronics` carry a mass penalty** (e.g. ×1.3 per
-   function) versus Earth-imported high-density electronics, or is the single-resource abstraction
-   cleaner? Realism argues for the penalty; UI simplicity argues against. Needs a playtest call
-   with 12.
+1. **Granularity of `Components`** — **RESOLVED (DECISIONS B12):** the single generic
+   `Components` SKU stays; recipes continue to encode precision via *which module* made them.
+   *(Original question: one generic resource vs. splitting precision vs. bulk into two SKUs.)*
+2. **Locally-made `Electronics` mass penalty** — **RESOLVED (DECISIONS B12):** yes — locally-fabbed
+   micron-class `Electronics` carry the **×1.3 mass penalty** per function vs Earth imports until
+   T3+ fab maturity; the single-resource abstraction is kept (penalty applied at installation).
+   Rule now stated in §3.3. *(Original question: realism argues for the penalty; UI simplicity
+   argues against.)*
 3. **Mass-driver debris consequences:** v1 treats catcher misses as pure loss + cosmetic warning.
    Do we want a real debris-risk mechanic at busy orbits (coordination with 01/06)?
-4. **Skyhook momentum ledger ownership:** the bookkeeping (boost debt repaid by down-mass) sits
-   here, but the orbital state belongs to 01. Confirm 01 is willing to model tether tip
-   rendezvous as a standard "node" with a Δv discount, or whether skyhooks become 01-owned.
+4. **Skyhook momentum ledger ownership** — **RESOLVED (DECISIONS A9):** the bookkeeping (boost
+   debt repaid by down-mass) stays **here**; 01 models tether-tip rendezvous as a standard node
+   with a Δv discount and provides orbital state only. `bot_mule`'s single data row (§4.3) is
+   confirmed under the same ruling.
 5. **Labor market for Earth-based teleoperators:** hiring ground controllers (cash → robot-h at
    Earth-RTT) is implied by 12's economy. Confirm 12 wants this lever; it strongly shapes early
    lunar automation.
-6. **Recycling depth:** scrap/loss fractions are currently destroyed. A T2 "recycler" module
-   (shredder + induction re-melt) reclaiming 80% of `loss_t` and decommissioned hardware would
-   tighten closure — worth a module slot? (Leaning yes; needs 04 sign-off on resource flows.)
+6. **Recycling depth** — **RESOLVED (DECISIONS B16):** the T2 Recycler is approved — 04 owns the
+   machine and recipe row (04 §4.5 RX-22: shredder + sort + induction re-melt reclaiming **80%**
+   of `loss_t` and decommissioned hardware, residue → Regolith); this document cross-references it
+   in the maintenance economy (§3.10). Without a co-sited Recycler, scrap/loss fractions remain
+   destroyed as before.
 7. **Wear of *ships* vs *modules*:** this doc defines the maintenance model generically; 06/10
    must confirm vehicles use the same C / MTBF / spares-split system rather than inventing a
    parallel one (strong recommendation: one system).
