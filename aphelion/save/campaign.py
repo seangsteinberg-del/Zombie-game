@@ -53,7 +53,8 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
                       visited_surface: set[str] | None = None,
                       milestones: set[str] | None = None,
                       builder_stack: list | None = None,
-                      difficulty: str = "DIRECTOR") -> dict:
+                      difficulty: str = "DIRECTOR",
+                      tutorial_state: dict | None = None) -> dict:
     """bases: objects with .name .last_t .pending_repairs .net (BaseSite)."""
     save = {
         "schema_version": SCHEMA_VERSION,
@@ -93,6 +94,7 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
                             "busy": getattr(m, "busy_until", 0.0)}
                      for name, m in crew.items()},
             "difficulty": difficulty,
+            "tutorial_state": tutorial_state,
             "visited": sorted(visited),
             "visited_surface": sorted(visited_surface or set()),
             "milestones": sorted(milestones or set()),
@@ -183,6 +185,7 @@ def restore_campaign(save: dict, db, tree):
         "tutorial_done": c["tutorial_done"],
         "builder_stack": c.get("builder_stack", []),
         "difficulty": c.get("difficulty", "DIRECTOR"),
+        "tutorial_state": c.get("tutorial_state"),
         "bases": bases,
         "rng_state": save.get("rng"),
     }

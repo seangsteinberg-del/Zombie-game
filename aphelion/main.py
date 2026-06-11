@@ -591,7 +591,8 @@ def run(argv: list[str] | None = None) -> int:
     from aphelion.ui import theme
     from aphelion.ui.audio import AudioCues
     from aphelion.ui.effects import Particles, Starfield
-    from aphelion.ui.tutorial import first_flight_tutorial
+    from aphelion.ui.tutorial import (first_flight_tutorial, next_rail,
+                                      restore_rail)
 
     from aphelion.core.rng import RngRegistry
     from aphelion.game.crew import (
@@ -660,8 +661,10 @@ def run(argv: list[str] | None = None) -> int:
 
     def loaded_campaign(path=None) -> dict:
         got = read_campaign(path or latest_save() or qs_path, db, tree)
-        tut = first_flight_tutorial()
-        tut.completed = got["tutorial_done"]
+        tut = restore_rail(got.get("tutorial_state"))
+        if got.get("tutorial_state") is None and got["tutorial_done"]:
+            tut.completed = True            # pre-depth saves: rail 1 done
+            tut.done_rails = {"first"}
         rng = (RngRegistry.from_state(got["rng_state"]) if got["rng_state"]
                else RngRegistry(20490101))
         for b in got["bases"]:
@@ -719,7 +722,10 @@ def run(argv: list[str] | None = None) -> int:
             crew=crew, visited=visited, visited_surface=visited_surface,
             milestones=milestones, bases=bases,
             tutorial_done=tutorial.completed, rng=campaign_rng,
-            builder_stack=builder.stack, difficulty=difficulty)
+            builder_stack=builder.stack, difficulty=difficulty,
+            tutorial_state={"rail": tutorial.rail, "index": tutorial.index,
+                            "visible": tutorial.visible,
+                            "done": sorted(tutorial.done_rails)})
         write_campaign(path or qs_path, snap)
         return label
 
@@ -761,6 +767,11 @@ def run(argv: list[str] | None = None) -> int:
     base_focus = "construct"          # or "modules"
     module_cursor = 0
     base_log_open = False
+    # tutorial latches + contracts ledger overlay
+    node_exec_seen = False
+    prox_seen = False
+    contracts_open = False
+    contracts_scroll = 0
     autosave_acc = 0.0
     gold_flash = 0.0
     ascent_event_count = 0
@@ -1184,6 +1195,16 @@ def run(argv: list[str] | None = None) -> int:
                 if event.key in (pygame.K_F1, pygame.K_ESCAPE,
                                  pygame.K_RETURN, pygame.K_h):
                     help_open = False
+            elif event.type == pygame.KEYDOWN and contracts_open:
+                if event.key in (pygame.K_ESCAPE, pygame.K_o,
+                                 pygame.K_RETURN):
+                    contracts_open = False
+                elif event.key == pygame.K_UP:
+                    contracts_scroll = max(0, contracts_scroll - 1)
+                    audio.play("tick")
+                elif event.key == pygame.K_DOWN:
+                    contracts_scroll += 1
+                    audio.play("tick")
             elif event.type == pygame.KEYDOWN and planner_open:
                 av0 = vessels[active_idx % len(vessels)] if vessels else None
                 prows = planner_rows_for(av0, t)
@@ -1851,6 +1872,7 @@ def run(argv: list[str] | None = None) -> int:
                             budget_dv=budget)
                         prox_chaser, prox_target = av0, best_tgt
                         prox_trail = []
+                        prox_seen = True
                         node = None
                         scene = "proxops"
                         toast = (f"rendezvous {best_cost:,.0f} m/s paid — "
@@ -1891,6 +1913,9 @@ def run(argv: list[str] | None = None) -> int:
                 elif event.key == pygame.K_p:
                     planner_open = True
                     planner_cursor = 0
+                elif event.key == pygame.K_o:
+                    contracts_open = True
+                    contracts_scroll = 0
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
                 elif event.key == pygame.K_PERIOD:
@@ -1946,12 +1971,13 @@ def run(argv: list[str] | None = None) -> int:
                                  pygame.MOUSEWHEEL)
                   and (pause_open or help_open or surface_open or crew_open
                        or base_screen or research_open or builder_open
-                       or planner_open)
+                       or planner_open or contracts_open)
                   and scene == "flight"):
                 # every overlay is mouse-first: hover selects, click acts,
                 # wheel scrolls, right-click closes — by re-posting the
                 # exact key the keyboard path already handles
                 top = ("pause" if pause_open else "help" if help_open
+                       else "contracts" if contracts_open
                        else "planner" if planner_open
                        else "surface" if surface_open
                        else "crew" if crew_open
@@ -2041,7 +2067,8 @@ def run(argv: list[str] | None = None) -> int:
             elif (event.type == pygame.MOUSEBUTTONDOWN and event.button == 3
                   and not (pause_open or builder_open or research_open
                            or base_screen or crew_open or surface_open
-                           or help_open or planner_open)):
+                           or help_open or planner_open
+                           or contracts_open)):
                 # right-click a body: set/clear the navigation TARGET
                 mx, my = event.pos
                 best = None
@@ -2064,7 +2091,8 @@ def run(argv: list[str] | None = None) -> int:
             elif (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
                   and not (pause_open or builder_open or research_open
                            or base_screen or crew_open or surface_open
-                           or help_open or planner_open)):
+                           or help_open or planner_open
+                           or contracts_open)):
                 mx, my = event.pos
                 best_v = None
                 best_d = 16.0 ** 2
@@ -2878,6 +2906,7 @@ def run(argv: list[str] | None = None) -> int:
                 toast = (f"NODE EXECUTED: {math.hypot(node['dvp'], node['dvr']):,.0f}"
                          f" m/s")
                 burn_glow = 0.8
+                node_exec_seen = True
                 audio.play("burn")
             else:
                 toast = "NODE FAILED: insufficient propellant"
@@ -3005,18 +3034,47 @@ def run(argv: list[str] | None = None) -> int:
                     toast_until = t + 6
                     audio.play("blip")
 
-        # tutorial rail (12 §5.8): completes from real state
+        # tutorial rails (12 §5.8): complete from real state, then the
+        # next rail teaches the next system the campaign demands
         legs_now = av.predict(t) if av is not None else []
         if tutorial.update({
             "builder_open": builder_open,
-            "in_orbit": av is not None,
+            "stack_launchable": (
+                sum(1 for s2 in builder.stack if s2) >= 2
+                and any(db.parts[p]["type"] == "crew"
+                        for s2 in builder.stack for p in s2)),
+            "in_orbit": av is not None and av.landed_at is None,
             "warp_idx": warp_idx,
             "apo_m": ((av.elements.apoapsis - tree.body(av.frame_id).radius)
                       if av is not None and av.elements.alpha > 0 else 0.0),
             "moon_leg": any(leg.frame_id == "core:moon" for leg in legs_now),
             "frame": av.frame_id if av is not None else "",
+            "moon_paid": any(c.contract_id == "c_moon"
+                             and c.completed_t is not None
+                             for c in program.contracts),
+            "node_placed": node is not None,
+            "node_armed": node is not None and node["armed"],
+            "node_executed": node_exec_seen,
+            "fleet_two": sum(1 for v in vessels
+                             if v.landed_at is None) >= 2,
+            "prox_open": prox_seen,
+            "docked": "docked" in milestones,
+            "landed_surface": bool(visited_surface),
+            "base_founded": bool(bases),
+            "base_producing": any(
+                b.net.buffers.get("Oxygen") is not None
+                and b.net.buffers["Oxygen"].level > 1_000.0
+                for b in bases),
         }):
             audio.play("blip")
+        if tutorial.completed:
+            nxt = next_rail(tutorial.done_rails | {tutorial.rail})
+            if nxt is not None:
+                nxt.visible = tutorial.visible
+                tutorial = nxt
+                toast = (f"NEW OBJECTIVE RAIL — "
+                         f"{tutorial.steps[0].text[:48]}…")
+                toast_until = t + 8
 
         # camera follow (positions in ROOT frame; camera frame is the root)
         def body_root(bid: str) -> tuple[float, float]:
@@ -3443,17 +3501,74 @@ def run(argv: list[str] | None = None) -> int:
         screen.blit(theme.panel(size[0], 26), (0, size[1] - 26))
         theme.draw_text(
             screen, 10, size[1] - 21,
-            "X/Z A/D burn  B build  N node  P planner  V ship  E dock  "
-            "U undock  T xfeed  G surface  F2 colony  R research  K crew  "
-            "SPACE pause  ./, warp  F1 help  ESC menu",
+            "X/Z A/D burn  B build  N node  P planner  O contracts  V ship  "
+            "E dock  U undock  T xfeed  G surface  F2 colony  R research  "
+            "K crew  SPACE pause  ./, warp  F1 help  ESC menu",
             color=theme.COLORS["text_dim"], font="small", shadow=False)
 
         # one shared dimmer under any content overlay (kills HUD bleed-through)
         if (base_screen and bases) or research_open or crew_open or (
-                surface_open and av is not None) or planner_open:
+                surface_open and av is not None) or planner_open \
+                or contracts_open:
             dimmer = pygame.Surface(size, pygame.SRCALPHA)
             dimmer.fill((4, 6, 10, 168))
             screen.blit(dimmer, (0, 0))
+
+        if contracts_open:
+            from aphelion.game.campaign import CONTRACTS as _SPECS
+            from aphelion.game.campaign import YEAR as _YEAR
+            from aphelion.game.campaign import act_unlocked as _au
+            lpan = theme.panel(880, 584, "CONTRACT LEDGER")
+            lx0, ly0 = size[0] // 2 - 440, size[1] // 2 - 292
+            screen.blit(lpan, (lx0, ly0))
+            lines3: list[tuple[str, tuple]] = []
+            by_id = {c.contract_id: c for c in program.contracts}
+            for act in (1, 2, 3, 4):
+                roman = ("I", "II", "III", "IV")[act - 1]
+                lines3.append((
+                    f"ACT {roman}"
+                    + ("" if _au(act, program)
+                       else "   — locked: complete 60% of the act before"),
+                    theme.COLORS["gold"]))
+                for spec in (s for s in _SPECS if s.act == act):
+                    c = by_id.get(spec.cid)
+                    if c is None:
+                        lines3.append((
+                            f"   {spec.desc[:46]:48s}"
+                            f"${spec.payout_m:>6,.0f}M   —",
+                            theme.COLORS["text_dim"]))
+                        continue
+                    if c.completed_t is not None:
+                        status, col3 = "PAID ✓", theme.COLORS["good"]
+                    elif c.failed:
+                        status = ("FAILED — renegotiation pending"
+                                  if c.retries < 2 else "FAILED — final")
+                        col3 = theme.COLORS["danger"]
+                    else:
+                        rem = c.deadline_s - t
+                        status = f"due in {theme.fmt_duration(rem)}"
+                        col3 = (theme.COLORS["warn"]
+                                if rem < spec.years * _YEAR * 0.25
+                                else theme.COLORS["text"])
+                        if c.retries:
+                            status += f"  (renegotiated x{c.retries})"
+                    lines3.append((
+                        f"   {c.description[:46]:48s}"
+                        f"${c.payout / 1e6:>6,.0f}M   {status}", col3))
+            max_rows = 24
+            contracts_scroll = max(0, min(contracts_scroll,
+                                          max(0, len(lines3) - max_rows)))
+            ly = ly0 + 36
+            for txt3, col3 in lines3[contracts_scroll:
+                                     contracts_scroll + max_rows]:
+                theme.draw_text(screen, lx0 + 18, ly, txt3, color=col3,
+                                font="small")
+                ly += 22
+            theme.draw_text(
+                screen, lx0 + 18, ly0 + 556,
+                f"{act_progress(program)} toward the next act   ·   "
+                "UP/DOWN scroll   O/ESC close",
+                color=theme.COLORS["text_dim"], font="small")
 
         if planner_open:
             prows = planner_rows_for(av, t)
@@ -4178,7 +4293,8 @@ def run(argv: list[str] | None = None) -> int:
                 )),
                 ("PROGRAM", (
                     ("B", "vessel builder"),
-                    ("R / K", "research tree · crew roster"),
+                    ("O", "contract ledger: every deadline and payout"),
+                    ("R / K", "research tree · crew roster (ENTER trains)"),
                     ("F2", "colony operations + construction"),
                     ("F5 / F9", "quicksave / quickload (autosaves 5 min)"),
                     ("H / F1", "tutorial rail · this screen"),
