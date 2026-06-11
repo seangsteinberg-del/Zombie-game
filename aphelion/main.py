@@ -25,6 +25,8 @@ Dev flags: --frames N  --screenshot PATH  --headless  --scene S
 from __future__ import annotations
 
 import argparse
+import colorsys
+import hashlib
 import json
 import math
 import os
@@ -63,6 +65,49 @@ _LEG_COLORS = [(120, 255, 170), (255, 200, 60), (255, 120, 200),
 _WARP_LADDER = (1.0,) + RAILS_RATES
 _PREDICT_HORIZON = 60.0 * SECONDS_PER_DAY
 _REVERT_WINDOW_S = 20.0      # pad-scrub window: ESC refunds only this long
+
+
+def _frame_color(frame_id: str) -> tuple[int, int, int]:
+    """Stable per-frame trajectory hue: a moon leg is ALWAYS the same color,
+    so a 3-leg prediction reads as a plan instead of a color-cycled tangle."""
+    h = int.from_bytes(hashlib.blake2b(frame_id.encode(),
+                                       digest_size=2).digest(), "little")
+    r, g, b = colorsys.hsv_to_rgb((h % 360) / 360.0, 0.55, 1.0)
+    return int(r * 255), int(g * 255), int(b * 255)
+
+
+def _wrap_pi(x: float) -> float:
+    return (x + math.pi) % (2.0 * math.pi) - math.pi
+
+
+def _transfer_window(mu_s: float, r1: float, r2: float,
+                     phase_now: float) -> tuple[float, float, float]:
+    """(wait_s, t_transfer_s, phase_required_rad) for a Hohmann departure
+    from circular r1 to r2 around mu_s, given the current target-minus-
+    origin phase angle. wait is in [0, synodic period)."""
+    _, _, t_tr = tr.hohmann(mu_s, r1, r2)
+    n_o = math.sqrt(mu_s / r1 ** 3)
+    n_t = math.sqrt(mu_s / r2 ** 3)
+    phase_req = math.pi - n_t * t_tr
+    dphase = n_t - n_o
+    syn = 2.0 * math.pi / abs(dphase)
+    wait = _wrap_pi(phase_req - phase_now) / dphase
+    wait %= syn
+    if wait < 0.0:
+        wait += syn
+    return wait, t_tr, phase_req
+
+
+def _next_apsis_times(el, t: float) -> tuple[float, float]:
+    """(next periapsis time, next apoapsis time) for an elliptic orbit."""
+    T = el.period
+    if not math.isfinite(T) or T <= 0.0:
+        return math.inf, math.inf
+    t_pe = el.tau + math.ceil((t - el.tau) / T + 1e-9) * T
+    t_ap = t_pe - T / 2.0
+    if t_ap <= t:
+        t_ap += T
+    return t_pe, t_ap
 _PAUSE_ITEMS = ("RESUME", "QUICKSAVE", "LOAD QUICKSAVE", "VOLUME -",
                 "VOLUME +", "EXIT TO MAIN MENU", "QUIT TO DESKTOP")
 
@@ -541,6 +586,12 @@ def run(argv: list[str] | None = None) -> int:
     crew_open = False
     crew_cursor = 0
     help_open = False
+    # map intelligence: target, transfer planner, warp-to-node
+    target_id: str | None = None
+    planner_open = False
+    planner_cursor = 0
+    warp_to_node = False
+    ca_cache = {"at": -1e9, "tgt": None, "d": None, "t": 0.0}
     autosave_acc = 0.0
     gold_flash = 0.0
     ascent_event_count = 0
@@ -564,6 +615,61 @@ def run(argv: list[str] | None = None) -> int:
             fs.set_alpha(int(255 * min(1.0, fade)))
             screen.blit(fs, (0, 0))
             fade = max(0.0, fade - 2.6 * real_dt)
+
+    def planner_rows_for(av0, t0: float) -> list[dict]:
+        """Transfer-window quotes from the active vessel's parking orbit —
+        built entirely on the tested Hohmann/synodic toolkit in
+        sim.orbits.transfers (which the UI never exposed until now)."""
+        rows: list[dict] = []
+        if av0 is None or av0.landed_at is not None:
+            return rows
+        origin = av0.frame_id
+        if origin not in planets:
+            return rows
+        mu_s = tree.body("core:sun").mu
+        b_o = tree.body(origin)
+        r1 = b_o.elements.a
+        ox, oy, _, _ = tree.state_in_root(origin, t0)
+        th_o = math.atan2(oy, ox)
+        crx, cry, _, _ = av0.state(t0)
+        park_r = math.hypot(crx, cry)
+        for pid in planets:
+            if pid == origin:
+                continue
+            b_t = tree.body(pid)
+            r2 = b_t.elements.a
+            _, dv2h, _ = tr.hohmann(mu_s, r1, r2)
+            tx, ty, _, _ = tree.state_in_root(pid, t0)
+            phase_now = _wrap_pi(math.atan2(ty, tx) - th_o)
+            wait, t_tr, _ = _transfer_window(mu_s, r1, r2, phase_now)
+            vinf = tr.hohmann_departure_vinf(mu_s, r1, r2)
+            dv_dep = tr.departure_dv(b_o.mu, park_r, vinf)
+            dv_cap = tr.departure_dv(b_t.mu, b_t.radius + 200e3, dv2h)
+            rows.append(dict(
+                pid=pid, name=pid.split(":")[1], wait=wait,
+                t_dep=t0 + wait, t_tr=t_tr, dv_dep=dv_dep, dv_cap=dv_cap,
+                affordable=dv_dep <= av0.dv_remaining))
+        return rows
+
+    def closest_approach(av0, tgt: str, t0: float) -> tuple[float, float]:
+        """(min distance m, when) sampling the prediction over ≤30 days —
+        the 'did I actually aim at it' number the map never gave."""
+        best_d, best_t = float("inf"), t0
+        horizon = min(_PREDICT_HORIZON, 30.0 * SECONDS_PER_DAY)
+        for leg in av0.predict(t0)[:3]:
+            lo = max(leg.t_start, t0)
+            hi = min(leg.t_end, t0 + horizon)
+            if hi <= lo:
+                continue
+            for k in range(33):
+                tt = lo + (hi - lo) * k / 32.0
+                ex, ey, _, _ = elements_to_state(leg.elements, tt)
+                fx2, fy2, _, _ = tree.state_in_root(leg.frame_id, tt)
+                tx2, ty2, _, _ = tree.state_in_root(tgt, tt)
+                d = math.hypot(fx2 + ex - tx2, fy2 + ey - ty2)
+                if d < best_d:
+                    best_d, best_t = d, tt
+        return best_d, best_t
 
     # ascent scene state (KSP-style flown launch)
     live: LiveAscent | None = None
@@ -733,6 +839,27 @@ def run(argv: list[str] | None = None) -> int:
                 if event.key in (pygame.K_F1, pygame.K_ESCAPE,
                                  pygame.K_RETURN, pygame.K_h):
                     help_open = False
+            elif event.type == pygame.KEYDOWN and planner_open:
+                av0 = vessels[active_idx % len(vessels)] if vessels else None
+                prows = planner_rows_for(av0, t)
+                if event.key in (pygame.K_ESCAPE, pygame.K_p) or not prows:
+                    planner_open = False
+                elif event.key == pygame.K_UP:
+                    planner_cursor = (planner_cursor - 1) % len(prows)
+                    audio.play("tick")
+                elif event.key == pygame.K_DOWN:
+                    planner_cursor = (planner_cursor + 1) % len(prows)
+                    audio.play("tick")
+                elif event.key == pygame.K_RETURN:
+                    row = prows[planner_cursor % len(prows)]
+                    node = {"t_node": row["t_dep"], "dvp": row["dv_dep"],
+                            "dvr": 0.0, "armed": False}
+                    target_id = row["pid"]
+                    planner_open = False
+                    toast = (f"TRANSFER NODE to {row['name']} at the window "
+                             f"— fine-tune ([/] arrows), ENTER arms, W warps")
+                    toast_until = t + 10
+                    audio.play("blip")
             elif event.type == pygame.KEYDOWN and pause_open:
                 if event.key == pygame.K_ESCAPE:
                     pause_open = False
@@ -1043,16 +1170,22 @@ def run(argv: list[str] | None = None) -> int:
                     if node is None:
                         node = {"t_node": t + 600.0, "dvp": 0.0, "dvr": 0.0,
                                 "armed": False}
-                        toast, toast_until = ("NODE placed +10 min: arrows set dv, "
-                                              "[/] move time, ENTER arm, N cancel"), t + 8
+                        toast, toast_until = (
+                            "NODE: arrows dv (CTRL 1/SHIFT 100)  [/] time "
+                            "(min/hr/day)  P/A snap Pe/Ap  O +1 orbit  "
+                            "ENTER arm  W warp", t + 10)
                     else:
                         node = None
+                        warp_to_node = False
                         toast, toast_until = "node cancelled", t + 4
                 elif node is not None and not node["armed"] and event.key in (
                         pygame.K_UP, pygame.K_DOWN, pygame.K_LEFT, pygame.K_RIGHT,
                         pygame.K_LEFTBRACKET, pygame.K_RIGHTBRACKET,
-                        pygame.K_RETURN):
-                    nstep = 100.0 if shift else 10.0
+                        pygame.K_p, pygame.K_a, pygame.K_o, pygame.K_RETURN):
+                    ctrl = event.mod & pygame.KMOD_CTRL
+                    nstep = 1.0 if ctrl else 100.0 if shift else 10.0
+                    tstep = 86_400.0 if ctrl else 3_600.0 if shift else 60.0
+                    av0 = vessels[active_idx % len(vessels)] if vessels else None
                     if event.key == pygame.K_UP:
                         node["dvp"] += nstep
                     elif event.key == pygame.K_DOWN:
@@ -1062,22 +1195,48 @@ def run(argv: list[str] | None = None) -> int:
                     elif event.key == pygame.K_LEFT:
                         node["dvr"] -= nstep
                     elif event.key == pygame.K_LEFTBRACKET:
-                        node["t_node"] = max(t + 60.0,
-                                             node["t_node"] - (600.0 if shift else 60.0))
+                        node["t_node"] = max(t + 60.0, node["t_node"] - tstep)
                     elif event.key == pygame.K_RIGHTBRACKET:
-                        node["t_node"] += 600.0 if shift else 60.0
+                        node["t_node"] += tstep
+                    elif (event.key in (pygame.K_p, pygame.K_a)
+                          and av0 is not None and av0.elements.alpha > 0):
+                        t_pe, t_ap = _next_apsis_times(av0.elements,
+                                                       max(t + 60.0,
+                                                           node["t_node"]
+                                                           - av0.elements.period))
+                        want = t_pe if event.key == pygame.K_p else t_ap
+                        while want <= t + 60.0:
+                            want += av0.elements.period
+                        node["t_node"] = want
+                        toast = ("node snapped to next "
+                                 + ("periapsis" if event.key == pygame.K_p
+                                    else "apoapsis"))
+                        toast_until = t + 4
+                    elif (event.key == pygame.K_o and av0 is not None
+                          and av0.elements.alpha > 0):
+                        node["t_node"] += av0.elements.period
                     elif event.key == pygame.K_RETURN:
                         need = math.hypot(node["dvp"], node["dvr"])
-                        av0 = vessels[active_idx % len(vessels)] if vessels else None
                         if (av0 is None or av0.landed_at is not None
                                 or need > av0.dv_remaining):
                             toast, toast_until = "node exceeds dv budget", t + 5
                             audio.play("alarm")
                         else:
                             node["armed"] = True
-                            toast, toast_until = ("node ARMED — warp on; burn "
-                                                  "executes on time"), t + 6
+                            toast, toast_until = ("node ARMED — W warps to "
+                                                  "the burn"), t + 6
                             audio.play("blip")
+                elif (node is not None and node["armed"]
+                      and event.key == pygame.K_RETURN):
+                    node["armed"] = False
+                    warp_to_node = False
+                    toast, toast_until = "node disarmed for editing", t + 4
+                elif (event.key == pygame.K_w and node is not None
+                      and node["armed"]):
+                    warp_to_node = True
+                    toast, toast_until = ("warping to the burn — any warp "
+                                          "key cancels"), t + 5
+                    audio.play("blip")
                 elif event.key == pygame.K_F2:
                     base_screen = not base_screen
                 elif event.key in (pygame.K_v, pygame.K_e, pygame.K_u,
@@ -1146,12 +1305,17 @@ def run(argv: list[str] | None = None) -> int:
                     else:
                         toast, toast_until = "no vessel — build one (B)", t + 5
                         audio.play("alarm")
+                elif event.key == pygame.K_p:
+                    planner_open = True
+                    planner_cursor = 0
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
                 elif event.key == pygame.K_PERIOD:
                     warp_idx = min(warp_idx + 1, len(_WARP_LADDER) - 1)
+                    warp_to_node = False
                 elif event.key == pygame.K_COMMA:
                     warp_idx = max(warp_idx - 1, 0)
+                    warp_to_node = False
                 elif event.key == pygame.K_TAB:
                     focus_idx = (focus_idx + (-1 if shift else 1)) % len(focus_order)
                 elif event.key == pygame.K_c:
@@ -1198,12 +1362,14 @@ def run(argv: list[str] | None = None) -> int:
             elif (event.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN,
                                  pygame.MOUSEWHEEL)
                   and (pause_open or help_open or surface_open or crew_open
-                       or base_screen or research_open or builder_open)
+                       or base_screen or research_open or builder_open
+                       or planner_open)
                   and scene == "flight"):
                 # every overlay is mouse-first: hover selects, click acts,
                 # wheel scrolls, right-click closes — by re-posting the
                 # exact key the keyboard path already handles
                 top = ("pause" if pause_open else "help" if help_open
+                       else "planner" if planner_open
                        else "surface" if surface_open
                        else "crew" if crew_open
                        else "base" if base_screen
@@ -1221,9 +1387,11 @@ def run(argv: list[str] | None = None) -> int:
 
                 def _set_cursor(idx) -> None:
                     nonlocal pause_cursor, surface_cursor, crew_cursor
-                    nonlocal base_cursor, research_cursor
+                    nonlocal base_cursor, research_cursor, planner_cursor
                     if top == "pause":
                         pause_cursor = idx
+                    elif top == "planner":
+                        planner_cursor = idx
                     elif top == "surface":
                         surface_cursor = idx
                     elif top == "crew":
@@ -1272,10 +1440,33 @@ def run(argv: list[str] | None = None) -> int:
                             _post(pygame.K_ESCAPE)
                 elif event.type == pygame.MOUSEWHEEL and event.y:
                     _post(pygame.K_UP if event.y > 0 else pygame.K_DOWN)
+            elif (event.type == pygame.MOUSEBUTTONDOWN and event.button == 3
+                  and not (pause_open or builder_open or research_open
+                           or base_screen or crew_open or surface_open
+                           or help_open or planner_open)):
+                # right-click a body: set/clear the navigation TARGET
+                mx, my = event.pos
+                best = None
+                best_d = 20.0 ** 2
+                for px, py, fi in body_click_pts:
+                    d = (px - mx) ** 2 + (py - my) ** 2
+                    if d < best_d:
+                        best, best_d = fi, d
+                if best is not None and focus_order[best] != "core:sun":
+                    bid = focus_order[best]
+                    if target_id == bid:
+                        target_id = None
+                        toast, toast_until = "target cleared", t + 4
+                    else:
+                        target_id = bid
+                        toast = (f"TARGET: {bid.split(':')[1]} — encounter "
+                                 f"and closest-approach on the NAV panel")
+                        toast_until = t + 6
+                    audio.play("tick")
             elif (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
                   and not (pause_open or builder_open or research_open
                            or base_screen or crew_open or surface_open
-                           or help_open)):
+                           or help_open or planner_open)):
                 mx, my = event.pos
                 best_v = None
                 best_d = 16.0 ** 2
@@ -1618,7 +1809,12 @@ def run(argv: list[str] | None = None) -> int:
                 running = False
             continue
 
-        # armed-node warp guard (01 §3.6): step down so the burn lands on time
+        # warp-to-node (W): climb the ladder while the burn is far away …
+        if node is not None and node["armed"] and warp_to_node:
+            while (warp_idx + 1 < len(_WARP_LADDER)
+                   and node["t_node"] - t >= _WARP_LADDER[warp_idx + 1] * 6.0):
+                warp_idx += 1
+        # … and the armed-node guard (01 §3.6) steps down to land on time
         if node is not None and node["armed"]:
             while (warp_idx > 0
                    and node["t_node"] - t < _WARP_LADDER[warp_idx] * 5.0):
@@ -1648,6 +1844,7 @@ def run(argv: list[str] | None = None) -> int:
                 audio.play("alarm")
             toast_until = t + 6
             node = None
+            warp_to_node = False
         # the whole fleet flies: SOI handoffs + first-entry science
         for fv in vessels:
             for note in fv.advance_to(t):
@@ -1829,7 +2026,35 @@ def run(argv: list[str] | None = None) -> int:
                         screen.blit(ring, (fpx[0] - ring.get_width() // 2,
                                            fpx[1] - ring.get_height() // 2))
 
-        # node preview: post-burn legs in magenta + node marker
+        # navigation target: bright orbit, its SOI bubble, a diamond tag —
+        # the thing you are trying to hit is no longer invisible
+        if target_id is not None and target_id in db.bodies:
+            tparent = db.bodies[target_id]["parent"]
+            torigin = ((0.0, 0.0) if tparent == "core:sun"
+                       else body_root(tparent))
+            draw_conic(screen, tree.body(target_id).elements, cam,
+                       (110, 190, 255), origin=torigin)
+            ttx, tty = body_root(target_id)
+            tpx = cam.world_to_screen(ttx, tty)
+            soi_t = tree.body(target_id).soi_radius
+            if math.isfinite(soi_t):
+                spx_t = int(soi_t * cam.zoom)
+                if 10 < spx_t <= 2000:
+                    ring = soi_ring(spx_t)
+                    if ring is not None:
+                        screen.blit(ring, (tpx[0] - ring.get_width() // 2,
+                                           tpx[1] - ring.get_height() // 2))
+            if (math.isfinite(tpx[0]) and math.isfinite(tpx[1])
+                    and -50 < tpx[0] < size[0] + 50
+                    and -50 < tpx[1] < size[1] + 50):
+                pygame.draw.polygon(screen, (110, 190, 255),
+                                    [(tpx[0], tpx[1] - 9), (tpx[0] + 9, tpx[1]),
+                                     (tpx[0], tpx[1] + 9), (tpx[0] - 9, tpx[1])],
+                                    width=1)
+
+        # node preview: post-burn legs (lightened frame hues) + node marker
+        node_post = None
+        node_enc = None
         if node is not None and av is not None:
             from aphelion.sim.flight.node_exec import ManeuverNode, apply_node_impulsive
             try:
@@ -1838,12 +2063,18 @@ def run(argv: list[str] | None = None) -> int:
                     ManeuverNode(node["t_node"], node["dvp"], node["dvr"]))
                 node_legs = predict_trajectory(tree, av.frame_id, post,
                                                node["t_node"], _PREDICT_HORIZON)
+                node_post = post
                 for leg in node_legs:
                     lfx, lfy = body_root(leg.frame_id)
                     r_soi_l = tree.body(leg.frame_id).soi_radius
-                    draw_conic(screen, leg.elements, cam, (255, 120, 220),
+                    fc = _frame_color(leg.frame_id)
+                    lite = tuple(min(255, int(c * 0.45 + 140)) for c in fc)
+                    draw_conic(screen, leg.elements, cam, lite,
                                r_max=r_soi_l if math.isfinite(r_soi_l) else None,
                                origin=(lfx, lfy))
+                    if (target_id is not None and node_enc is None
+                            and leg.frame_id == target_id):
+                        node_enc = leg
                 nfx, nfy = body_root(av.frame_id)
                 nx, ny, _, _ = elements_to_state(av.elements, node["t_node"])
                 npx = cam.world_to_screen(nfx + nx, nfy + ny)
@@ -1858,14 +2089,45 @@ def run(argv: list[str] | None = None) -> int:
         # the fleet: active vessel gets trajectory legs + big icon; the
         # rest draw as dim markers with names (click to take command)
         vessel_click_pts = []
+        soi_marks: list[tuple[float, float, str]] = []
+        apsis_marks: list[tuple[tuple, str, float]] = []
         if av is not None:
-            for i, leg in enumerate(av.predict(t)):
+            for leg in av.predict(t):
                 frx, fry = body_root(leg.frame_id)
                 r_soi = tree.body(leg.frame_id).soi_radius
                 r_max = r_soi if math.isfinite(r_soi) else None
                 draw_conic(screen, leg.elements, cam,
-                           _LEG_COLORS[i % len(_LEG_COLORS)],
+                           _frame_color(leg.frame_id),
                            r_max=r_max, origin=(frx, fry))
+                if leg.end_reason.startswith("soi"):
+                    ex, ey, _, _ = elements_to_state(leg.elements, leg.t_end)
+                    epx = cam.world_to_screen(frx + ex, fry + ey)
+                    if math.isfinite(epx[0]) and math.isfinite(epx[1]):
+                        nxt = (leg.end_reason.split(":", 1)[1]
+                               if ":" in leg.end_reason
+                               else db.bodies[leg.frame_id]["parent"])
+                        soi_marks.append(
+                            (epx[0], epx[1],
+                             f"{nxt.split(':')[-1]}  "
+                             f"{theme.fmt_duration(leg.t_end - t)}"))
+            # Ap/Pe chevrons on the CURRENT orbit when it subtends enough
+            if av.landed_at is None and av.elements.alpha > 0:
+                el_a = av.elements
+                frx, fry = body_root(av.frame_id)
+                body_r = tree.body(av.frame_id).radius
+                if 2.0 * el_a.a * cam.zoom > 70.0:
+                    for rr, ang, tag2 in (
+                            (el_a.periapsis, el_a.varpi, "Pe"),
+                            (el_a.apoapsis, el_a.varpi + math.pi, "Ap")):
+                        if not math.isfinite(rr) or (tag2 == "Ap"
+                                                     and el_a.e < 1e-4):
+                            continue
+                        ppx2 = cam.world_to_screen(frx + rr * math.cos(ang),
+                                                   fry + rr * math.sin(ang))
+                        if (math.isfinite(ppx2[0]) and math.isfinite(ppx2[1])
+                                and -40 < ppx2[0] < size[0] + 40
+                                and -40 < ppx2[1] < size[1] + 40):
+                            apsis_marks.append((ppx2, tag2, rr - body_r))
         for vi, fv in enumerate(vessels):
             vfx, vfy = body_root(fv.frame_id)
             if fv.landed_at is not None:
@@ -1900,6 +2162,27 @@ def run(argv: list[str] | None = None) -> int:
         particles.update_draw(screen, real_dt)
         bloom.apply(screen)
 
+        # crisp world annotations above the bloom: SOI crossings, Ap/Pe
+        for mx2, my2, lbl in soi_marks:
+            if -40 < mx2 < size[0] + 40 and -40 < my2 < size[1] + 40:
+                pygame.draw.polygon(
+                    screen, (235, 240, 250),
+                    [(mx2, my2 - 5), (mx2 + 5, my2), (mx2, my2 + 5),
+                     (mx2 - 5, my2)], width=1)
+                theme.draw_text(screen, int(mx2) + 8, int(my2) - 6, lbl,
+                                color=theme.COLORS["text_dim"], font="small")
+        for ppx2, tag2, alt_m in apsis_marks:
+            col = (theme.COLORS["accent"] if tag2 == "Pe"
+                   else theme.COLORS["warn"])
+            if alt_m < 0:
+                col = theme.COLORS["danger"]
+            pygame.draw.polygon(
+                screen, col, [(ppx2[0], ppx2[1] - 6), (ppx2[0] + 5, ppx2[1] + 3),
+                              (ppx2[0] - 5, ppx2[1] + 3)], width=1)
+            theme.draw_text(screen, ppx2[0] + 8, ppx2[1] - 7,
+                            f"{tag2} {alt_m / 1e3:,.0f} km", color=col,
+                            font="small")
+
         if node is not None:
             state_txt = "ARMED" if node["armed"] else "editing"
             screen.blit(font.render(
@@ -1907,6 +2190,22 @@ def run(argv: list[str] | None = None) -> int:
                 f"prograde {node['dvp']:+,.0f}  radial {node['dvr']:+,.0f}  "
                 f"({math.hypot(node['dvp'], node['dvr']):,.0f} m/s)",
                 True, (255, 120, 220)), (10, size[1] - 48))
+            if node_post is not None and av is not None:
+                body_r = tree.body(av.frame_id).radius
+                pe_post = node_post.periapsis - body_r
+                ap_post = (node_post.apoapsis - body_r
+                           if node_post.alpha > 0 else float("inf"))
+                after = (f"after: Pe {pe_post / 1e3:,.0f} km  Ap "
+                         + ("escape" if not math.isfinite(ap_post)
+                            else f"{ap_post / 1e3:,.0f} km"))
+                if node_enc is not None:
+                    enc_pe = (node_enc.elements.periapsis
+                              - tree.body(node_enc.frame_id).radius)
+                    after += (f"   ENCOUNTER {node_enc.frame_id.split(':')[1]}"
+                              f" — Pe {enc_pe / 1e3:,.0f} km"
+                              + ("  IMPACT" if enc_pe < 0 else ""))
+                screen.blit(font.render(after, True, (255, 170, 235)),
+                            (10, size[1] - 68))
 
         hud1 = (f"t {t / SECONDS_PER_DAY:9.3f} d   warp {_WARP_LADDER[warp_idx]:>9,.0f}x"
                 f"{'  [PAUSED]' if paused else ''}   focus: {focus.split(':')[-1]}"
@@ -1991,20 +2290,139 @@ def run(argv: list[str] | None = None) -> int:
             screen.blit(theme.bar(160, 7, frac, bcol), (cx0 + 44, yy + 17))
             yy += 34
 
+        # NAV panel: orbit clocks, target intelligence, fleet rendezvous —
+        # the questions the sim could always answer, finally on screen
+        nav_lines: list[tuple[str, tuple]] = []
+        if av is not None and av.landed_at is None:
+            el_n = av.elements
+            if el_n.alpha > 0:
+                t_pe_n, t_ap_n = _next_apsis_times(el_n, t)
+                nav_lines.append((
+                    f"T {theme.fmt_duration(el_n.period)}   "
+                    f"Pe in {theme.fmt_duration(t_pe_n - t)}   "
+                    f"Ap in {theme.fmt_duration(t_ap_n - t)}",
+                    theme.COLORS["text"]))
+            if target_id is not None:
+                tname = target_id.split(":")[1]
+                enc = next((leg for leg in legs_now
+                            if leg.frame_id == target_id), None)
+                if enc is not None and enc.t_start > t:
+                    pe_enc = (enc.elements.periapsis
+                              - tree.body(target_id).radius)
+                    nav_lines.append((
+                        f"ENCOUNTER {tname} in "
+                        f"{theme.fmt_duration(enc.t_start - t)} — Pe "
+                        f"{pe_enc / 1e3:,.0f} km"
+                        + ("  IMPACT" if pe_enc < 0 else ""),
+                        theme.COLORS["danger"] if pe_enc < 0
+                        else theme.COLORS["good"]))
+                else:
+                    if (ui_t - ca_cache["at"] > 0.5
+                            or ca_cache["tgt"] != target_id):
+                        d_ca, t_ca = closest_approach(av, target_id, t)
+                        ca_cache.update(at=ui_t, tgt=target_id, d=d_ca,
+                                        t=t_ca)
+                    if ca_cache["d"] is not None and math.isfinite(
+                            ca_cache["d"]):
+                        nav_lines.append((
+                            f"TGT {tname} — closest "
+                            f"{ca_cache['d'] / 1e3:,.0f} km in "
+                            f"{theme.fmt_duration(max(0.0, ca_cache['t'] - t))}",
+                            theme.COLORS["warn"]))
+            else:
+                nav_lines.append(("right-click a body to TARGET it",
+                                  theme.COLORS["text_dim"]))
+            others = [o for o in vessels
+                      if o is not av and o.frame_id == av.frame_id
+                      and o.landed_at is None]
+            if others:
+                arx, ary, avx2, avy2 = av.state(t)
+                best_o, best_rng, best_close = None, float("inf"), 0.0
+                for o in others:
+                    orx, ory, ovx, ovy = o.state(t)
+                    rng_m = math.hypot(orx - arx, ory - ary)
+                    if rng_m < best_rng:
+                        rel_r = (orx - arx, ory - ary)
+                        rel_v = (ovx - avx2, ovy - avy2)
+                        best_close = (-(rel_r[0] * rel_v[0]
+                                        + rel_r[1] * rel_v[1])
+                                      / max(rng_m, 1.0))
+                        best_o, best_rng = o, rng_m
+                if best_o is not None:
+                    in_env = best_rng < 100e3
+                    nav_lines.append((
+                        f"REL {best_o.name} — {best_rng / 1e3:,.1f} km  "
+                        f"{'closing' if best_close > 0 else 'opening'} "
+                        f"{abs(best_close):,.1f} m/s"
+                        + ("   E docks" if in_env else ""),
+                        theme.COLORS["good"] if in_env
+                        else theme.COLORS["accent"]))
+        if nav_lines:
+            npan = theme.panel(354, 34 + 20 * len(nav_lines), "NAV")
+            nx0, ny0 = size[0] - 364, 84
+            screen.blit(npan, (nx0, ny0))
+            for li, (txt2, col2) in enumerate(nav_lines):
+                theme.draw_text(screen, nx0 + 12, ny0 + 30 + li * 20, txt2,
+                                color=col2, font="small")
+
         screen.blit(theme.panel(size[0], 26), (0, size[1] - 26))
         theme.draw_text(
             screen, 10, size[1] - 21,
-            "X/Z A/D burn  B build  N node  V ship  E dock  U undock  "
-            "T xfeed  G surface  F2 colony  R research  K crew  "
-            "SPACE pause  ./, warp  F5/F9 save  F1 help  ESC menu",
+            "X/Z A/D burn  B build  N node  P planner  V ship  E dock  "
+            "U undock  T xfeed  G surface  F2 colony  R research  K crew  "
+            "SPACE pause  ./, warp  F1 help  ESC menu",
             color=theme.COLORS["text_dim"], font="small", shadow=False)
 
         # one shared dimmer under any content overlay (kills HUD bleed-through)
         if (base_screen and bases) or research_open or crew_open or (
-                surface_open and av is not None):
+                surface_open and av is not None) or planner_open:
             dimmer = pygame.Surface(size, pygame.SRCALPHA)
             dimmer.fill((4, 6, 10, 168))
             screen.blit(dimmer, (0, 0))
+
+        if planner_open:
+            prows = planner_rows_for(av, t)
+            ppan2 = theme.panel(760, 122 + 26 * max(1, len(prows)),
+                                "TRANSFER PLANNER")
+            ppx2, ppy2 = size[0] // 2 - 380, 110
+            screen.blit(ppan2, (ppx2, ppy2))
+            overlay_rects["planner"] = []
+            if not prows:
+                theme.draw_text(
+                    screen, ppx2 + 18, ppy2 + 42,
+                    "the planner quotes departures from a PARKING ORBIT "
+                    "around a planet — get one first",
+                    color=theme.COLORS["text_dim"], font="small")
+            else:
+                theme.draw_text(
+                    screen, ppx2 + 18, ppy2 + 34,
+                    f"{'DESTINATION':14s}{'WINDOW IN':>12s}{'TRANSIT':>12s}"
+                    f"{'DEPART dv':>12s}{'CAPTURE dv':>12s}",
+                    color=theme.COLORS["gold"], font="small")
+                for i, row in enumerate(prows):
+                    sel = i == planner_cursor % len(prows)
+                    ry2 = ppy2 + 58 + i * 26
+                    if sel:
+                        screen.blit(theme.row_glow(724, 24), (ppx2 + 14, ry2 - 3))
+                    col2 = (theme.COLORS["good"] if row["affordable"]
+                            else theme.COLORS["danger"])
+                    theme.draw_text(
+                        screen, ppx2 + 18, ry2,
+                        f"{row['name']:14s}"
+                        f"{theme.fmt_duration(row['wait']):>12s}"
+                        f"{theme.fmt_duration(row['t_tr']):>12s}"
+                        f"{row['dv_dep']:>10,.0f} m/s"
+                        f"{row['dv_cap']:>10,.0f} m/s",
+                        color=theme.COLORS["gold"] if sel else col2,
+                        font="small")
+                    overlay_rects["planner"].append(
+                        (pygame.Rect(ppx2 + 14, ry2 - 3, 724, 26), i))
+                theme.draw_text(
+                    screen, ppx2 + 18, ppy2 + 66 + len(prows) * 26,
+                    "ENTER places the departure node AT the window (sets "
+                    "target too)   ·   quotes assume your current parking "
+                    "orbit   ·   P/ESC close",
+                    color=theme.COLORS["text_dim"], font="small")
 
         if base_screen and bases:
             from aphelion.game.basebuild import CATALOG, catalog_for_kind
@@ -2472,14 +2890,19 @@ def run(argv: list[str] | None = None) -> int:
             dim = pygame.Surface(size, pygame.SRCALPHA)
             dim.fill((4, 6, 10, 200))
             screen.blit(dim, (0, 0))
-            hp = theme.panel(880, 540, "CONTROLS")
-            hpx, hpy = size[0] // 2 - 440, size[1] // 2 - 270
+            hp = theme.panel(880, 612, "CONTROLS")
+            hpx, hpy = size[0] // 2 - 440, size[1] // 2 - 306
             screen.blit(hp, (hpx, hpy))
             cols = (
                 ("FLIGHT", (
                     ("X / Z", "burn prograde / retrograde"),
                     ("A / D", "burn radial out / in  (SHIFT = 100 m/s)"),
-                    ("N", "maneuver node — arrows dv, [/] time, ENTER arm"),
+                    ("N", "node — arrows dv (CTRL fine), [/] time, "
+                          "P/A snap, O +1 orbit"),
+                    ("W", "warp to the armed node's burn"),
+                    ("P", "transfer planner: windows + dv to every planet"),
+                    ("right-click", "set TARGET body (encounter + closest "
+                                    "approach)"),
                     ("V / click", "switch command between vessels"),
                     ("E / U / T", "dock · undock · crossfeed propellant"),
                     ("G", "surface ops: land, relaunch, found a base"),
@@ -2513,7 +2936,7 @@ def run(argv: list[str] | None = None) -> int:
                                     color=theme.COLORS["text"], font="small")
                     hy += 21
                 hy += 8
-            theme.draw_text(screen, hpx + 28, hpy + 506,
+            theme.draw_text(screen, hpx + 28, hpy + 582,
                             "F1 / ESC — close",
                             color=theme.COLORS["text_dim"], font="small")
 
