@@ -23,8 +23,8 @@ def db():
 
 def test_catalog_lists_full_parts_pack(db):
     b = Builder(db, ResearchState())
-    # engines + tanks + payload + crew parts + gondola + precursor probe
-    assert len(b.catalog) == 35
+    # engines (incl. NTR + torch) + tanks + payload + crew + gondola + probe
+    assert len(b.catalog) == 37
 
 
 def test_research_gating_in_builder(db):

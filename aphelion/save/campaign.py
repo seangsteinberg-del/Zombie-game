@@ -52,7 +52,8 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
                       tutorial_done: bool, rng=None,
                       visited_surface: set[str] | None = None,
                       milestones: set[str] | None = None,
-                      builder_stack: list | None = None) -> dict:
+                      builder_stack: list | None = None,
+                      difficulty: str = "DIRECTOR") -> dict:
     """bases: objects with .name .last_t .pending_repairs .net (BaseSite)."""
     save = {
         "schema_version": SCHEMA_VERSION,
@@ -88,7 +89,10 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
                 "history": [list(h) for h in research.history],
             },
             "crew": {name: {"msv": m.dose.accumulated_msv, "role": m.role,
-                            "skill": m.skill} for name, m in crew.items()},
+                            "skill": m.skill,
+                            "busy": getattr(m, "busy_until", 0.0)}
+                     for name, m in crew.items()},
+            "difficulty": difficulty,
             "visited": sorted(visited),
             "visited_surface": sorted(visited_surface or set()),
             "milestones": sorted(milestones or set()),
@@ -133,7 +137,8 @@ def restore_campaign(save: dict, db, tree):
     for name, cd in c["crew"].items():
         if isinstance(cd, dict):
             crew[name] = CrewMember(name, cd["role"], cd["skill"],
-                                    CrewDose(cd["msv"]))
+                                    CrewDose(cd["msv"]),
+                                    busy_until=cd.get("busy", 0.0))
         else:                       # early-v2 shape: bare msv float
             crew[name] = CrewMember(name, "pilot", 1, CrewDose(cd))
     vessels = []
@@ -177,6 +182,7 @@ def restore_campaign(save: dict, db, tree):
         "milestones": set(c.get("milestones", [])),
         "tutorial_done": c["tutorial_done"],
         "builder_stack": c.get("builder_stack", []),
+        "difficulty": c.get("difficulty", "DIRECTOR"),
         "bases": bases,
         "rng_state": save.get("rng"),
     }

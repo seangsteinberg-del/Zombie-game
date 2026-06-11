@@ -52,6 +52,7 @@ class Contract:
     deadline_s: float
     completed_t: float | None = None
     failed: bool = False
+    retries: int = 0                # re-negotiations consumed (max 2)
 
 
 @dataclass(slots=True)

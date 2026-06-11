@@ -1,0 +1,12 @@
+id        = "core:engine_torch_d1"
+type      = "engine"
+tier      = "T4"
+name      = "D-1 Daystar fusion torch [SPECULATIVE]"
+mass_t    = 6.0
+[engine]
+thrust_kN  = 120.0
+isp_s      = 8000.0
+isp_sl_s   = 8000.0
+throttle   = [0.1, 1.0]
+gimbal_deg = 1.0
+propellant = { Hydrogen = 1.0 }

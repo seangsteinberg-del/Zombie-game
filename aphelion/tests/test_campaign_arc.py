@@ -68,7 +68,8 @@ def test_contract_payout_flows_to_funds():
     S = _state(milestones={"orbited"})
     sweep(program, S, 0.0)
     sweep(program, S, 1.0)
-    assert program.funds == pytest.approx(100e6)
+    # base $100M plus the +25% early-delivery bonus (depth update)
+    assert program.funds == pytest.approx(125e6)
 
 
 def test_precursor_win_condition(world):

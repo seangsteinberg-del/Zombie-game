@@ -1,0 +1,12 @@
+id        = "core:engine_ntr_k2"
+type      = "engine"
+tier      = "T2"
+name      = "K-2 Kingfisher nuclear-thermal engine (NERVA-D)"
+mass_t    = 2.3
+[engine]
+thrust_kN  = 245.0
+isp_s      = 900.0
+isp_sl_s   = 380.0
+throttle   = [0.3, 1.0]
+gimbal_deg = 2.0
+propellant = { Hydrogen = 1.0 }

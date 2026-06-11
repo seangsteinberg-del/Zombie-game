@@ -19,10 +19,17 @@ class CrewMember:
     role: str
     skill: int                      # 1-3
     dose: CrewDose = field(default_factory=CrewDose)
+    busy_until: float = 0.0         # in training until this sim time
+
+    TRAIN_COST = 12.0e6
+    TRAIN_DAYS = 90.0
 
     @property
     def hire_cost(self) -> float:
         return (4.0 + 4.0 * self.skill) * 1e6
+
+    def available(self, t: float) -> bool:
+        return t >= self.busy_until
 
 
 # deterministic candidate pool (the 2049 astronaut class; hire in order)

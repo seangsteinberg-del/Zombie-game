@@ -79,7 +79,7 @@ CATALOG: dict[str, dict] = {
         "name": "Field science lab", "price_m": 22.0, "power_kw": 15.0,
         "primary": None, "inputs": {}, "outputs": {},
         "mtbf_d": 70.0, "kinds": "*", "tech": None,
-        "sci_per_day": 1.5, "ed_per_day": 1.5,
+        "sci_per_day": 2.5, "ed_per_day": 2.5,
     },
     "hab_module": {
         "name": "Habitat module (4 beds)", "price_m": 25.0, "power_kw": 5.0,
