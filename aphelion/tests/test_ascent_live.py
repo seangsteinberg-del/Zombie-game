@@ -97,6 +97,19 @@ def test_throttle_cut_means_freefall(db):
     assert live.h != h0
 
 
+def test_cannot_stage_away_the_whole_vehicle(db):
+    """Regression: spamming SPACE staged away every row -> mass 0 ->
+    ZeroDivisionError in step()."""
+    live = LiveAscent.from_pad(_two_stage(db), "core:earth", MU_E, R_E, T_ROT)
+    live.ignite()
+    _run(live, 5.0)
+    assert live.stage() is True          # booster away
+    assert live.stage() is False         # the last stage IS the vehicle
+    assert live.vessel.total_mass_kg() > 0.0
+    _run(live, 5.0)                      # must not raise
+    assert live.outcome != "lost" or live.h < 0  # no breakup from staging
+
+
 def test_q_telemetry_peaks_in_atmosphere(db):
     live = LiveAscent.from_pad(_two_stage(db), "core:earth", MU_E, R_E, T_ROT)
     live.ignite()

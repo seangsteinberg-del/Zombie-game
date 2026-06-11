@@ -84,7 +84,8 @@ class LiveAscent:
             self.events.append("IGNITION — liftoff")
 
     def stage(self) -> bool:
-        if self.outcome is None and self.vessel.stage_plan:
+        # the last stage IS the vehicle — it cannot be staged away
+        if self.outcome is None and len(self.vessel.stage_plan) > 1:
             self.vessel.stage()
             self.stages_spent += 1
             self.events.append(f"t={self.t:6.1f}s  STAGE {self.stages_spent} away")
@@ -116,6 +117,10 @@ class LiveAscent:
             return                      # clamped to the pad
 
         m = self.vessel.total_mass_kg()
+        if m <= 0.0:                    # defensive: nothing left to fly
+            self.outcome = "lost"
+            self.events.append("VEHICLE BREAKUP — nothing left to fly")
+            return
         rho = density(self.body_id, max(self.h, 0.0))
         atmo_frac = min(1.0, rho / 1.225)
         vax = self.vx - (-self.omega * self.y)
@@ -167,8 +172,8 @@ class LiveAscent:
                 if f <= 0.0 and "FLAMEOUT" not in (self.events[-1:] or [""])[0]:
                     self.events.append(
                         f"t={self.t:6.1f}s  FLAMEOUT — stage empty"
-                        + ("" if not self.vessel.stage_plan
-                           else " (SPACE to stage)"))
+                        + (" (SPACE to stage)"
+                           if len(self.vessel.stage_plan) > 1 else ""))
                 if self.prog and self.vessel.stage_plan and len(
                         self.vessel.stage_plan) > 1:
                     self.stage()
