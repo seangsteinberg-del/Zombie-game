@@ -791,8 +791,23 @@ def run(argv: list[str] | None = None) -> int:
     toast_key: tuple = ("", 0.0)
     toast_real0 = -10.0
 
+    # film grain: 4 pre-rendered sparse luminance-noise frames, cycled —
+    # one alpha blit per frame, kills the too-clean software-render look
+    grain_frames: list = []
+    _grng = np.random.default_rng(909)
+    for _gi in range(4):
+        _gs = pygame.Surface(size, pygame.SRCALPHA)
+        _ga = pygame.surfarray.pixels_alpha(_gs)
+        _ga[...] = (_grng.random((size[0], size[1])) ** 3 * 24).astype(np.uint8)
+        del _ga
+        _grgb = pygame.surfarray.pixels3d(_gs)
+        _grgb[...] = 235
+        del _grgb
+        grain_frames.append(_gs)
+
     def apply_fade() -> None:
         nonlocal fade
+        screen.blit(grain_frames[frame_count & 3], (0, 0))
         if fade > 0.0:
             fs = pygame.Surface(size)
             fs.fill((4, 6, 10))
@@ -905,6 +920,7 @@ def run(argv: list[str] | None = None) -> int:
     ascent_warp = 1.0
     ascent_acc = 0.0
     rot_cache: dict = {}
+    menu_limb = None        # lazy hero Earth limb for the title screen
     # ---- ascent/descent scene dressing (cached in surface_art) -----------
     cloud_spr = pygame.Surface((150, 52), pygame.SRCALPHA)
     for _cx, _cy, _cr in ((40, 30, 22), (72, 24, 27), (104, 30, 20),
@@ -2807,42 +2823,75 @@ def run(argv: list[str] | None = None) -> int:
             screen.fill((6, 8, 14))
             nebula.draw(screen, cam)
             starfield.draw(screen, cam)
-            title = font_big.render("A P H E L I O N", True, (140, 235, 255))
-            screen.blit(title, (size[0] // 2 - title.get_width() // 2, 150))
-            sub = font.render(
-                "a hard-realism solar-system program  ·  2049", True,
-                (110, 122, 140))
-            screen.blit(sub, (size[0] // 2 - sub.get_width() // 2, 205))
+            # hero: a lit Earth limb breathing at the bottom of the frame
+            if menu_limb is None:
+                menu_limb = pygame.transform.smoothscale(
+                    body_sprite("core:earth", 360, -math.pi / 2),
+                    (1240, 1240))
+            screen.blit(menu_limb,
+                        (size[0] // 2 - 620,
+                         size[1] - 296 + int(5 * math.sin(ui_t * 0.23))))
+            title = theme.tracked("APHELION", "ui_huge",
+                                  theme.COLORS["accent"], 20)
+            tx0 = size[0] // 2 - title.get_width() // 2
+            screen.blit(title, (tx0, 128))
+            for rx0, rx1 in ((tx0 - 150, tx0 - 28),
+                             (tx0 + title.get_width() + 28,
+                              tx0 + title.get_width() + 150)):
+                pygame.draw.line(screen, (90, 150, 175), (rx0, 156),
+                                 (rx1, 156), 1)
+            sub = theme.tracked("A HARD-REALISM SOLAR-SYSTEM PROGRAM · 2049",
+                                "ui_small", (132, 146, 166), 3)
+            screen.blit(sub, (size[0] // 2 - sub.get_width() // 2, 196))
             items = (list(_DIFFICULTIES) if menu_mode == "difficulty"
                      else ["NEW CAMPAIGN"]
                      + (["CONTINUE"] if latest_save() else [])
                      + ["QUIT"])
             if menu_mode == "difficulty":
-                head = font_med.render("SELECT PROGRAM DIFFICULTY", True,
-                                       (140, 235, 255))
-                screen.blit(head, (size[0] // 2 - head.get_width() // 2, 258))
+                head = theme.tracked("SELECT PROGRAM DIFFICULTY", "ui_title",
+                                     theme.COLORS["accent"], 4)
+                screen.blit(head, (size[0] // 2 - head.get_width() // 2, 252))
             menu_rects = []
+            card_w = 700 if menu_mode == "difficulty" else 300
             for i, label in enumerate(items):
                 sel = i == menu_cursor % len(items)
-                color = (255, 215, 130) if sel else (200, 210, 224)
-                line = label
+                card = pygame.Rect(size[0] // 2 - card_w // 2,
+                                   298 + i * 46, card_w, 38)
+                fill = (24, 36, 58) if sel else (12, 18, 30)
+                pygame.draw.rect(screen, fill, card, border_radius=8)
+                pygame.draw.rect(
+                    screen,
+                    theme.COLORS["gold"] if sel
+                    else theme.COLORS["panel_edge"],
+                    card, width=1, border_radius=8)
+                tcol = (theme.COLORS["gold"] if sel
+                        else theme.COLORS["text"])
                 if menu_mode == "difficulty":
                     d = _DIFFICULTIES[label]
-                    line = (f"{label:9s}  ${d['funds'] / 1e6:,.0f}M — "
-                            f"{d['blurb']}")
-                txt = font_med.render(("> " if sel else "  ") + line, True,
-                                      color)
-                pos = (size[0] // 2 - (330 if menu_mode == "difficulty"
-                                       else 110), 300 + i * 36)
-                screen.blit(txt, pos)
-                menu_rects.append(pygame.Rect(pos[0], pos[1] - 4,
-                                              660 if menu_mode == "difficulty"
-                                              else 280, 30))
-            foot = font.render(
-                "arrows + ENTER or click  ·  F11 fullscreen  ·  M mute  ·  "
-                "ESC quit", True, (110, 122, 140))
-            screen.blit(foot, (size[0] // 2 - foot.get_width() // 2,
-                               size[1] - 60))
+                    theme.draw_text(screen, card.x + 24, card.y + 9, label,
+                                    color=tcol, font="ui")
+                    theme.draw_text(screen, card.x + 170, card.y + 9,
+                                    f"${d['funds'] / 1e6:,.0f}M",
+                                    color=theme.COLORS["gold"], font="ui")
+                    theme.draw_text(screen, card.x + 268, card.y + 10,
+                                    d["blurb"],
+                                    color=theme.COLORS["text_dim"],
+                                    font="ui_small")
+                else:
+                    img = theme.init_fonts()["ui"].render(label, True, tcol)
+                    screen.blit(img, (card.centerx - img.get_width() // 2,
+                                      card.y + 9))
+                menu_rects.append(card)
+            foot = theme.tracked(
+                "ARROWS + ENTER OR CLICK  ·  F11 FULLSCREEN  ·  M MUTE  ·  "
+                "ESC QUIT", "ui_small", (148, 160, 180), 2)
+            fx0 = size[0] // 2 - foot.get_width() // 2
+            fpill = pygame.Surface((foot.get_width() + 36, 28),
+                                   pygame.SRCALPHA)
+            pygame.draw.rect(fpill, (6, 10, 18, 175), fpill.get_rect(),
+                             border_radius=14)
+            screen.blit(fpill, (fx0 - 18, size[1] - 59))
+            screen.blit(foot, (fx0, size[1] - 53))
             bloom.apply(screen)
             screen.blit(vig, (0, 0))
             apply_fade()
