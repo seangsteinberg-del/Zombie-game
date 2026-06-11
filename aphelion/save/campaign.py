@@ -118,6 +118,8 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
                 "crew": list(getattr(b, "crew", [])),
                 "last_t": b.last_t,
                 "pending_repairs": [list(r) for r in b.pending_repairs],
+                "pending_commission": [list(c) for c in
+                                       getattr(b, "pending_commission", [])],
                 "ledger": ledger_to_dict(b.net),
                 "module_extras": {m.module_id: {
                     "mtbf_s": _num(m.mtbf_s), "failure_t": _num(m.failure_t),
@@ -200,6 +202,8 @@ def restore_campaign(save: dict, db, tree):
             "built": bd.get("built", ["solar_array"]),
             "crew": bd.get("crew", []),
             "pending_repairs": [tuple(r) for r in bd["pending_repairs"]],
+            "pending_commission": [tuple(c) for c in
+                                   bd.get("pending_commission", [])],
             "net": net,
         })
     return {

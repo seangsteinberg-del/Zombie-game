@@ -151,6 +151,73 @@ def test_storable_propellant_chain_exists():
     assert nto["inputs"]["Oxygen"] == pytest.approx(0.70)
 
 
+def test_construction_pipeline_deploy_to_commission():
+    """07 §2.3: ISRU-built structures consume LOCAL materials and only
+    come online after the build schedule elapses."""
+    base = BaseSite("Vault Base", 0.0, RngRegistry(13),
+                    site_id="core:sec_moon_07")
+    program = Program(funds=2e9)
+    rs = _rs("core:tech_is02_regolith_excavation",
+             "core:tech_is05_polar_ice_mining",
+             "core:tech_hb03_regolith_printing",
+             "core:tech_is09b_materials_chem",
+             "core:tech_pw05_fission_surface")
+    # no regolith banked yet: the vault refuses
+    ok, msg = base.build("regolith_vault", 0.0, rs, program)
+    assert not ok and "materials" in msg
+    # mine sinter feed + fiber first
+    for key in ("bucket_wheel", "reactor_100", "yard_extension",
+                "basalt_furnace"):
+        ok, msg = base.build(key, 0.0, rs, program)
+        assert ok, msg
+    base.advance(3.0 * DAY)
+    assert base.net.buffers["Regolith"].level > 150_000.0
+    assert base.net.buffers["BasaltFiber"].level > 700.0
+    t0 = base.last_t
+    ok, msg = base.build("regolith_vault", t0, rs, program)
+    assert ok and "DEPLOYING" in msg
+    vault = next(m for m in base.net.modules
+                 if m.module_id.startswith("regolith_vault"))
+    assert vault.state == "OFF"
+    base.advance(t0 + 30.0 * DAY)
+    assert vault.state == "OFF"              # 60-day print, halfway
+    base.advance(t0 + 61.0 * DAY)
+    assert vault.state == "RUNNING"          # commissioned
+    assert any(e.kind == "commissioned" for e in base.events)
+    assert base.beds() == 5                  # the vault's berths count
+
+
+def test_food_chain_greenhouse():
+    """Farms: a greenhouse turns water + CO2 + power into FoodRations
+    and oxygen (08 agriculture, HAB-06)."""
+    base = BaseSite("Agri Base", 0.0, RngRegistry(21),
+                    site_id="site:jezero")
+    program = Program(funds=2e9)
+    rs = _rs("core:tech_is05_polar_ice_mining",
+             "core:tech_is06_mars_atmo_processing",
+             "core:tech_ls04_greenhouse", "core:tech_is09b_materials_chem",
+             "core:tech_is02_regolith_excavation",
+             "core:tech_pw05_fission_surface")
+    for key in ("drill_ice", "co2_intake", "bucket_wheel", "glass_furnace",
+                "reactor_100", "reactor_100", "yard_extension"):
+        ok, msg = base.build(key, 0.0, rs, program)
+        assert ok, msg
+    base.advance(3.0 * DAY)                  # bank glass for the dome
+    ok, msg = base.build("greenhouse", base.last_t, rs, program)
+    assert ok, msg
+    base.advance(base.last_t + 40.0 * DAY)
+    assert base.net.buffers["FoodRations"].level > 100.0
+    assert base.net.buffers["Oxygen"].level > 100.0
+
+
+def test_machine_shop_makes_maintenance_currency():
+    mod = CATALOG["machine_shop"]
+    assert mod["primary"][0] == "MachineParts"
+    assert mod["tech"] == "core:tech_in01_workshop"
+    mill = CATALOG["struct_mill"]
+    assert mill["primary"][0] == "StructuralParts"
+
+
 def test_he3_kiln_is_speculative_endgame():
     kiln = CATALOG["he3_kiln"]
     assert kiln["tech"] == "core:tech_is20_he3_kiln"

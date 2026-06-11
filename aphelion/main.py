@@ -271,6 +271,7 @@ class BaseSite:
         self.last_t = t_founded
         self.events: list = []
         self.pending_repairs: list[tuple[float, str]] = []
+        self.pending_commission: list[tuple[float, str]] = []
         self.built: list[str] = ["solar_array"]
         self.crew: list[str] = []
         self.day_sched_until = t_founded
@@ -351,15 +352,26 @@ class BaseSite:
         return "module not found"
 
     def build(self, key: str, t: float, research, program) -> tuple[bool, str]:
-        """Buy and install a module from the base catalog."""
+        """Buy and install a module from the base catalog. ISRU-built
+        structures consume LOCAL materials and commission after a real
+        Deploy->Outfit->Commission schedule (07 §2.3)."""
         from aphelion.game.basebuild import CATALOG, add_module
         spec = CATALOG[key]
         if spec["tech"] and spec["tech"] not in research.unlocked:
             return False, f"{spec['name']} needs research: {spec['tech'].split(':')[1]}"
+        self.advance(t)                       # settle the ledger first
+        mats = spec.get("build_materials", {})
+        missing = [(r, kg) for r, kg in mats.items()
+                   if self.net.buffers.get(r) is None
+                   or self.net.buffers[r].level < kg]
+        if missing:
+            need = ", ".join(f"{kg / 1e3:,.1f} t {r}" for r, kg in missing)
+            return False, f"needs local materials: {need}"
         cost = spec["price_m"] * 1e6
         if not program.spend(t, cost, f"base module {key}"):
             return False, f"insufficient funds (${spec['price_m']:,.0f}M)"
-        self.advance(t)                       # settle the ledger first
+        for r, kg in mats.items():
+            self.net.buffers[r].level -= kg
         mod = add_module(self.net, key, SITES[self.site_id],
                          serial=len(self.built))
         self.built.append(key)
@@ -368,6 +380,16 @@ class BaseSite:
             schedule_day_night(self.net, [mod.module_id], t,
                                SITES[self.site_id]["day_s"],
                                max(self.day_sched_until - t, 86_400.0))
+        days = spec.get("build_days", 0.0)
+        if days > 0.0:
+            mod.state = "OFF"                 # deploying, not yet online
+            self.pending_commission.append(
+                (t + days * 86_400.0, mod.module_id))
+            used = ("  using " + ", ".join(f"{kg / 1e3:,.1f}t {r}"
+                                           for r, kg in mats.items())
+                    if mats else "")
+            return True, (f"{spec['name']} DEPLOYING — commissions in "
+                          f"{days:.0f} d{used} (${spec['price_m']:,.0f}M)")
         return True, f"{spec['name']} ONLINE (${spec['price_m']:,.0f}M)"
 
     @classmethod
@@ -375,7 +397,8 @@ class BaseSite:
                      pending_repairs: list, net,
                      site_id: str = "site:peary",
                      built: list[str] | None = None,
-                     crew: list[str] | None = None) -> "BaseSite":
+                     crew: list[str] | None = None,
+                     pending_commission: list | None = None) -> "BaseSite":
         site = cls.__new__(cls)
         site.site_id = site_id
         site.built = list(built or ["solar_array"])
@@ -384,6 +407,8 @@ class BaseSite:
         site.last_t = last_t
         site.events = []
         site.pending_repairs = list(pending_repairs)
+        site.pending_commission = [tuple(c) for c in
+                                   (pending_commission or [])]
         site.net = net
         site.day_sched_until = last_t
         site.day_anchor = last_t
@@ -402,13 +427,15 @@ class BaseSite:
             guard += 1
             self.net.roll_failures(self.last_t)
             t_rep = min((r[0] for r in self.pending_repairs), default=float("inf"))
+            t_com = min((c[0] for c in self.pending_commission),
+                        default=float("inf"))
             # clamp at the next PRE-ROLLED failure too (13 §3.9: fates are
             # knowable) — else a long span strands its repairs forever
             t_fail = min((m.failure_t for m in self.net.modules
                           if m.failure_t is not None
                           and m.failure_t > self.last_t + 1e-6),
                          default=float("inf"))
-            t_stop = min(t, t_rep, t_fail + 1.0)
+            t_stop = min(t, t_rep, t_fail + 1.0, t_com)
             evs = self.net.advance(self.last_t, t_stop)
             new_events.extend(evs)
             for e in evs:
@@ -421,6 +448,15 @@ class BaseSite:
                 mod = [m for m in self.net.modules if m.module_id == due[1]][0]
                 self.net.repair(mod, due[0])
                 new_events.append(LedgerEvent(due[0], "repaired", due[1]))
+            if t_com <= t_stop + 1e-6:
+                due_c = min(self.pending_commission)
+                self.pending_commission.remove(due_c)
+                for m in self.net.modules:
+                    if m.module_id == due_c[1] and m.state == "OFF":
+                        m.state = "RUNNING"
+                        new_events.append(
+                            LedgerEvent(due_c[0], "commissioned",
+                                        due_c[1]))
             self.last_t = t_stop
         self.events.extend(new_events)
         if len(self.events) > self.LOG_CAP:       # bounded log
@@ -769,7 +805,8 @@ def run(argv: list[str] | None = None) -> int:
                                                  b["pending_repairs"], b["net"],
                                                  b.get("site_id", "site:peary"),
                                                  b.get("built"),
-                                                 b.get("crew"))
+                                                 b.get("crew"),
+                                                 b.get("pending_commission"))
                            for b in got["bases"]],
                     crew=got["crew"], research=got["research"],
                     visited=got["visited"],
@@ -3380,6 +3417,10 @@ def run(argv: list[str] | None = None) -> int:
                              f"{eta_h:,.0f} h")
                     toast_until = t + 8
                     audio.play("alarm")
+                elif ev.kind == "commissioned":
+                    toast = f"{site.name}: {ev.subject} COMMISSIONED — online"
+                    toast_until = t + 8
+                    audio.play("paid")
                 elif ev.kind == "repaired":
                     # investigated failure: lessons learned pay family ED
                     fam = MODULE_FAMILY.get(
