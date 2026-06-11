@@ -68,6 +68,29 @@ def schedule_day_night(net: LedgerNetwork, array_ids: list[str],
         on = not on
 
 
+# environment sink temperatures, K (09 H-2): what your radiators stare at.
+# Two entries per site kind: (day, night). The lunar-noon 330 K trap and
+# Titan's gorgeous 94 K sink are the gameplay extremes.
+SINK_K: dict[str, tuple[float, float]] = {
+    "psr_ice": (100.0, 100.0),       # crater shadow: always cold
+    "regolith": (330.0, 100.0),      # airless noon trap / cold night
+    "mars_ice": (235.0, 180.0),
+    "aerostat": (310.0, 310.0),      # Venus cloud deck: warm, convective
+    "methane_lake": (94.0, 94.0),    # Titan: the best sink in the system
+    "ice_burrow": (110.0, 90.0),
+}
+RADIATOR_T_K = 400.0                 # habitat-loop panel temperature (H-1)
+
+
+def sink_factor(kind: str, daylight: bool) -> float:
+    """Radiator effectiveness vs its rated cold-sink capacity:
+    (T_r^4 − T_sink^4)/T_r^4, floored at 15% (heat pumps exist)."""
+    day, night = SINK_K.get(kind, (200.0, 150.0))
+    t_sink = day if daylight else night
+    f = 1.0 - (t_sink / RADIATOR_T_K) ** 4
+    return max(0.15, f)
+
+
 def thermal_balance_kw(net: LedgerNetwork) -> tuple[float, float]:
     """(heat emitted, rejection capacity), kW. v1 rule: every powered
     consumer emits its consumed power as heat (09 H-0: 'there is no fourth

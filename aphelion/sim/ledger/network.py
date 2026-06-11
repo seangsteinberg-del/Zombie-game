@@ -55,6 +55,9 @@ class Module:
     outputs: dict[str, float]       # includes byproducts; primary first
     rate_kgps: float                # nominal primary output, kg/s
     power_kw: float = 0.0           # +consumes, -produces (solar/reactor)
+    # load-shed priority (09 P-1): 1 survival -> 5 bulk industry; when the
+    # grid browns out, high numbers shed first
+    priority: int = 3
     state: str = RUNNING
     f_condition: float = 1.0
     f_labor: float = 1.0
@@ -154,30 +157,25 @@ class LedgerNetwork:
             frac[m.module_id] = (m.f_condition * m.f_labor * m.yield_y
                                  if runnable else 0.0)
 
-        f_power = 1.0
         battery = self.buffers.get(BATTERY)
+        alloc: dict[str, float] = {}
 
         for _ in range(_FIXED_POINT_MAX):
             changed = 0.0
 
-            # power coupling (global): demand is taken at the NON-power-
-            # limited fractions — throttled demand would oscillate (throttle
-            # satisfies demand -> unthrottle -> deficit -> throttle ...)
-            demand = sum(m.power_kw * frac[m.module_id]
-                         for m in self.modules
-                         if m.power_kw > 0.0 and frac[m.module_id] > 0.0)
-            supply = sum(-m.power_kw for m in self.modules
-                         if m.power_kw < 0.0 and m.state not in (OFF, FAILED))
-            if demand > supply and (battery is None or battery.level <= 0.0):
-                new_fp = supply / demand if demand > 0.0 else 1.0
-            else:
-                new_fp = 1.0
-            if abs(new_fp - f_power) > 1e-12:
-                changed = max(changed, abs(new_fp - f_power))
-                f_power = new_fp
+            # power coupling (09 P-1 priority dispatch): demand is taken at
+            # the NON-power-limited fractions — throttled demand would
+            # oscillate. When the grid browns out (no battery charge),
+            # survival loads (priority 1) are served first; bulk industry
+            # (priority 5) sheds first; the marginal tier pro-rates.
+            new_alloc = self._power_alloc(frac, battery)
+            for mid, f in new_alloc.items():
+                if abs(f - alloc.get(mid, 1.0)) > 1e-12:
+                    changed = max(changed, abs(f - alloc.get(mid, 1.0)))
+            alloc = new_alloc
 
             # per-resource net rates at current fractions
-            rates = self._buffer_rates(frac, f_power)
+            rates = self._buffer_rates(frac, alloc)
 
             # throttle by empty inputs / full outputs
             for m in self.modules:
@@ -191,14 +189,14 @@ class LedgerNetwork:
                     buf = self.buffers.get(res)
                     if buf is None or buf.level > 0.0:
                         continue
-                    inflow = max(0.0, self._inflow_excluding(res, m, frac, f_power))
+                    inflow = max(0.0, self._inflow_excluding(res, m, frac, alloc))
                     cap_f = inflow / (stoich * m.rate_kgps) if stoich * m.rate_kgps > 0 else 0.0
                     limit = min(limit, cap_f)
                 for res, stoich in m.outputs.items():
                     buf = self.buffers.get(res)
                     if buf is None or buf.level < buf.capacity:
                         continue
-                    drain = max(0.0, -self._inflow_excluding(res, m, frac, f_power))
+                    drain = max(0.0, -self._inflow_excluding(res, m, frac, alloc))
                     cap_f = drain / (stoich * m.rate_kgps) if stoich * m.rate_kgps > 0 else 0.0
                     limit = min(limit, cap_f)
                 new_f = max(0.0, min(f, limit))
@@ -209,28 +207,67 @@ class LedgerNetwork:
             if changed <= 1e-12:
                 break
 
-        rates = self._buffer_rates(frac, f_power)
+        rates = self._buffer_rates(frac, alloc)
         module_rates = {
             m.module_id: frac[m.module_id] * m.rate_kgps
-            * (f_power if m.power_kw > 0.0 else 1.0)
+            * (alloc.get(m.module_id, 1.0) if m.power_kw > 0.0 else 1.0)
             for m in self.modules}
 
         # battery charge/discharge folds into the Battery buffer rate (kWh/s)
+        demand = sum(m.power_kw * frac[m.module_id] for m in self.modules
+                     if m.power_kw > 0.0)
+        supply = sum(-m.power_kw for m in self.modules
+                     if m.power_kw < 0.0 and m.state not in (OFF, FAILED))
         if battery is not None:
-            demand = sum(m.power_kw * frac[m.module_id] for m in self.modules
-                         if m.power_kw > 0.0)
-            supply = sum(-m.power_kw for m in self.modules
-                         if m.power_kw < 0.0 and m.state not in (OFF, FAILED))
             rates[BATTERY] = rates.get(BATTERY, 0.0) + (supply - demand) / 3_600.0
             if battery.level >= battery.capacity and rates[BATTERY] > 0.0:
                 rates[BATTERY] = 0.0
             if battery.level <= 0.0 and rates[BATTERY] < 0.0:
                 rates[BATTERY] = 0.0
 
-        return module_rates, rates, f_power
+        # aggregate f_power for display: served / demanded
+        served = sum(m.power_kw * frac[m.module_id]
+                     * alloc.get(m.module_id, 1.0)
+                     for m in self.modules if m.power_kw > 0.0)
+        f_power = served / demand if demand > 1e-12 else 1.0
+        return module_rates, rates, min(1.0, f_power)
+
+    def _power_alloc(self, frac: dict[str, float],
+                     battery) -> dict[str, float]:
+        """09 P-1: per-module power fraction. Full service while supply
+        covers demand or the battery holds charge; otherwise tiers are
+        served in priority order and the marginal tier pro-rates."""
+        demands: list[tuple[int, str, float]] = []
+        for m in self.modules:
+            if m.power_kw > 0.0 and frac[m.module_id] > 0.0:
+                demands.append((m.priority, m.module_id,
+                                m.power_kw * frac[m.module_id]))
+        if not demands:
+            return {}
+        supply = sum(-m.power_kw for m in self.modules
+                     if m.power_kw < 0.0 and m.state not in (OFF, FAILED))
+        total = sum(d[2] for d in demands)
+        if total <= supply or (battery is not None and battery.level > 0.0):
+            return {d[1]: 1.0 for d in demands}
+        out: dict[str, float] = {}
+        remaining = supply
+        for pr in sorted({d[0] for d in demands}):
+            tier = [d for d in demands if d[0] == pr]
+            need = sum(d[2] for d in tier)
+            if need <= remaining:
+                for _, mid, _ in tier:
+                    out[mid] = 1.0
+                remaining -= need
+            else:
+                f = remaining / need if need > 0.0 else 0.0
+                for _, mid, _ in tier:
+                    out[mid] = f
+                remaining = 0.0
+        return out
 
     def _inflow_excluding(self, resource: str, exclude: Module,
-                          frac: dict[str, float], f_power: float) -> float:
+                          frac: dict[str, float],
+                          alloc: dict[str, float]) -> float:
         total = 0.0
         for m in self.modules:
             if m is exclude:
@@ -239,7 +276,7 @@ class LedgerNetwork:
             if f <= 0.0:
                 continue
             if m.power_kw > 0.0:
-                f *= f_power
+                f *= alloc.get(m.module_id, 1.0)
             r = f * m.rate_kgps
             total += m.outputs.get(resource, 0.0) * r
             total -= m.inputs.get(resource, 0.0) * r
@@ -249,14 +286,14 @@ class LedgerNetwork:
         return total
 
     def _buffer_rates(self, frac: dict[str, float],
-                      f_power: float) -> dict[str, float]:
+                      alloc: dict[str, float]) -> dict[str, float]:
         rates: dict[str, float] = {res: 0.0 for res in self.buffers}
         for m in self.modules:
             f = frac[m.module_id]
             if f <= 0.0:
                 continue
             if m.power_kw > 0.0:
-                f *= f_power
+                f *= alloc.get(m.module_id, 1.0)
             r = f * m.rate_kgps
             for res, stoich in m.inputs.items():
                 rates[res] = rates.get(res, 0.0) - stoich * r

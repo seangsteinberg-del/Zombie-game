@@ -33,12 +33,14 @@ _REG = ("psr_ice", "mars_ice", "ice_burrow", "regolith")
 CATALOG: dict[str, dict] = {
     # ---- water & regolith extraction (04 §3.3) ----------------------------
     "ice_corer": {
+        "prio": 5,
         "name": "Thermal ice corer (T1)", "price_m": 4.0, "power_kw": 3.0,
         "primary": ("Water", 20.0 / DAY), "inputs": {},
         "outputs": {"Water": 1.0},
         "mtbf_d": 70.0, "kinds": _ICE, "tech": "core:tech_is01_surface_survey_coring",
     },
-    "drill_ice": {            # key kept for save compat: Sublimation Tent
+    "drill_ice": {
+        "prio": 5,            # key kept for save compat: Sublimation Tent
         "name": "Sublimation tent miner (T2)", "price_m": 14.0,
         "power_kw": 86.0,     # 80 kWt + 6 kWe; 2.58 kWh/kg at g=5%
         "primary": ("Water", 800.0 / DAY), "inputs": {},
@@ -47,6 +49,7 @@ CATALOG: dict[str, dict] = {
         "tech": "core:tech_is05_polar_ice_mining",
     },
     "ice_strip_miner": {
+        "prio": 5,
         "name": "Ice strip miner (T3)", "price_m": 55.0, "power_kw": 870.0,
         "primary": ("Water", 10_000.0 / DAY), "inputs": {},
         "outputs": {"Water": 1.0},
@@ -54,6 +57,7 @@ CATALOG: dict[str, dict] = {
         "tech": "core:tech_is17_strip_optical_mining",
     },
     "rodwell": {
+        "prio": 5,
         "name": "Rodwell rig (massive ice, T2)", "price_m": 8.0,
         "power_kw": 27.0,     # 0.54 kWh/kg: melts, no vacuum sublimation
         "primary": ("Water", 1_200.0 / DAY), "inputs": {},
@@ -62,6 +66,7 @@ CATALOG: dict[str, dict] = {
         "tech": "core:tech_is05_polar_ice_mining",
     },
     "drum_excavator": {
+        "prio": 5,
         "name": "Drum excavator (T1)", "price_m": 2.0, "power_kw": 0.4,
         "primary": ("Regolith", 2_500.0 / DAY), "inputs": {},
         "outputs": {"Regolith": 1.0},
@@ -69,6 +74,7 @@ CATALOG: dict[str, dict] = {
         "tech": "core:tech_is02_regolith_excavation",
     },
     "bucket_wheel": {
+        "prio": 5,
         "name": "Bucket-wheel excavator (T2)", "price_m": 16.0,
         "power_kw": 12.0,
         "primary": ("Regolith", 100_000.0 / DAY), "inputs": {},
@@ -77,6 +83,7 @@ CATALOG: dict[str, dict] = {
         "tech": "core:tech_is05_polar_ice_mining",
     },
     "volatile_oven": {
+        "prio": 5,
         "name": "Volatile bake oven (T2)", "price_m": 12.0, "power_kw": 40.0,
         # C-type rubble at g~8%, R 0.85: per kg water also bakes out CO2/N2
         "primary": ("Water", 680.0 / DAY),
@@ -87,7 +94,8 @@ CATALOG: dict[str, dict] = {
         "tech": "core:tech_is10_nea_volatile_capture",
     },
     # ---- atmosphere & sea intakes (04 §3.2, fractionation folded) ---------
-    "co2_intake": {           # key kept: Mars Atmospheric Intake II
+    "co2_intake": {
+        "prio": 5,           # key kept: Mars Atmospheric Intake II
         "name": "Mars atmospheric intake II (T2)", "price_m": 9.0,
         "power_kw": 18.0,     # 0.4 kWh/kg + folded fractionation
         "primary": ("CO2", 960.0 / DAY), "inputs": {},
@@ -96,6 +104,7 @@ CATALOG: dict[str, dict] = {
         "tech": "core:tech_is06_mars_atmo_processing",
     },
     "venus_intake": {
+        "prio": 5,
         "name": "Venus aerostat intake (T3)", "price_m": 10.0,
         "power_kw": 6.0,
         "primary": ("CO2", 1_930.0 / DAY), "inputs": {},
@@ -105,6 +114,7 @@ CATALOG: dict[str, dict] = {
         "kinds": ("aerostat",), "tech": "core:tech_is18_venus_aerostat_intake",
     },
     "titan_intake": {
+        "prio": 5,
         "name": "Titan atmospheric intake (T3)", "price_m": 6.0,
         "power_kw": 2.0,
         "primary": ("Nitrogen", 4_725.0 / DAY), "inputs": {},
@@ -112,7 +122,8 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": 85.0, "kinds": ("methane_lake",),
         "tech": "core:tech_is19_titan_hydrocarbons",
     },
-    "lake_pump": {            # key kept: Titan Sea Pump (Ligeia mix)
+    "lake_pump": {
+        "prio": 5,            # key kept: Titan Sea Pump (Ligeia mix)
         "name": "Titan sea pump (T3)", "price_m": 8.0, "power_kw": 4.0,
         # 20 t/day liquid; ethane lumps to Methane at 0.93 (B14)
         "primary": ("Methane", 16_440.0 / DAY), "inputs": {},
@@ -121,7 +132,8 @@ CATALOG: dict[str, dict] = {
         "tech": "core:tech_hb07_titan_outpost",
     },
     # ---- chemistry: RX plants (04 §3.4) ------------------------------------
-    "electrolyzer": {         # RX-01 PEM
+    "electrolyzer": {
+        "prio": 4,         # RX-01 PEM
         "name": "PEM electrolyzer RX-01 (T1)", "price_m": 12.0,
         "power_kw": 58.0,     # 5.6 kWh/kg H2O × 250 kg/day
         "primary": ("Oxygen", 222.0 / DAY),
@@ -130,7 +142,8 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": 45.0, "kinds": _ICE,
         "tech": "core:tech_is03_water_electrolysis",
     },
-    "electrolyzer_soec": {    # RX-02
+    "electrolyzer_soec": {
+        "prio": 4,    # RX-02
         "name": "SOEC electrolyzer RX-02 (T2)", "price_m": 30.0,
         "power_kw": 200.0,
         "primary": ("Oxygen", 888.0 / DAY),
@@ -139,7 +152,8 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": 40.0, "kinds": _ICE,
         "tech": "core:tech_is03_water_electrolysis",
     },
-    "sabatier": {             # RX-03
+    "sabatier": {
+        "prio": 4,             # RX-03
         "name": "Sabatier reactor RX-03 (T1)", "price_m": 10.0,
         "power_kw": 0.8,
         "primary": ("Methane", 91.0 / DAY),
@@ -149,7 +163,8 @@ CATALOG: dict[str, dict] = {
         "tech": "core:tech_is04_sabatier",
         "heat_kw": -6.8,      # net exotherm (canonical, 09 H-0 ledger)
     },
-    "soxe": {                 # RX-05 plant (MOXIE scaled)
+    "soxe": {
+        "prio": 4,                 # RX-05 plant (MOXIE scaled)
         "name": "SOXE CO2 electrolyzer RX-05 (T2)", "price_m": 14.0,
         "power_kw": 35.0,
         "primary": ("Oxygen", 100.0 / DAY),
@@ -159,7 +174,8 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": 55.0, "kinds": ("mars_ice", "aerostat", "regolith"),
         "tech": "core:tech_is06_mars_atmo_processing",
     },
-    "bosch": {                # RX-06
+    "bosch": {
+        "prio": 4,                # RX-06
         "name": "Bosch reactor RX-06 (T2)", "price_m": 8.0, "power_kw": 3.1,
         "primary": ("Carbon", 50.0 / DAY),
         "inputs": {"CO2": 3.67, "Hydrogen": 0.333},
@@ -167,7 +183,8 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": 60.0, "kinds": ("mars_ice", "aerostat", "regolith"),
         "tech": "core:tech_is09b_materials_chem",
     },
-    "ilmenite_line": {        # RX-07 (beneficiation folded)
+    "ilmenite_line": {
+        "prio": 4,        # RX-07 (beneficiation folded)
         "name": "Ilmenite H2-reduction line RX-07 (T2)", "price_m": 24.0,
         "power_kw": 58.0,
         # H2 loop recycled internally, 2% makeup folded into MachineParts
@@ -178,7 +195,8 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": 50.0, "kinds": ("regolith", "psr_ice"),
         "tech": "core:tech_is08_ilmenite_reduction",
     },
-    "carbothermal": {         # RX-08
+    "carbothermal": {
+        "prio": 4,         # RX-08
         "name": "Carbothermal reactor RX-08 (T2)", "price_m": 18.0,
         "power_kw": 65.0,     # 20 kWe + 45 kWt
         "primary": ("Oxygen", 50.0 / DAY),
@@ -188,7 +206,8 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": 55.0, "kinds": _REG,
         "tech": "core:tech_is12_carbothermal",
     },
-    "mre_cell": {             # RX-09
+    "mre_cell": {
+        "prio": 4,             # RX-09
         "name": "Molten regolith electrolysis RX-09 (T3)", "price_m": 48.0,
         "power_kw": 365.0,
         "primary": ("Oxygen", 250.0 / DAY),
@@ -197,7 +216,8 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": 35.0,       # anode burn = MachineParts-hungry ×3
         "kinds": _REG, "tech": "core:tech_is13_molten_regolith",
     },
-    "mond_refinery": {        # RX-10 (NiFe feed via folded beneficiation)
+    "mond_refinery": {
+        "prio": 4,        # RX-10 (NiFe feed via folded beneficiation)
         "name": "Mond carbonyl refinery RX-10 (T3)", "price_m": 26.0,
         "power_kw": 42.0,
         "primary": ("IronSteel", 500.0 / DAY),
@@ -207,7 +227,8 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": 60.0, "kinds": ("regolith",),
         "tech": "core:tech_is14_carbonyl_refining",
     },
-    "aluminum_line": {        # RX-11
+    "aluminum_line": {
+        "prio": 4,        # RX-11
         "name": "Anorthite aluminum line RX-11 (T3)", "price_m": 40.0,
         "power_kw": 145.0,
         "primary": ("Aluminum", 100.0 / DAY),
@@ -217,7 +238,8 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": 45.0, "kinds": _REG,
         "tech": "core:tech_is15_light_metals",
     },
-    "dri_steel": {            # RX-12 (magnetic concentration folded)
+    "dri_steel": {
+        "prio": 4,            # RX-12 (magnetic concentration folded)
         "name": "H2-DRI steel plant RX-12 (T2)", "price_m": 20.0,
         "power_kw": 39.0,
         "primary": ("IronSteel", 250.0 / DAY),
@@ -226,7 +248,8 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": 55.0, "kinds": ("mars_ice", "regolith"),
         "tech": "core:tech_is09b_materials_chem",
     },
-    "haber_loop": {           # RX-14
+    "haber_loop": {
+        "prio": 4,           # RX-14
         "name": "Haber ammonia loop RX-14 (T2)", "price_m": 6.0,
         "power_kw": 2.1,
         "primary": ("Ammonia", 50.0 / DAY),
@@ -235,7 +258,8 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": 70.0, "kinds": _REG + ("aerostat", "methane_lake"),
         "tech": "core:tech_is09a_gas_volatile_chem",
     },
-    "polymer_plant": {        # RX-15 (= 05 polymers_mto)
+    "polymer_plant": {
+        "prio": 4,        # RX-15 (= 05 polymers_mto)
         "name": "Polymer plant RX-15 (T1 build)", "price_m": 12.0,
         "power_kw": 12.5,
         "primary": ("Polymers", 200.0 / DAY),
@@ -245,7 +269,8 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": 60.0, "kinds": _REG + ("aerostat", "methane_lake"),
         "tech": "core:tech_is09a_gas_volatile_chem",
     },
-    "basalt_furnace": {       # RX-17 (fiber line)
+    "basalt_furnace": {
+        "prio": 4,       # RX-17 (fiber line)
         "name": "Basalt fiber furnace RX-17 (T2)", "price_m": 10.0,
         "power_kw": 31.0,
         "primary": ("BasaltFiber", 500.0 / DAY),
@@ -255,7 +280,8 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": 65.0, "kinds": _REG,
         "tech": "core:tech_is09b_materials_chem",
     },
-    "glass_furnace": {        # RX-17 (glass line)
+    "glass_furnace": {
+        "prio": 4,        # RX-17 (glass line)
         "name": "Glass furnace RX-17 (T2)", "price_m": 10.0,
         "power_kw": 31.0,
         "primary": ("Glass", 500.0 / DAY),
@@ -265,7 +291,8 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": 65.0, "kinds": _REG,
         "tech": "core:tech_is09b_materials_chem",
     },
-    "ffc_titanium": {         # RX-18 (TiO2 slag feed folded)
+    "ffc_titanium": {
+        "prio": 4,         # RX-18 (TiO2 slag feed folded)
         "name": "FFC titanium cell RX-18 (T3)", "price_m": 22.0,
         "power_kw": 47.0,
         "primary": ("Titanium", 25.0 / DAY),
@@ -274,7 +301,8 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": 50.0, "kinds": _REG,
         "tech": "core:tech_is15_light_metals",
     },
-    "mmh_loop": {             # RX-20 (DECISIONS B11)
+    "mmh_loop": {
+        "prio": 4,             # RX-20 (DECISIONS B11)
         "name": "MMH synthesis loop RX-20 (T3)", "price_m": 14.0,
         "power_kw": 8.3,
         "primary": ("MMH", 25.0 / DAY),
@@ -283,7 +311,8 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": 55.0, "kinds": _REG + ("aerostat", "methane_lake"),
         "tech": "core:tech_is09a_gas_volatile_chem",
     },
-    "nto_plant": {            # RX-21 (DECISIONS B11)
+    "nto_plant": {
+        "prio": 4,            # RX-21 (DECISIONS B11)
         "name": "NTO arc synthesis RX-21 (T3)", "price_m": 16.0,
         "power_kw": 31.0,
         "primary": ("NTO", 50.0 / DAY),
@@ -292,7 +321,8 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": 55.0, "kinds": _REG + ("aerostat", "methane_lake"),
         "tech": "core:tech_is09a_gas_volatile_chem",
     },
-    "he3_kiln": {             # T4 [SPECULATIVE] — byproducts ARE the point
+    "he3_kiln": {
+        "prio": 5,             # T4 [SPECULATIVE] — byproducts ARE the point
         "name": "He3 volatile kiln (T4)", "price_m": 220.0,
         "power_kw": 2_000.0,
         "primary": ("He3", 0.014 / DAY),
@@ -304,20 +334,23 @@ CATALOG: dict[str, dict] = {
         "tech": "core:tech_is20_he3_kiln",
     },
     # ---- habitats & people (07 HAB rows; Deploy->Outfit->Commission) -------
-    "hab_rigid": {            # HAB-02 Rigid Core Module
+    "hab_rigid": {
+        "prio": 1,            # HAB-02 Rigid Core Module
         "name": "Rigid core module HAB-02", "price_m": 30.0,
         "power_kw": 0.65, "primary": None, "inputs": {}, "outputs": {},
         "mtbf_d": None, "kinds": "*", "tech": "core:tech_hb01_surface_hab_landers",
         "beds": 3, "build_days": 7.0,
     },
-    "hab_inflatable": {       # HAB-04 (TransHab class)
+    "hab_inflatable": {
+        "prio": 1,       # HAB-04 (TransHab class)
         "name": "Inflatable hab HAB-04", "price_m": 35.0, "power_kw": 2.0,
         "primary": None, "inputs": {}, "outputs": {},
         "mtbf_d": None, "kinds": "*",
         "tech": "core:tech_sh02_inflatable_modules",
         "beds": 6, "build_days": 10.0,
     },
-    "regolith_vault": {       # HAB-07: printed from 120 t of local sinter
+    "regolith_vault": {
+        "prio": 1,       # HAB-07: printed from 120 t of local sinter
         "name": "Sintered regolith vault HAB-07", "price_m": 12.0,
         "power_kw": 1.25, "primary": None, "inputs": {}, "outputs": {},
         "mtbf_d": None, "kinds": _REG,
@@ -326,7 +359,8 @@ CATALOG: dict[str, dict] = {
         "build_materials": {"Regolith": 120_000.0, "BasaltFiber": 600.0},
         "shielded": True,     # masonry overburden: storm-proof berths
     },
-    "basalt_hab": {           # HAB-18: filament-wound on site
+    "basalt_hab": {
+        "prio": 1,           # HAB-18: filament-wound on site
         "name": "Basalt-wound hab HAB-18", "price_m": 10.0,
         "power_kw": 1.8, "primary": None, "inputs": {}, "outputs": {},
         "mtbf_d": None, "kinds": _REG,
@@ -334,7 +368,8 @@ CATALOG: dict[str, dict] = {
         "beds": 6, "build_days": 12.0,
         "build_materials": {"BasaltFiber": 6_000.0, "Glass": 2_000.0},
     },
-    "storm_shelter": {        # HAB-17: >=35 g/cm2 water jacket
+    "storm_shelter": {
+        "prio": 1,        # HAB-17: >=35 g/cm2 water jacket
         "name": "Storm shelter cell HAB-17", "price_m": 8.0,
         "power_kw": 0.29, "primary": None, "inputs": {}, "outputs": {},
         "mtbf_d": None, "kinds": "*",
@@ -343,6 +378,7 @@ CATALOG: dict[str, dict] = {
         "shelter": 5,
     },
     "airlock": {
+        "prio": 1,
         "name": "Surface airlock", "price_m": 8.0, "power_kw": 0.5,
         "primary": None, "inputs": {}, "outputs": {},
         "mtbf_d": None, "kinds": "*",
@@ -350,13 +386,15 @@ CATALOG: dict[str, dict] = {
         "build_days": 2.0,
     },
     "med_bay": {
+        "prio": 1,
         "name": "Medical bay", "price_m": 14.0, "power_kw": 3.0,
         "primary": None, "inputs": {}, "outputs": {},
         "mtbf_d": 80.0, "kinds": "*", "tech": "core:tech_ls08_crew_health",
         "build_days": 4.0,
     },
     # ---- food & fabrication (08 agriculture / 05 fab starters) -------------
-    "salad_rack": {           # LS-02 Veggie-class: morale + trace food
+    "salad_rack": {
+        "prio": 2,           # LS-02 Veggie-class: morale + trace food
         "name": "Salad crop rack", "price_m": 5.0, "power_kw": 3.0,
         "primary": ("FoodRations", 0.5 / DAY),
         "inputs": {"Water": 4.0, "CO2": 2.2},
@@ -364,7 +402,8 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": 90.0, "kinds": "*", "tech": "core:tech_ls02_crop_modules",
         "build_days": 2.0,
     },
-    "greenhouse": {           # HAB-06 glazed agri-dome + LS-GARDEN racks
+    "greenhouse": {
+        "prio": 2,           # HAB-06 glazed agri-dome + LS-GARDEN racks
         "name": "Greenhouse dome HAB-06", "price_m": 28.0, "power_kw": 25.0,
         "primary": ("FoodRations", 5.0 / DAY),
         "inputs": {"Water": 4.0, "CO2": 2.2, "Nitrogen": 0.05},
@@ -372,7 +411,8 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": 75.0, "kinds": "*", "tech": "core:tech_ls04_greenhouse",
         "build_days": 9.0, "build_materials": {"Glass": 1_000.0},
     },
-    "bio_farm": {             # LS-GREEN full-diet bioregenerative racks
+    "bio_farm": {
+        "prio": 2,             # LS-GREEN full-diet bioregenerative racks
         "name": "Bioregenerative farm HB-GRN", "price_m": 60.0,
         "power_kw": 90.0,
         "primary": ("FoodRations", 20.0 / DAY),
@@ -382,7 +422,8 @@ CATALOG: dict[str, dict] = {
         "tech": "core:tech_ls07_closed_loop_eclss",
         "build_days": 14.0,
     },
-    "machine_shop": {         # 05 workshop: THE maintenance currency
+    "machine_shop": {
+        "prio": 3,         # 05 workshop: THE maintenance currency
         "name": "Machine shop", "price_m": 24.0, "power_kw": 15.0,
         "primary": ("MachineParts", 20.0 / DAY),
         "inputs": {"IronSteel": 0.70, "Aluminum": 0.20, "Polymers": 0.12},
@@ -390,7 +431,8 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": 70.0, "kinds": "*", "tech": "core:tech_in01_workshop",
         "build_days": 6.0,
     },
-    "struct_mill": {          # 05: beams/panels from local metal+fiber
+    "struct_mill": {
+        "prio": 3,          # 05: beams/panels from local metal+fiber
         "name": "Structural parts mill", "price_m": 20.0, "power_kw": 22.0,
         "primary": ("StructuralParts", 100.0 / DAY),
         "inputs": {"IronSteel": 0.55, "Aluminum": 0.25, "BasaltFiber": 0.22},
@@ -424,19 +466,50 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": None, "kinds": "*", "tech": None,
         "cap_add": {"Battery": 400.0},
     },
+    "rfc_unit": {
+        "name": "Regenerative fuel cell (1.2 MWh)", "price_m": 11.0,
+        "power_kw": 0.0, "primary": None, "inputs": {}, "outputs": {},
+        "mtbf_d": None, "kinds": "*",
+        "tech": "core:tech_pw02_regen_fuel_cells",
+        "cap_add": {"Battery": 1_200.0},    # H2/O2 loop night storage
+    },
+    "thermal_battery": {
+        "name": "Thermal storage bank (800 kWh)", "price_m": 7.0,
+        "power_kw": 0.0, "primary": None, "inputs": {}, "outputs": {},
+        "mtbf_d": None, "kinds": "*",
+        "tech": "core:tech_pw07_thermal_storage",
+        "cap_add": {"Battery": 800.0},      # molten-salt/regolith TES
+    },
+    "solar_blanket": {
+        "name": "Thin-film solar blanket", "price_m": 7.0,
+        "power_kw": -60.0, "primary": None, "inputs": {}, "outputs": {},
+        "mtbf_d": None, "kinds": "*", "tech": "core:tech_pw06_adv_pv_dust",
+        "solar_scaled": True,
+    },
     "radiator_wing": {
         "name": "Radiator wing", "price_m": 4.0, "power_kw": 0.0,
         "primary": None, "inputs": {}, "outputs": {},
         "mtbf_d": None, "kinds": "*", "tech": None,
-        "heat_kw": -160.0,          # rejection capacity
+        "heat_kw": -160.0,          # rejection capacity at a cold sink
+        "radiator": True,
+    },
+    "radiator_high": {
+        "name": "Deployable two-phase radiator", "price_m": 12.0,
+        "power_kw": 0.0, "primary": None, "inputs": {}, "outputs": {},
+        "mtbf_d": None, "kinds": "*",
+        "tech": "core:tech_pw03_high_cap_radiators",
+        "heat_kw": -400.0,
+        "radiator": True,
     },
     "science_lab": {
+        "prio": 3,
         "name": "Field science lab", "price_m": 22.0, "power_kw": 15.0,
         "primary": None, "inputs": {}, "outputs": {},
         "mtbf_d": 70.0, "kinds": "*", "tech": None,
         "sci_per_day": 2.5,
     },
     "hab_module": {
+        "prio": 1,
         "name": "Habitat module (4 beds)", "price_m": 25.0, "power_kw": 5.0,
         "primary": None, "inputs": {}, "outputs": {},
         "mtbf_d": None, "kinds": "*", "tech": None, "beds": 4,
@@ -520,6 +593,7 @@ def add_module(net: LedgerNetwork, key: str, site: dict,
         outputs=dict(spec["outputs"]),
         rate_kgps=rate,
         power_kw=power,
+        priority=spec.get("prio", 3),
         heat_kw=spec.get("heat_kw", 0.0),
     )
     if spec["mtbf_d"]:

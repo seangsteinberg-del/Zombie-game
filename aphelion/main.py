@@ -3313,6 +3313,34 @@ def run(argv: list[str] | None = None) -> int:
                 toast_until = t + 12
                 audio.play("alarm" if mars_storm else "blip")
 
+            # the radiator doctrine (09 H-1/H-2): rejection scales with
+            # the local sink — the lunar-noon 330 K trap is real. Declared
+            # waste heat (reactors, exothermic plants) beyond capacity
+            # SCRAMs the hottest emitter.
+            from aphelion.sim.power import sink_factor, thermal_balance_kw
+            for b in bases:
+                site_kind = SITES[b.site_id].get("kind", "regolith")
+                sf = sink_factor(site_kind, b.daylight(t) > 0.0)
+                for m in b.net.modules:
+                    spec0 = _CAT.get(m.module_id.rsplit("_", 1)[0])
+                    if spec0 and spec0.get("radiator"):
+                        m.heat_kw = spec0["heat_kw"] * sf
+                emitted, capacity = thermal_balance_kw(b.net)
+                if emitted > capacity * 1.05 and emitted > 1.0:
+                    hottest = max(
+                        (m for m in b.net.modules
+                         if m.state == "RUNNING" and (m.heat_kw or 0) > 0),
+                        key=lambda m: m.heat_kw, default=None)
+                    if hottest is not None:
+                        hottest.state = "OFF"
+                        toast = (f"{b.name}: THERMAL TRIP — "
+                                 f"{hottest.module_id} SCRAM "
+                                 f"({emitted:,.0f} kWt emitted vs "
+                                 f"{capacity:,.0f} rejected; build "
+                                 f"radiators)")
+                        toast_until = t + 12
+                        audio.play("alarm")
+
             # orbital surveys (03 S-10): mapping accrues in low orbit; L1
             # completion pays the one-shot region survey + SurveyData
             for fv in vessels:
