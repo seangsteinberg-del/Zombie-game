@@ -108,4 +108,7 @@ def test_scientist_multiplies_science(world):
             "P": CrewMember("P", "pilot", 1)}
     fv = _vessel_with_crew(db, tree, ["S", "P"])
     assert science_multiplier(fv, crew) == pytest.approx(1.6)
-    assert best_skill(fv, crew, "engineer") == 0
+    # v2 tracks: the scientist archetype carries engineer 1 (08 §4.10);
+    # nobody aboard holds agronomy
+    assert best_skill(fv, crew, "engineer") == 1
+    assert best_skill(fv, crew, "agronomist") <= 1

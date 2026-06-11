@@ -102,7 +102,15 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
             "crew": {name: {"msv": m.dose.accumulated_msv, "role": m.role,
                             "skill": m.skill,
                             "acute": [list(p) for p in m.dose.acute_log],
-                            "busy": getattr(m, "busy_until", 0.0)}
+                            "busy": getattr(m, "busy_until", 0.0),
+                            "skills": dict(getattr(m, "skills", {}) or {}),
+                            "morale": getattr(m, "morale", 70.0),
+                            "cond": getattr(m, "cond", 100.0),
+                            "energy": getattr(m, "energy_kcal", 90_000.0),
+                            "traits": list(getattr(m, "traits", ()) or ()),
+                            "conditions": [dict(c) for c in
+                                           getattr(m, "conditions", [])],
+                            "xp": dict(getattr(m, "xp", {}) or {})}
                      for name, m in crew.items()},
             "difficulty": difficulty,
             "tutorial_state": tutorial_state,
@@ -172,10 +180,18 @@ def restore_campaign(save: dict, db, tree):
     crew = {}
     for name, cd in c["crew"].items():
         if isinstance(cd, dict):
-            crew[name] = CrewMember(name, cd["role"], cd["skill"],
-                                    CrewDose(cd["msv"],
-                                             cd.get("acute", [])),
-                                    busy_until=cd.get("busy", 0.0))
+            crew[name] = CrewMember(
+                name, cd["role"], cd["skill"],
+                CrewDose(cd["msv"], cd.get("acute", [])),
+                busy_until=cd.get("busy", 0.0),
+                skills=dict(cd["skills"]) if cd.get("skills") else None,
+                morale=cd.get("morale", 70.0),
+                cond=cd.get("cond", 100.0),
+                energy_kcal=cd.get("energy", 90_000.0),
+                traits=(tuple(cd["traits"])
+                        if cd.get("traits") is not None else None),
+                conditions=[dict(c) for c in cd.get("conditions", [])],
+                xp=dict(cd.get("xp", {})))
         else:                       # early-v2 shape: bare msv float
             crew[name] = CrewMember(name, "pilot", 1, CrewDose(cd))
     vessels = []
