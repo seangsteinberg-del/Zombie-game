@@ -1,0 +1,5 @@
+id     = "core:probe_longshot"
+type   = "structure"
+tier   = "T4"
+name   = "LONGSHOT interstellar precursor probe"
+mass_t = 1.8

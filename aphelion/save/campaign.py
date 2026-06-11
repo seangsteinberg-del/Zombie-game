@@ -49,7 +49,8 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
                       research: ResearchState, crew: dict[str, CrewDose],
                       visited: set[str], bases: list,
                       tutorial_done: bool, rng=None,
-                      visited_surface: set[str] | None = None) -> dict:
+                      visited_surface: set[str] | None = None,
+                      milestones: set[str] | None = None) -> dict:
     """bases: objects with .name .last_t .pending_repairs .net (BaseSite)."""
     save = {
         "schema_version": SCHEMA_VERSION,
@@ -87,6 +88,7 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
             "crew": {name: d.accumulated_msv for name, d in crew.items()},
             "visited": sorted(visited),
             "visited_surface": sorted(visited_surface or set()),
+            "milestones": sorted(milestones or set()),
             "tutorial_done": tutorial_done,
             "bases": [{
                 "name": b.name,
@@ -160,6 +162,7 @@ def restore_campaign(save: dict, db, tree):
         "crew": crew,
         "visited": set(c["visited"]),
         "visited_surface": set(c.get("visited_surface", [])),
+        "milestones": set(c.get("milestones", [])),
         "tutorial_done": c["tutorial_done"],
         "bases": bases,
         "rng_state": save.get("rng"),

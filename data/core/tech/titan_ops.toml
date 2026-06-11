@@ -1,0 +1,7 @@
+id      = "core:tech_titan_ops"
+tier    = "T2"
+name    = "Cryogenic surface operations"
+prereqs = ["core:tech_closed_loop_eclss"]
+unlocks = []
+cost_sci = 1_200.0
+cost_ed  = 900.0

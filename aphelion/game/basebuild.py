@@ -49,7 +49,7 @@ CATALOG: dict[str, dict] = {
         "primary": ("Methane", 0.05), "inputs": {},
         "outputs": {"Methane": 1.0},
         "mtbf_d": 80.0, "kinds": ("methane_lake",),
-        "tech": None,
+        "tech": "core:tech_titan_ops",
     },
     "solar_array": {
         "name": "Solar array wing", "price_m": 6.0, "power_kw": -40.0,

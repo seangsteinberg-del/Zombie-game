@@ -290,32 +290,15 @@ def run(argv: list[str] | None = None) -> int:
 
     def fresh_campaign() -> dict:
         """A brand-new 2049 campaign (12 §3: Act 1 opens with money, two
-        astronauts, an empty pad — and no rocket. Build one."""
-        program = Program(funds=150_000_000.0)
-        program.offer(Contract("c_orbit", "Put a vessel in orbit",
-                               payout=100_000_000.0, deadline_s=60 * 86_400.0))
-        program.offer(Contract("c_moon", "Reach the Moon's SOI",
-                               payout=80_000_000.0, deadline_s=180 * 86_400.0))
-        program.offer(Contract("c_helio", "Achieve heliocentric orbit",
-                               payout=120_000_000.0, deadline_s=365 * 86_400.0))
-        program.offer(Contract("c_base", "Found a lunar surface base (G in Moon SOI)",
-                               payout=150_000_000.0, deadline_s=2 * 365 * 86_400.0))
-        program.offer(Contract("c_lox", "Bank 100 t of lunar LOX",
-                               payout=200_000_000.0, deadline_s=4 * 365 * 86_400.0))
-        program.offer(Contract("c_land_moon", "Land on the Moon",
-                               payout=120_000_000.0, deadline_s=2 * 365 * 86_400.0))
-        program.offer(Contract("c_mars", "Reach the Mars SOI",
-                               payout=300_000_000.0, deadline_s=6 * 365 * 86_400.0))
-        program.offer(Contract("c_land_mars", "Land on Mars",
-                               payout=350_000_000.0, deadline_s=8 * 365 * 86_400.0))
-        program.offer(Contract("c_venus", "Reach the Venus SOI",
-                               payout=250_000_000.0, deadline_s=6 * 365 * 86_400.0))
+        astronauts, an empty pad — and no rocket. Build one. Contracts
+        arrive from the Act table (game/campaign.py) as you earn them."""
         return dict(clock=SimClock(t0=0.0), vessels=[], active_idx=0,
-                    next_vid=1, program=program,
+                    next_vid=1, program=Program(funds=150_000_000.0),
                     rng=RngRegistry(20490101), bases=[],
                     crew={"V. Ainsworth": CrewDose(), "J. Okafor": CrewDose()},
                     research=ResearchState(), visited={"core:earth"},
-                    visited_surface=set(), tutorial=first_flight_tutorial())
+                    visited_surface=set(), milestones=set(),
+                    tutorial=first_flight_tutorial())
 
     def loaded_campaign() -> dict:
         got = read_campaign(qs_path, db, tree)
@@ -335,27 +318,30 @@ def run(argv: list[str] | None = None) -> int:
                            for b in got["bases"]],
                     crew=got["crew"], research=got["research"],
                     visited=got["visited"],
-                    visited_surface=got["visited_surface"], tutorial=tut)
+                    visited_surface=got["visited_surface"],
+                    milestones=got["milestones"], tutorial=tut)
 
     def campaign_tuple(st: dict):
         """One unpack shape for new game, quickload, and startup."""
         return (st["clock"], st["vessels"], st["active_idx"], st["next_vid"],
                 st["program"], st["rng"], st["bases"], st["crew"],
                 st["research"], st["visited"], st["visited_surface"],
-                st["tutorial"], Builder(db, st["research"]),
+                st["milestones"], st["tutorial"], Builder(db, st["research"]),
                 None, 0, False, False, False, False, False, 0.0, "", 0.0)
 
     (clock, vessels, active_idx, next_vid, program, campaign_rng, bases,
-     crew, research, visited, visited_surface, tutorial, builder, node,
-     warp_idx, paused, base_screen, builder_open, research_open, crew_warned,
-     last_dose_t, toast, toast_until) = campaign_tuple(fresh_campaign())
+     crew, research, visited, visited_surface, milestones, tutorial, builder,
+     node, warp_idx, paused, base_screen, builder_open, research_open,
+     crew_warned, last_dose_t, toast, toast_until) = \
+        campaign_tuple(fresh_campaign())
 
     def do_quicksave() -> str:
         snap = snapshot_campaign(
             t=clock.t, vessels=vessels, active_idx=active_idx,
             next_vid=next_vid, program=program, research=research,
             crew=crew, visited=visited, visited_surface=visited_surface,
-            bases=bases, tutorial_done=tutorial.completed, rng=campaign_rng)
+            milestones=milestones, bases=bases,
+            tutorial_done=tutorial.completed, rng=campaign_rng)
         write_campaign(qs_path, snap)
         return "QUICKSAVED"
 
@@ -513,6 +499,13 @@ def run(argv: list[str] | None = None) -> int:
                         ascent_done = True
                     elif event.key == pygame.K_ESCAPE:
                         ascent_abort = True
+            elif scene == "victory":
+                if event.type == pygame.KEYDOWN and event.key in (
+                        pygame.K_RETURN, pygame.K_ESCAPE):
+                    scene = "flight"
+                    toast = ("the program continues — the sky is not the "
+                             "limit anymore")
+                    toast_until = t + 10
             elif event.type == pygame.KEYDOWN and pause_open:
                 if event.key == pygame.K_ESCAPE:
                     pause_open = False
@@ -569,10 +562,7 @@ def run(argv: list[str] | None = None) -> int:
                         active_idx = 0
                         node = None
                         surface_open = False
-                        paid = program.complete(t, "c_base")
-                        toast = (f"BASE FOUNDED at {site['name']}"
-                                 + ("  |  CONTRACT PAID +$150M" if paid
-                                    else ""))
+                        toast = f"BASE FOUNDED at {site['name']} (F2 to build)"
                         toast_until = t + 10
                         audio.play("paid")
                     elif action[0] == "land":
@@ -587,13 +577,6 @@ def run(argv: list[str] | None = None) -> int:
                                 research.earn_science(site["science"])
                                 research.earn_eng_data(site["science"] * 0.3)
                                 msg += f"  +{site['science']:.0f} science"
-                            for cid, body_need, label in (
-                                    ("c_land_moon", "core:moon", "+$120M"),
-                                    ("c_land_mars", "core:mars", "+$350M")):
-                                if (site["body"] == body_need
-                                        and program.complete(t, cid)):
-                                    msg += f"  |  CONTRACT PAID {label}"
-                                    audio.play("paid")
                             toast, toast_until = msg, t + 10
                             audio.play("soi")
                         else:
@@ -756,6 +739,7 @@ def run(argv: list[str] | None = None) -> int:
                         vessels.remove(av0)
                         active_idx = vessels.index(best_tgt)
                         node = None
+                        milestones.add("docked")
                         toast = (f"DOCKED: {av0.name} -> {best_tgt.name} "
                                  f"({best_cost:,.0f} m/s rendezvous)")
                         toast_until = t + 8
@@ -872,10 +856,10 @@ def run(argv: list[str] | None = None) -> int:
         # scene transitions decided during event handling
         if start_new:
             (clock, vessels, active_idx, next_vid, program, campaign_rng,
-             bases, crew, research, visited, visited_surface, tutorial,
-             builder, node, warp_idx, paused, base_screen, builder_open,
-             research_open, crew_warned, last_dose_t, toast, toast_until) = \
-                campaign_tuple(fresh_campaign())
+             bases, crew, research, visited, visited_surface, milestones,
+             tutorial, builder, node, warp_idx, paused, base_screen,
+             builder_open, research_open, crew_warned, last_dose_t, toast,
+             toast_until) = campaign_tuple(fresh_campaign())
             scene, pause_open, focus_idx = "flight", False, 0
             surface_open = False
         if load_save:
@@ -883,10 +867,10 @@ def run(argv: list[str] | None = None) -> int:
                 try:
                     (clock, vessels, active_idx, next_vid, program,
                      campaign_rng, bases, crew, research, visited,
-                     visited_surface, tutorial, builder, node, warp_idx,
-                     paused, base_screen, builder_open, research_open,
-                     crew_warned, last_dose_t, toast, toast_until) = \
-                        campaign_tuple(loaded_campaign())
+                     visited_surface, milestones, tutorial, builder, node,
+                     warp_idx, paused, base_screen, builder_open,
+                     research_open, crew_warned, last_dose_t, toast,
+                     toast_until) = campaign_tuple(loaded_campaign())
                     scene, pause_open, focus_idx = "flight", False, 0
                     surface_open = False
                     toast, toast_until = "QUICKSAVE LOADED", clock.t + 5.0
@@ -920,8 +904,7 @@ def run(argv: list[str] | None = None) -> int:
                 fv.crew = free[:fv.crew_capacity]
                 vessels.append(fv)
                 active_idx = len(vessels) - 1
-                if program.complete(t, "c_orbit"):
-                    audio.play("paid")
+                milestones.add("orbited")
                 crewed = f" — crew: {', '.join(fv.crew)}" if fv.crew else ""
                 toast = (f"{fv.name} IN ORBIT — "
                          f"{fv.dv_remaining:,.0f} m/s remaining{crewed}")
@@ -1084,6 +1067,41 @@ def run(argv: list[str] | None = None) -> int:
                 running = False
             continue
 
+        if scene == "victory":
+            screen.fill((6, 8, 14))
+            nebula.draw(screen, None)
+            starfield.draw(screen, cam)
+            ttl = font_big.render("THE PRECURSOR FLIES", True,
+                                  (255, 215, 130))
+            screen.blit(ttl, (size[0] // 2 - ttl.get_width() // 2, 130))
+            days = t / SECONDS_PER_DAY
+            done = sum(1 for c in program.contracts
+                       if c.completed_t is not None)
+            lines = [
+                "Humanity's first starship is on a hyperbolic solar orbit.",
+                "",
+                f"campaign time      {days:,.0f} days "
+                f"({2049 + days / 365.25:.1f} CE)",
+                f"program funds      ${program.funds / 1e6:,.0f}M",
+                f"contracts honored  {done}",
+                f"fleet              {len(vessels)} vessels, "
+                f"{len(bases)} surface bases",
+                f"science banked     {research.science:,.0f}",
+                f"crew on the books  {len(crew)}",
+                "",
+                "ENTER — keep flying the program (sandbox continues)",
+            ]
+            for i, line in enumerate(lines):
+                txt = font_med.render(line, True, (200, 210, 224))
+                screen.blit(txt, (size[0] // 2 - 290, 220 + i * 30))
+            bloom.apply(screen)
+            screen.blit(vig, (0, 0))
+            pygame.display.flip()
+            frame_count += 1
+            if args.frames and frame_count >= args.frames:
+                running = False
+            continue
+
         if scene == "menu":
             screen.fill((6, 8, 14))
             nebula.draw(screen, cam)
@@ -1141,7 +1159,7 @@ def run(argv: list[str] | None = None) -> int:
                 audio.play("alarm")
             toast_until = t + 6
             node = None
-        # the whole fleet flies: SOI handoffs + campaign hooks per vessel
+        # the whole fleet flies: SOI handoffs + first-entry science
         for fv in vessels:
             for note in fv.advance_to(t):
                 toast, toast_until = f"SOI {note}", t + 8
@@ -1154,16 +1172,19 @@ def run(argv: list[str] | None = None) -> int:
                          f"+{sci:.0f} science ({fv.name})")
                 toast_until = t + 10
                 audio.play("soi")
-            for cid, frame_need, label in (
-                    ("c_moon", "core:moon", "+$80M"),
-                    ("c_helio", "core:sun", "+$120M"),
-                    ("c_mars", "core:mars", "+$300M"),
-                    ("c_venus", "core:venus", "+$250M")):
-                if fv.frame_id == frame_need and program.complete(t, cid):
-                    toast = (f"CONTRACT PAID {label} — "
-                             f"{frame_need.split(':')[1]} reached")
-                    toast_until = t + 10
-                    audio.play("paid")
+
+        # the Act table sweeps REAL state: offers, payouts, the win
+        from aphelion.game.campaign import sweep as campaign_sweep
+        sweep_state = {"vessels": vessels, "bases": bases, "visited": visited,
+                       "visited_surface": visited_surface,
+                       "milestones": milestones, "research": research}
+        sweep_toasts, won_now = campaign_sweep(program, sweep_state, t)
+        for line in sweep_toasts:
+            toast, toast_until = line, t + 10
+            audio.play("paid" if "PAID" in line else "blip")
+        if won_now and "won" not in milestones:
+            milestones.add("won")
+            scene = "victory"
         program.expire_overdue(t)
 
         # crew dose + vessel life support (08): hourly bookkeeping
@@ -1200,7 +1221,7 @@ def run(argv: list[str] | None = None) -> int:
                     toast_until = t + 10
                     audio.play("alarm")
 
-        # bases tick on the ledger (warp-exact); LOX contract watches stores
+        # bases tick on the ledger (warp-exact); contracts watch via sweep
         for site in bases:
             for ev in site.advance(t):
                 if ev.kind == "module_failed":
@@ -1209,11 +1230,6 @@ def run(argv: list[str] | None = None) -> int:
                 elif ev.kind == "repaired":
                     toast, toast_until = f"{site.name}: {ev.subject} repaired", t + 6
                     audio.play("blip")
-            if (site.net.buffers["Oxygen"].level >= 100_000.0
-                    and program.complete(t, "c_lox")):
-                toast = "100 t LUNAR LOX BANKED — CONTRACT PAID +$200M"
-                toast_until = t + 10
-                audio.play("paid")
 
         # tutorial rail (12 §5.8): completes from real state
         legs_now = av.predict(t) if av is not None else []

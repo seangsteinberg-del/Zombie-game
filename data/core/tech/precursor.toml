@@ -1,0 +1,7 @@
+id      = "core:tech_precursor"
+tier    = "T4"
+name    = "Interstellar precursor program"
+prereqs = ["core:tech_fusion_torch", "core:tech_autonomous_factories"]
+unlocks = ["core:probe_longshot"]
+cost_sci = 12_000.0
+cost_ed  = 9_000.0
