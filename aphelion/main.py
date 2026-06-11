@@ -2344,7 +2344,10 @@ def run(argv: list[str] | None = None) -> int:
             elif rho0 <= 0.0:
                 starfield.draw(screen, cam)
 
-            px_per_m = max(0.0022, 0.26 * 1500.0 / (1500.0 + live.h))
+            # world scale: starts at 0.26 px/m on the pad and decays SLOWLY
+            # enough that h*px_per_m keeps growing — the ground genuinely
+            # falls away (gone by ~3 km) instead of hanging in frame forever
+            px_per_m = max(0.0022, 0.26 * 5000.0 / (5000.0 + live.h))
             rocket_y = int(size[1] * 0.62)
 
             # camera shake: ignition/staging/loss impulses + max-q rattle
@@ -2358,7 +2361,9 @@ def run(argv: list[str] | None = None) -> int:
 
             stack_now = live_stack[live.stages_spent:]
             tilt = -(90.0 - live.gamma_deg)
-            rs = max(0.12, 1500.0 / (1500.0 + 1.2 * live.h))
+            # the VEHICLE stays readable: shrink only through the first
+            # ~2 km of climb, then lock at 60% — never a 12% speck again
+            rs = max(0.60, 2600.0 / (2600.0 + 0.9 * live.h))
             rkey = (live.stages_spent, int(tilt // 4), round(rs, 2))
             if rkey not in rot_cache:
                 if len(rot_cache) > 160:
@@ -2566,7 +2571,9 @@ def run(argv: list[str] | None = None) -> int:
             dstack = [[descent.vessel.rows[i].part_id for i in st]
                       for st in descent.vessel.stage_plan]
             dspr0 = vessel_sprite(db, dstack)
-            ds = max(0.30, 900.0 / (900.0 + 1.5 * descent.h))
+            # lander stays readable through the whole burn (floor 55%),
+            # growing back to full size on final approach
+            ds = max(0.55, 1600.0 / (1600.0 + 0.8 * descent.h))
             dkey = (len(descent.vessel.stage_plan), round(ds, 2))
             if dkey not in rot_cache:
                 if len(rot_cache) > 160:
