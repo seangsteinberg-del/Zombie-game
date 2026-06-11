@@ -277,16 +277,20 @@ def _alb_gas(rng: np.random.Generator, x: np.ndarray, y: np.ndarray,
     base, shade, accent = _c(pal.base), _c(pal.shade), _c(pal.accent)
     n_bands = int(6 + rng.integers(0, 5))                       # 6-10 bands
     bands = np.empty((n_bands, 3))
-    for i in range(n_bands):
-        col = _lerp(base, shade, 0.15 + 0.75 * float(rng.random()))
+    contrast = min(1.0, pal.detail * 1.2)
+    for i in range(n_bands):                        # alternate light / dark
+        if i % 2 == 0:
+            col = _lerp(base, shade, 0.05 + 0.25 * float(rng.random()))
+        else:
+            col = _lerp(base, shade, 0.55 + 0.40 * float(rng.random()))
         if float(rng.random()) < 0.30:
             col = _lerp(col, accent, 0.30)
-        bands[i] = col
+        bands[i] = _lerp(base, col, contrast)
     warp = (_fbm(rng, size, 4, 3) - 0.5) * pal.detail           # flow noise
     pos = np.clip((lat * 0.5 + 0.5) * (n_bands - 1) + warp * 2.2,
                   0.0, n_bands - 1.001)
     i0 = pos.astype(np.intp)
-    f = _smooth(pos - i0)
+    f = _smooth((pos - i0 - 0.5) * 3.5 + 0.5)       # plateaus, crisp edges
     alb = bands[i0] * (1.0 - f)[..., None] \
         + bands[np.minimum(i0 + 1, n_bands - 1)] * f[..., None]
     alb *= 1.0 + ((_fbm(rng, size, 5, 6) - 0.5) * 0.10 * pal.detail)[..., None]
@@ -451,7 +455,8 @@ def _render_body(body_id: str, pal: BodyPalette, d: int,
     rr = x * x + y * y
     r = np.sqrt(rr)
     nz = np.sqrt(np.clip(1.0 - rr, 0.0, 1.0))       # sphere normal z
-    lat = np.clip(y / np.sqrt(np.clip(1.0 - x * x, 1e-4, None)), -1.0, 1.0)
+    # orthographic screen y IS sin(latitude); a slight x^2 bow fakes axial tilt
+    lat = np.clip(y * (1.0 + 0.18 * x * x), -1.0, 1.0)
     cov = np.clip((1.0 - r) * (d * 0.5) + 0.5, 0.0, 1.0)        # AA limb
 
     lx, ly = math.cos(sun_angle), math.sin(sun_angle)

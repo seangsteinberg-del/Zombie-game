@@ -213,7 +213,7 @@ class Builder:
              if p["type"] in ("engine", "tank", "structure")])
         self.cursor = 0
         self.stack: list[list[str]] = [[]]    # stages, bottom first
-        self.message = "ENTER add part | S new stage | BACKSPACE remove | L launch | B close"
+        self.message = "assemble a vessel from the catalog, then L to launch it"
 
     def locked(self, part_id: str) -> bool:
         return not self.research.part_available(self.db, part_id)
@@ -271,7 +271,12 @@ def run(argv: list[str] | None = None) -> int:
         os.environ["SDL_AUDIODRIVER"] = "dummy"
 
     import pygame
+    from aphelion.render.body_art import body_sprite, marker_dot, sun_sprite
     from aphelion.render.draw_conics import draw_conic
+    from aphelion.render.postfx import Bloom, Nebula, soi_ring, vignette
+    from aphelion.render.vessel_art import (
+        app_icon, craft_icon, part_thumb, vessel_sprite)
+    from aphelion.ui import theme
     from aphelion.ui.audio import AudioCues
     from aphelion.ui.effects import Particles, Starfield
     from aphelion.ui.tutorial import first_flight_tutorial
@@ -289,6 +294,7 @@ def run(argv: list[str] | None = None) -> int:
     pygame.init()
     size = (1280, 720)
     fullscreen = False
+    pygame.display.set_icon(app_icon())
     screen = pygame.display.set_mode(size, pygame.SCALED | pygame.DOUBLEBUF,
                                      vsync=0 if args.headless else 1)
     pygame.display.set_caption("APHELION")
@@ -296,6 +302,9 @@ def run(argv: list[str] | None = None) -> int:
     font = pygame.font.SysFont("consolas", 14)
     font_med = pygame.font.SysFont("consolas", 18, bold=True)
     font_big = pygame.font.SysFont("consolas", 44, bold=True)
+    nebula = Nebula(size)
+    bloom = Bloom(size)
+    vig = vignette(size)
 
     cam = Camera(*size, frame_id="core:earth", zoom=3.0e-5, layer=ZoomLayer.LOCAL)
     focus_order = (["craft", "core:sun"] + planets
@@ -393,6 +402,7 @@ def run(argv: list[str] | None = None) -> int:
     pause_cursor = 0
     research_cursor = 0
     body_click_pts: list = []
+    burn_glow = 0.0
 
     frame_count = 0
     running = True
@@ -634,6 +644,7 @@ def run(argv: list[str] | None = None) -> int:
                              pygame.K_a: "radial-out +", pygame.K_d: "radial-in -"}
                     toast = f"{names[event.key]}{step:.0f} m/s"
                     toast_until = t + 5
+                    burn_glow = 0.6
                     audio.play("burn")
                     frx0, fry0, _, _ = tree.state_in_root(craft.frame_id, t)
                     px0 = cam.world_to_screen(frx0 + crx0, fry0 + cry0)
@@ -681,6 +692,7 @@ def run(argv: list[str] | None = None) -> int:
 
         if scene == "menu":
             screen.fill((6, 8, 14))
+            nebula.draw(screen, cam)
             starfield.draw(screen, cam)
             title = font_big.render("A P H E L I O N", True, (140, 235, 255))
             screen.blit(title, (size[0] // 2 - title.get_width() // 2, 150))
@@ -705,6 +717,8 @@ def run(argv: list[str] | None = None) -> int:
                 "ESC quit", True, (110, 122, 140))
             screen.blit(foot, (size[0] // 2 - foot.get_width() // 2,
                                size[1] - 60))
+            bloom.apply(screen)
+            screen.blit(vig, (0, 0))
             pygame.display.flip()
             frame_count += 1
             if args.frames and frame_count >= args.frames:
@@ -724,6 +738,7 @@ def run(argv: list[str] | None = None) -> int:
             if craft.burn(node["t_node"], node["dvp"], node["dvr"]):
                 toast = (f"NODE EXECUTED: {math.hypot(node['dvp'], node['dvr']):,.0f}"
                          f" m/s")
+                burn_glow = 0.8
                 audio.play("burn")
             else:
                 toast = "NODE FAILED: insufficient dv"
@@ -819,21 +834,42 @@ def run(argv: list[str] | None = None) -> int:
             cam.follow(*body_root(focus))
 
         screen.fill((6, 8, 14))
+        nebula.draw(screen, cam)
         starfield.draw(screen, cam)
         body_click_pts = []
+
+        def blit_body(bid: str, wx: float, wy: float, px: tuple) -> None:
+            """Shaded sprite when resolved, crisp marker dot otherwise."""
+            d_px = 2.0 * tree.body(bid).radius * cam.zoom
+            if d_px >= 5.0:
+                # light comes FROM the sun at the world origin (screen y-down)
+                ang = math.atan2(wy, -wx) if (wx or wy) else 0.0
+                spr = body_sprite(bid, min(int(d_px), 512), ang)
+                screen.blit(spr, (px[0] - spr.get_width() // 2,
+                                  px[1] - spr.get_height() // 2))
+            else:
+                dot = marker_dot(bid, 3)
+                screen.blit(dot, (px[0] - dot.get_width() // 2,
+                                  px[1] - dot.get_height() // 2))
 
         for pid in planets:
             draw_conic(screen, tree.body(pid).elements, cam, _ORBIT_COLOR)
         sun_px = cam.world_to_screen(0.0, 0.0)
-        pygame.draw.circle(screen, _BODY_COLORS["core:sun"], sun_px, 5)
+        if -400 < sun_px[0] < size[0] + 400 and -400 < sun_px[1] < size[1] + 400:
+            sd = max(10, min(int(2.0 * tree.body("core:sun").radius * cam.zoom),
+                             512))
+            sspr = sun_sprite(sd)
+            screen.blit(sspr, (sun_px[0] - sspr.get_width() // 2,
+                               sun_px[1] - sspr.get_height() // 2))
+            body_click_pts.append((sun_px[0], sun_px[1], 1))
         for pid in planets:
             prx, pry = body_root(pid)
             ppx = cam.world_to_screen(prx, pry)
             on_screen = -60 < ppx[0] < size[0] + 60 and -60 < ppx[1] < size[1] + 60
             if on_screen:
-                pygame.draw.circle(screen, _BODY_COLORS.get(pid, _DEFAULT_COLOR), ppx, 3)
+                blit_body(pid, prx, pry, ppx)
                 screen.blit(font.render(pid.split(":")[1], True, (150, 160, 180)),
-                            (ppx[0] + 6, ppx[1] - 6))
+                            (ppx[0] + 8, ppx[1] - 8))
                 body_click_pts.append((ppx[0], ppx[1], focus_of_body[pid]))
             for mid in moons_of.get(pid, []):
                 mel = tree.body(mid).elements
@@ -842,10 +878,22 @@ def run(argv: list[str] | None = None) -> int:
                 mpx = cam.world_to_screen(prx + mrx, pry + mry)
                 if (2.0 * abs(mel.a) * cam.zoom > 8.0
                         and -60 < mpx[0] < size[0] + 60 and -60 < mpx[1] < size[1] + 60):
-                    pygame.draw.circle(screen, _BODY_COLORS.get(mid, _DEFAULT_COLOR), mpx, 2)
+                    blit_body(mid, prx + mrx, pry + mry, mpx)
                     screen.blit(font.render(mid.split(":")[1], True, (120, 130, 150)),
-                                (mpx[0] + 5, mpx[1] - 5))
+                                (mpx[0] + 7, mpx[1] - 7))
                     body_click_pts.append((mpx[0], mpx[1], focus_of_body[mid]))
+
+        # SOI boundary of the craft's current frame (faint dashed cyan)
+        soi_m = tree.body(craft.frame_id).soi_radius
+        if math.isfinite(soi_m):
+            soi_px = int(soi_m * cam.zoom)
+            if 24 < soi_px <= 2000:
+                ring = soi_ring(soi_px)
+                if ring is not None:
+                    frx_s, fry_s = body_root(craft.frame_id)
+                    fpx = cam.world_to_screen(frx_s, fry_s)
+                    screen.blit(ring, (fpx[0] - ring.get_width() // 2,
+                                       fpx[1] - ring.get_height() // 2))
 
         # node preview: post-burn legs in magenta + node marker
         if node is not None:
@@ -886,101 +934,156 @@ def run(argv: list[str] | None = None) -> int:
         frx, fry = body_root(craft.frame_id)
         crx, cry, cvx, cvy = craft.state(t)
         cpx = cam.world_to_screen(frx + crx, fry + cry)
-        pygame.draw.circle(screen, _CRAFT_COLOR, cpx, 3)
+        heading = math.atan2(-cvy, cvx)        # nose along velocity, y-down
+        cspr = craft_icon(heading, size=14, burning=burn_glow > 0.0)
+        screen.blit(cspr, (cpx[0] - cspr.get_width() // 2,
+                           cpx[1] - cspr.get_height() // 2))
+        burn_glow = max(0.0, burn_glow - real_dt)
         body_click_pts.append((cpx[0], cpx[1], 0))
 
         el = craft.elements
         body = tree.body(craft.frame_id)
         alt = math.hypot(crx, cry) - body.radius
-        hud1 = (f"t = {t / SECONDS_PER_DAY:9.3f} d   warp {_WARP_LADDER[warp_idx]:>9,.0f}x"
-                f"{'  [PAUSED]' if paused else ''}   focus: {focus.split(':')[-1]}   "
-                f"zoom {cam.zoom:.2e}")
+        hud1 = (f"t {t / SECONDS_PER_DAY:9.3f} d   warp {_WARP_LADDER[warp_idx]:>9,.0f}x"
+                f"{'  [PAUSED]' if paused else ''}   focus: {focus.split(':')[-1]}")
         peri = el.periapsis - body.radius
         apo = (el.apoapsis - body.radius) if el.alpha > 0 else float("inf")
         hud2 = (f"{craft.name} @ {craft.frame_id.split(':')[1]}   "
                 f"alt {alt/1e3:,.0f} km   v {math.hypot(cvx, cvy):,.0f} m/s   "
                 f"peri {peri/1e3:,.0f} km   apo {apo/1e3:,.0f} km   "
                 f"dv {craft.dv_remaining:,.0f} m/s")
-        screen.blit(font.render(hud1, True, (190, 200, 215)), (10, 8))
-        screen.blit(font.render(hud2, True, _CRAFT_COLOR), (10, 28))
         open_contracts = [c for c in program.contracts
                           if c.completed_t is None and not c.failed]
         worst_dose = max(crew.values(), key=lambda c: c.career_fraction)
-        hud3 = (f"PROGRAM  ${program.funds/1e6:,.0f}M   sci {research.science:,.0f}"
+        hud3 = (f"${program.funds/1e6:,.0f}M   sci {research.science:,.0f}"
                 f"  ed {research.eng_data:,.0f}"
-                f"   crew dose {worst_dose.career_fraction:.0%}   contracts: "
-                + (" | ".join(c.description[:28] for c in open_contracts[:3])
-                   or "none"))
-        screen.blit(font.render(hud3, True, (255, 215, 130)), (10, 48))
+                f"   dose {worst_dose.career_fraction:.0%}   "
+                + (" | ".join(c.description[:30] for c in open_contracts[:3])
+                   or "no open contracts"))
+        screen.blit(theme.panel(size[0], 76), (0, 0))
+        for icon_name, line, yy, color in (
+                ("clock", hud1, 8, theme.COLORS["text"]),
+                ("dv", hud2, 28, _CRAFT_COLOR),
+                ("funds", hud3, 48, theme.COLORS["gold"])):
+            screen.blit(theme.icon(icon_name, 14), (10, yy + 1))
+            theme.draw_text(screen, 30, yy, line, color=color)
         if t < toast_until and toast:
-            screen.blit(font.render(toast, True, (255, 230, 140)), (10, 68))
-        screen.blit(font.render(
+            up = toast.upper()
+            kind = ("paid" if ("PAID" in up or "QUICKSAVE" in up or "ORBIT" in up)
+                    else "alarm" if any(w in up for w in (
+                        "WARNING", "FAILED", "INSUFFICIENT", "LOSS", "CANNOT",
+                        "NEEDS", "EXCEEDS", "NO QUICK"))
+                    else "science" if ("FIRST ENTRY" in up or "RESEARCHED" in up)
+                    else "info")
+            ts = theme.toast_surface(toast, kind)
+            screen.blit(ts, (size[0] // 2 - ts.get_width() // 2, 84))
+
+        # crew panel (08): portraits + career-dose gauges
+        cw = 196
+        cpanel = theme.panel(cw, 46 + 34 * len(crew), "CREW")
+        cx0, cy0 = size[0] - cw - 10, size[1] - cpanel.get_height() - 42
+        screen.blit(cpanel, (cx0, cy0))
+        yy = cy0 + 32
+        for cname, cdose in crew.items():
+            screen.blit(theme.portrait(cname, 28), (cx0 + 8, yy))
+            theme.draw_text(screen, cx0 + 44, yy, cname,
+                            color=theme.COLORS["text"], font="small")
+            frac = cdose.career_fraction
+            bcol = (theme.COLORS["good"] if frac < 0.5 else
+                    theme.COLORS["warn"] if frac < 0.8 else
+                    theme.COLORS["danger"])
+            screen.blit(theme.bar(140, 7, frac, bcol), (cx0 + 44, yy + 17))
+            yy += 34
+
+        screen.blit(theme.panel(size[0], 26), (0, size[1] - 26))
+        theme.draw_text(
+            screen, 10, size[1] - 21,
             "X/Z A/D burn  B build  N node  R research  G base  F2 base view  "
             "F5/F9 save/load  TAB/click focus  ./, warp  ESC menu",
-            True, (110, 120, 135)), (10, size[1] - 24))
+            color=theme.COLORS["text_dim"], font="small", shadow=False)
 
         particles.update_draw(screen, real_dt)
         if tutorial.visible and tutorial.current_text:
             tut = font.render(tutorial.current_text, True, (140, 235, 255))
-            screen.blit(tut, (size[0] // 2 - tut.get_width() // 2, 86))
+            tbg = pygame.Surface((tut.get_width() + 20, 24), pygame.SRCALPHA)
+            tbg.fill((10, 16, 28, 180))
+            tx = size[0] // 2 - tut.get_width() // 2
+            screen.blit(tbg, (tx - 10, 116))
+            screen.blit(tut, (tx, 120))
 
         if base_screen and bases:
             site = bases[0]
-            panel = pygame.Surface((430, 230), pygame.SRCALPHA)
-            panel.fill((8, 14, 24, 225))
-            screen.blit(panel, (size[0] - 444, 90))
-            bx, by = size[0] - 430, 100
-            screen.blit(font.render(f"{site.name} — live ledger (F2 hide)",
-                                    True, (255, 215, 130)), (bx, by))
-            by += 22
             _, rates, f_power = site.net.solve_rates()
+            n_rows = 3 + len(site.net.modules)
+            bpanel = theme.panel(460, 96 + 24 * n_rows, site.name)
+            screen.blit(bpanel, (size[0] - 474, 90))
+            bx, by = size[0] - 458, 126
+            res_icons = {"Water": "water", "Oxygen": "oxygen",
+                         "Hydrogen": "hydrogen"}
             for res in ("Water", "Oxygen", "Hydrogen"):
                 buf = site.net.buffers[res]
                 rate = rates.get(res, 0.0)
-                frac = min(1.0, buf.level / buf.capacity)
-                pygame.draw.rect(screen, (40, 50, 70), (bx, by + 4, 200, 10))
-                pygame.draw.rect(screen, (120, 255, 170),
-                                 (bx, by + 4, int(200 * frac), 10))
-                screen.blit(font.render(
-                    f"{res:9s} {buf.level/1e3:8.1f} t  "
-                    f"{rate * 86_400.0 / 1e3:+6.2f} t/d", True,
-                    (190, 200, 215)), (bx + 210, by))
-                by += 22
+                frac = min(1.0, buf.level / max(buf.capacity, 1e-9))
+                screen.blit(theme.icon(res_icons[res], 16), (bx, by))
+                screen.blit(theme.bar(170, 11, frac, theme.COLORS["good"]),
+                            (bx + 24, by + 2))
+                theme.draw_text(
+                    screen, bx + 204, by,
+                    f"{buf.level/1e3:8.1f} t  {rate * 86_400.0 / 1e3:+6.2f} t/d",
+                    color=theme.COLORS["text"], font="small")
+                by += 24
+            by += 6
             for m in site.net.modules:
-                color = {"RUNNING": (120, 255, 170), "FAILED": (255, 110, 110),
-                         "STARVED": (255, 200, 90), "BLOCKED": (255, 200, 90),
-                         "OFF": (120, 130, 150)}.get(m.state, (200, 200, 200))
-                screen.blit(font.render(f"{m.module_id:14s} {m.state}",
-                                        True, color), (bx, by))
-                by += 18
-            screen.blit(font.render(
-                f"power OK (f={f_power:.2f})   repairs pending: "
-                f"{len(site.pending_repairs)}", True, (140, 235, 255)),
-                (bx, by + 4))
+                color = {"RUNNING": theme.COLORS["good"],
+                         "FAILED": theme.COLORS["danger"],
+                         "STARVED": theme.COLORS["warn"],
+                         "BLOCKED": theme.COLORS["warn"],
+                         "OFF": theme.COLORS["text_dim"]}.get(
+                             m.state, theme.COLORS["text"])
+                pygame.draw.circle(screen, color, (bx + 6, by + 8), 4)
+                theme.draw_text(screen, bx + 20, by,
+                                f"{m.module_id:14s} {m.state}", color=color,
+                                font="small")
+                by += 24
+            screen.blit(theme.icon("power", 16), (bx, by + 2))
+            theme.draw_text(
+                screen, bx + 24, by + 2,
+                f"power f={f_power:.2f}   repairs pending: "
+                f"{len(site.pending_repairs)}   (F2 hide)",
+                color=theme.COLORS["accent"], font="small")
 
         if builder_open:
-            panel = pygame.Surface(size, pygame.SRCALPHA)
-            panel.fill((8, 12, 20, 235))
-            screen.blit(panel, (0, 0))
-            screen.blit(font.render(
-                "ENGINEER — VESSEL ASSEMBLY (12 §5.4)", True, (240, 240, 250)),
-                (20, 16))
-            top = builder.cursor - 10
+            dimmer = pygame.Surface(size, pygame.SRCALPHA)
+            dimmer.fill((6, 9, 16, 242))
+            screen.blit(dimmer, (0, 0))
+            screen.blit(theme.panel(560, size[1] - 80, "PART CATALOG"),
+                        (16, 16))
+            screen.blit(theme.panel(360, size[1] - 80, "STACK"), (592, 16))
+            screen.blit(theme.panel(296, size[1] - 80, "VESSEL"), (968, 16))
+            rows_fit = (size[1] - 150) // 30
+            top = max(0, min(builder.cursor - rows_fit // 2,
+                             len(builder.catalog) - rows_fit))
             for i, pid in enumerate(builder.catalog):
-                if i < top or i > top + 24:
+                if i < top or i >= top + rows_fit:
                     continue
                 p = db.parts[pid]
                 locked = builder.locked(pid)
-                color = (90, 95, 105) if locked else (200, 210, 220)
-                marker = ">" if i == builder.cursor else " "
-                lock = " [LOCKED]" if locked else ""
-                screen.blit(font.render(
-                    f"{marker} {p['tier']}  {p['name'][:42]}{lock}",
-                    True, color), (20, 48 + (i - max(top, 0)) * 18))
-            vx0 = 660
-            screen.blit(font.render("STACK (bottom stage first):", True,
-                                    (255, 215, 130)), (vx0, 48))
-            yy = 70
+                ry = 54 + (i - top) * 30
+                if i == builder.cursor:
+                    hi = pygame.Surface((540, 28), pygame.SRCALPHA)
+                    hi.fill((140, 235, 255, 26))
+                    screen.blit(hi, (26, ry - 2))
+                screen.blit(part_thumb(p, pid, 26), (32, ry))
+                tcol = (theme.COLORS["text_dim"] if locked
+                        else theme.COLORS["text"])
+                theme.draw_text(screen, 66, ry + 4, p["name"][:46], color=tcol,
+                                font="small")
+                screen.blit(theme.chip(p["tier"], theme.COLORS["accent"]),
+                            (470, ry + 2))
+                if locked:
+                    screen.blit(theme.icon("lock", 14), (530, ry + 5))
+            sx0 = 608
+            yy = 54
             vessel = builder.build_vessel()
             stats = vessel.stage_stats() if vessel else []
             for si, stage in enumerate(builder.stack):
@@ -988,39 +1091,52 @@ def run(argv: list[str] | None = None) -> int:
                 line = f"STAGE {si + 1}: " + (
                     f"dv {stat['dv_vac']:,.0f} m/s  TWR {stat['twr']:.2f}"
                     if stat else "(empty)")
-                screen.blit(font.render(line, True, (140, 235, 255)), (vx0, yy))
-                yy += 18
+                theme.draw_text(screen, sx0, yy, line,
+                                color=theme.COLORS["accent"], font="small")
+                yy += 20
                 for pid in stage:
-                    screen.blit(font.render("   " + pid.split(":")[1], True,
-                                            (190, 200, 215)), (vx0, yy))
-                    yy += 16
-                yy += 6
+                    p = db.parts[pid]
+                    screen.blit(part_thumb(p, pid, 18), (sx0 + 6, yy))
+                    theme.draw_text(screen, sx0 + 30, yy + 2,
+                                    p["name"][:32],
+                                    color=theme.COLORS["text"], font="small")
+                    yy += 22
+                yy += 8
             if vessel:
                 total_dv = sum(s["dv_vac"] for s in stats)
                 cost = builder.price(vessel)
-                screen.blit(font.render(
-                    f"TOTAL dv {total_dv:,.0f} m/s   mass "
-                    f"{vessel.total_mass_kg()/1e3:,.1f} t   price ${cost/1e6:,.0f}M"
-                    f"   funds ${program.funds/1e6:,.0f}M",
-                    True, (255, 230, 140)), (vx0, yy + 6))
-            screen.blit(font.render(builder.message, True, (140, 235, 255)),
-                        (20, size[1] - 48))
+                for ci, (txt, col) in enumerate((
+                        (f"dv {total_dv:,.0f} m/s", theme.COLORS["good"]),
+                        (f"{vessel.total_mass_kg()/1e3:,.1f} t",
+                         theme.COLORS["accent"]),
+                        (f"${cost/1e6:,.0f}M of ${program.funds/1e6:,.0f}M",
+                         theme.COLORS["gold"] if cost <= program.funds
+                         else theme.COLORS["danger"]))):
+                    screen.blit(theme.chip(txt, col), (sx0, size[1] - 132 + ci * 26))
+                vspr = vessel_sprite(db, builder.stack)
+                vx = 968 + (296 - vspr.get_width()) // 2
+                vy = 54 + max(0, (size[1] - 150 - vspr.get_height()) // 2)
+                screen.blit(vspr, (vx, vy))
+            theme.draw_text(screen, 24, size[1] - 52, builder.message,
+                            color=theme.COLORS["accent"])
+            theme.draw_text(
+                screen, 24, size[1] - 30,
+                "UP/DOWN browse   ENTER add   S new stage   BACKSPACE remove   "
+                "L launch   B/ESC close", color=theme.COLORS["text_dim"],
+                font="small", shadow=False)
 
         if research_open:
             tech_ids = _tech_order(db)
-            panel = pygame.Surface((660, 90 + 24 * len(tech_ids)),
-                                   pygame.SRCALPHA)
-            panel.fill((8, 12, 22, 235))
             px0, py0 = size[0] // 2 - 330, 110
-            screen.blit(panel, (px0, py0))
-            screen.blit(font_med.render(
-                "RESEARCH — ENTER unlock, R close", True, (255, 215, 130)),
-                (px0 + 16, py0 + 10))
-            screen.blit(font.render(
+            screen.blit(theme.panel(660, 120 + 24 * len(tech_ids), "RESEARCH"),
+                        (px0, py0))
+            screen.blit(theme.icon("science", 16), (px0 + 16, py0 + 34))
+            theme.draw_text(
+                screen, px0 + 38, py0 + 34,
                 f"science {research.science:,.0f}   eng data "
-                f"{research.eng_data:,.0f}", True, (140, 235, 255)),
-                (px0 + 16, py0 + 34))
-            yy = py0 + 58
+                f"{research.eng_data:,.0f}   —   ENTER unlock, R close",
+                color=theme.COLORS["accent"], font="small")
+            yy = py0 + 62
             for i, nid in enumerate(tech_ids):
                 nd = db.tech[nid]
                 unlocked = nid in research.unlocked
@@ -1048,15 +1164,19 @@ def run(argv: list[str] | None = None) -> int:
             dim = pygame.Surface(size, pygame.SRCALPHA)
             dim.fill((4, 6, 10, 170))
             screen.blit(dim, (0, 0))
-            ttl = font_big.render("PAUSED", True, (140, 235, 255))
-            screen.blit(ttl, (size[0] // 2 - ttl.get_width() // 2, 180))
+            ppan = theme.panel(340, 80 + 34 * len(_PAUSE_ITEMS), "PAUSED")
+            ppx = size[0] // 2 - 170
+            ppy = 200
+            screen.blit(ppan, (ppx, ppy))
             for i, label in enumerate(_PAUSE_ITEMS):
                 sel = i == pause_cursor
-                color = (255, 215, 130) if sel else (200, 210, 224)
+                color = theme.COLORS["gold"] if sel else theme.COLORS["text"]
                 txt = font_med.render(("> " if sel else "  ") + label, True,
                                       color)
-                screen.blit(txt, (size[0] // 2 - 130, 280 + i * 34))
+                screen.blit(txt, (ppx + 28, ppy + 48 + i * 34))
 
+        bloom.apply(screen)
+        screen.blit(vig, (0, 0))
         pygame.display.flip()
         frame_count += 1
         if args.frames and frame_count >= args.frames:
