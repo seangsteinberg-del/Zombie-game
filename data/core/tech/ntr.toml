@@ -1,0 +1,7 @@
+id      = "core:tech_ntr"
+tier    = "T2"
+name    = "Nuclear-thermal propulsion"
+prereqs = ["core:tech_cryo_depots", "core:tech_fission_100kwe"]
+unlocks = []
+cost_sci = 1200.0
+cost_ed  = 600.0

@@ -1,0 +1,7 @@
+id      = "core:tech_cryo_depots"
+tier    = "T1"
+name    = "Cryogenic depots & ZBO storage"
+prereqs = []
+unlocks = []
+cost_sci = 150.0
+cost_ed  = 100.0

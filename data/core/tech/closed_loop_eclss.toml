@@ -1,0 +1,7 @@
+id      = "core:tech_closed_loop_eclss"
+tier    = "T3"
+name    = "Closed-loop bioregenerative ECLSS"
+prereqs = ["core:tech_isru_large"]
+unlocks = []
+cost_sci = 2400.0
+cost_ed  = 1500.0

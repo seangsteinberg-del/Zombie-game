@@ -1,0 +1,7 @@
+id      = "core:tech_wafer_fab"
+tier    = "T3"
+name    = "Off-Earth wafer fabrication (Silicon Independence)"
+prereqs = ["core:tech_isru_large", "core:tech_fission_100kwe"]
+unlocks = []
+cost_sci = 3000.0
+cost_ed  = 2500.0

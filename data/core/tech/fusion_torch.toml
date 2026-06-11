@@ -1,0 +1,7 @@
+id      = "core:tech_fusion_torch"
+tier    = "T4"
+name    = "Fusion torch drive [SPECULATIVE]"
+prereqs = ["core:tech_ntr", "core:tech_autonomous_factories"]
+unlocks = []
+cost_sci = 12000.0
+cost_ed  = 8000.0

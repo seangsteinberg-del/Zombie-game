@@ -1,0 +1,7 @@
+id      = "core:tech_isru_large"
+tier    = "T2"
+name    = "Large-scale ISRU"
+prereqs = []
+unlocks = ["core:engine_ml111"]
+cost_sci = 500.0
+cost_ed  = 400.0

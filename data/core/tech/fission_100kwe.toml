@@ -1,0 +1,7 @@
+id      = "core:tech_fission_100kwe"
+tier    = "T2"
+name    = "100 kWe-class fission power"
+prereqs = []
+unlocks = []
+cost_sci = 400.0
+cost_ed  = 250.0
