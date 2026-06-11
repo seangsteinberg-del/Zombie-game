@@ -299,6 +299,19 @@ class ResearchState:
             amount *= NOVEL_MULT
         return self._credit(db, family, amount)
 
+    def accrue_burn_seconds(self, db: ContentDB | None, family: str,
+                            seconds: float, *,
+                            env_class: str = "leo_microgravity") -> float:
+        """Engine burn time alone (0.05 ED/s) — the ignition's 5 ED lump is
+        credited separately at ignition/staging time."""
+        if seconds <= 0.0:
+            return 0.0
+        amount = 0.05 * seconds
+        key = f"{family}|{env_class}"
+        if self.ed_novel.get(key, 0.0) < NOVEL_HOURS:
+            amount *= NOVEL_MULT
+        return self._credit(db, family, amount)
+
     def accrue_event(self, db: ContentDB | None, family: str, kind: str, *,
                      env_class: str = "leo_microgravity",
                      unit_rank: int = 1, vessel_id: str | None = None) -> float:

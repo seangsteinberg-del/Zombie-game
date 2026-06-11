@@ -40,7 +40,8 @@ from aphelion.sim.orbits.ephemeris import load_solar_system
 from aphelion.sim.orbits.kepler import elements_to_state, state_to_elements
 from aphelion.sim.orbits import transfers as tr
 from aphelion.sim.orbits.trajectory import predict_trajectory
-from aphelion.sim.research import ResearchState
+from aphelion.sim.research import (MODULE_FAMILY, ResearchState, badge,
+                                   engine_family, maturity)
 
 # exploration science per first SOI entry (11: location-gated Science)
 _FIRST_ENTRY_SCIENCE = {
@@ -134,9 +135,55 @@ _PAUSE_ITEMS = ("RESUME", "QUICKSAVE", "LOAD QUICKSAVE", "VOLUME -",
                 "VOLUME +", "EXIT TO MAIN MENU", "QUIT TO DESKTOP")
 
 
-def _tech_order(db) -> list[str]:
-    return sorted(db.tech, key=lambda i: (db.tech[i].get("cost_sci", 0.0)
-                                          + db.tech[i].get("cost_ed", 0.0)))
+_BRANCH_ORDER = ("PR", "GN", "PW", "IS", "IN", "SH", "HB", "LS", "VH", "SC")
+_BRANCH_NAMES = {"PR": "PROPULSION", "GN": "GNC & COMMS", "PW": "POWER",
+                 "IS": "ISRU", "IN": "INDUSTRY", "SH": "SHIPS",
+                 "HB": "HABITATS", "LS": "LIFE SUPPORT", "VH": "VEHICLES",
+                 "SC": "SCIENCE"}
+
+
+def _tech_order(db, research=None) -> list[str]:
+    """Board order: branch columns, then tier, then cost. With a research
+    state, fogged nodes (11 §1.5) are excluded — they draw as ??? but are
+    not selectable."""
+    ids = sorted(
+        db.tech,
+        key=lambda i: (_BRANCH_ORDER.index(db.tech[i].get("category", "SC")),
+                       db.tech[i]["tier"],
+                       db.tech[i].get("cost_sci", 0.0)))
+    if research is not None:
+        ids = [i for i in ids if research.visible(db, i)]
+    return ids
+
+
+def _fresh_research(db) -> "ResearchState":
+    rs = ResearchState()
+    rs.bootstrap(db)
+    return rs
+
+
+# environment class (11 §3.5 M_env) by site kind / body for ED accrual
+_KIND_ENV = {"psr_ice": "cryo_surface", "mars_ice": "vacuum_dusty_surface",
+             "aerostat": "dense_atmosphere", "methane_lake": "cryo_surface",
+             "ice_burrow": "high_radiation"}
+_ATMO_BODIES = {"core:earth", "core:venus", "core:mars", "core:titan"}
+
+
+def _stage_engine_families(vessel) -> set[str]:
+    """ED families of the engines in the active (bottom) stage."""
+    fams: set[str] = set()
+    if vessel is None or not vessel.stage_plan:
+        return fams
+    for idx in vessel.stage_plan[0]:
+        pid = vessel.rows[idx].part_id
+        if "engine" in pid:
+            fams.add(engine_family(pid))
+    return fams
+
+
+def _ascent_env(body_id: str) -> str:
+    return ("dense_atmosphere" if body_id in _ATMO_BODIES
+            else "vacuum_dusty_surface")
 
 
 from aphelion.game.fleet import FleetVessel  # noqa: E402  (campaign vessel)
@@ -566,7 +613,8 @@ def run(argv: list[str] | None = None) -> int:
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("--scene", type=str, default="auto",
                         choices=["auto", "menu", "flight", "builder", "base",
-                                 "research", "ascent", "descent", "help",
+                                 "research", "research_ed", "research_codex",
+                                 "ascent", "descent", "help",
                                  "contracts", "crew", "pause", "planner"])
     args = parser.parse_args(argv)
     if args.headless:
@@ -660,7 +708,7 @@ def run(argv: list[str] | None = None) -> int:
                                                      "pilot", 2),
                           "J. Okafor": CrewMember("J. Okafor",
                                                   "engineer", 1)},
-                    research=ResearchState(), visited={"core:earth"},
+                    research=_fresh_research(db), visited={"core:earth"},
                     visited_surface=set(), milestones=set(),
                     tutorial=first_flight_tutorial())
 
@@ -717,7 +765,7 @@ def run(argv: list[str] | None = None) -> int:
         """Crew bonuses + the closed-loop ECLSS retrofit when researched
         (the tech node finally GRANTS something: 2.5x life support)."""
         apply_crew_bonuses(fv, crew)
-        if "core:tech_closed_loop_eclss" in research.unlocked:
+        if "core:tech_ls07_closed_loop_eclss" in research.unlocked:
             fv.lss_bonus *= 2.5
 
     def do_quicksave(path=None, label="QUICKSAVED") -> str:
@@ -753,6 +801,7 @@ def run(argv: list[str] | None = None) -> int:
     pause_open = False
     pause_cursor = 0
     research_cursor = 0
+    research_view = "tree"            # tree | ed (data dashboard) | codex
     surface_open = False
     surface_cursor = 0
     base_cursor = 0
@@ -787,6 +836,10 @@ def run(argv: list[str] | None = None) -> int:
         planner_open = True
     elif want == "pause":
         pause_open = True
+    elif want == "research_ed":
+        research_open, research_view = True, "ed"
+    elif want == "research_codex":
+        research_open, research_view = True, "codex"
     autosave_acc = 0.0
     gold_flash = 0.0
     ascent_event_count = 0
@@ -1060,11 +1113,19 @@ def run(argv: list[str] | None = None) -> int:
                             live.ignite()
                             shake = 1.0
                             audio.play("ignition")
+                            for fam in _stage_engine_families(live.vessel):
+                                research.accrue_ignition(
+                                    db, fam,
+                                    env_class=_ascent_env(ascent_body_id))
                         elif live.t < 2.0:
                             pass        # debounce: SPACE-spam must not stage
                         elif live.stage():
                             shake = max(shake, 0.6)
                             audio.play("stage")
+                            for fam in _stage_engine_families(live.vessel):
+                                research.accrue_ignition(
+                                    db, fam,
+                                    env_class=_ascent_env(ascent_body_id))
                     elif event.key == pygame.K_x:
                         live.throttle_cmd = 1.0     # X = burn, as in flight
                     elif event.key == pygame.K_z:
@@ -1439,7 +1500,16 @@ def run(argv: list[str] | None = None) -> int:
                                             sci = (site["science"]
                                                    * science_multiplier(av0, crew))
                                             research.earn_science(sci)
-                                            research.earn_eng_data(sci * 0.3)
+                                            body = site.get("body",
+                                                            "core:venus")
+                                            sci += research.award_milestone(
+                                                "landing", body, t)
+                                            if av0.crew:
+                                                sci += research.award_milestone(
+                                                    "crewed_landing", body, t)
+                                            research.accrue_event(
+                                                db, "AeroFlight", "aero_event",
+                                                env_class="dense_atmosphere")
                                             msg += f"  +{sci:.0f} science"
                                         toast, toast_until = msg, t + 10
                                         audio.play("soi")
@@ -1584,24 +1654,66 @@ def run(argv: list[str] | None = None) -> int:
                             toast, toast_until = msg, t + 5
                             audio.play("blip")
             elif event.type == pygame.KEYDOWN and research_open:
-                tech_ids = _tech_order(db)
+                tech_ids = _tech_order(db, research)
                 if event.key in (pygame.K_ESCAPE, pygame.K_r):
                     research_open = False
+                elif event.key == pygame.K_TAB:
+                    research_view = {"tree": "ed", "ed": "codex",
+                                     "codex": "tree"}[research_view]
+                    audio.play("tick")
+                elif research_view != "tree":
+                    pass                       # data/codex panes are read-only
                 elif event.key == pygame.K_UP:
                     research_cursor = (research_cursor - 1) % len(tech_ids)
                     audio.play("tick")
                 elif event.key == pygame.K_DOWN:
                     research_cursor = (research_cursor + 1) % len(tech_ids)
                     audio.play("tick")
+                elif event.key in (pygame.K_LEFT, pygame.K_RIGHT):
+                    # jump a whole branch column
+                    cur = tech_ids[research_cursor % len(tech_ids)]
+                    bi = _BRANCH_ORDER.index(db.tech[cur].get("category", "SC"))
+                    step = 1 if event.key == pygame.K_RIGHT else -1
+                    for hop in range(1, len(_BRANCH_ORDER)):
+                        want_br = _BRANCH_ORDER[(bi + step * hop)
+                                                % len(_BRANCH_ORDER)]
+                        nxt = next((k for k, n in enumerate(tech_ids)
+                                    if db.tech[n].get("category") == want_br),
+                                   None)
+                        if nxt is not None:
+                            research_cursor = nxt
+                            audio.play("tick")
+                            break
                 elif event.key == pygame.K_RETURN:
                     nid = tech_ids[research_cursor % len(tech_ids)]
+                    nd = db.tech[nid]
                     if research.unlock(db, nid, t):
-                        toast = f"RESEARCHED: {db.tech[nid]['name']}"
+                        toast = f"RESEARCHED: {nd['name']}"
                         toast_until = t + 8.0
                         audio.play("paid")
                     else:
-                        toast = "cannot unlock (prereqs or insufficient sci/ed)"
-                        toast_until = t + 5.0
+                        missing = research.missing_ed(db, nid)
+                        dscs = db.by_type("discoveries")
+                        need_dsc = [d for d in nd.get("discovery_prereqs", [])
+                                    if d not in research.discoveries]
+                        if nid in research.unlocked:
+                            toast = "already researched"
+                        elif need_dsc:
+                            names = ", ".join(dscs[d]["name"]
+                                              for d in need_dsc)
+                            toast = f"requires discovery: {names}"
+                        elif missing:
+                            toast = "needs data: " + ", ".join(
+                                f"{f} {h:,.0f}/{n:,.0f}"
+                                for f, h, n in missing)
+                        elif research.science < research.discounted_cost(
+                                db, nid):
+                            toast = (f"insufficient science "
+                                     f"({research.discounted_cost(db, nid):,.0f}"
+                                     f" needed)")
+                        else:
+                            toast = "prerequisite nodes not researched"
+                        toast_until = t + 6.0
                         audio.play("alarm")
             elif event.type == pygame.KEYDOWN and builder_open:
                 ground = sorted(
@@ -2189,6 +2301,12 @@ def run(argv: list[str] | None = None) -> int:
                     vessels.append(fv)
                     active_idx = len(vessels) - 1
                     milestones.add("orbited")
+                    research.award_milestone("orbit", ascent_body_id, t)
+                    # burn-time ED for the stack that flew (0.05 ED/s)
+                    for fam in _stage_engine_families(live.vessel):
+                        research.accrue_burn_seconds(
+                            db, fam, live.t,
+                            env_class=_ascent_env(ascent_body_id))
                     crew_refit(fv)
                     crewed = (f" — crew: {', '.join(fv.crew)}"
                               if fv.crew else "")
@@ -2230,7 +2348,14 @@ def run(argv: list[str] | None = None) -> int:
                     sci = site["science"] * science_multiplier(descent_av,
                                                                crew)
                     research.earn_science(sci)
-                    research.earn_eng_data(sci * 0.3)
+                    body = site.get("body", "core:moon")
+                    sci += research.award_milestone("landing", body, t)
+                    if descent_av.crew:
+                        sci += research.award_milestone("crewed_landing",
+                                                        body, t)
+                    if body in _ATMO_BODIES:
+                        research.accrue_event(db, "AeroFlight", "aero_event",
+                                              env_class="dense_atmosphere")
                     msg += f"  +{sci:.0f} science"
                 toast, toast_until = msg, t + 10
                 audio.play("soi")
@@ -2950,6 +3075,8 @@ def run(argv: list[str] | None = None) -> int:
                 burn_glow = 0.8
                 node_exec_seen = True
                 audio.play("burn")
+                research.accrue_event(db, "Avionics", "program_exec",
+                                      vessel_id=str(av.vid))
             else:
                 toast = "NODE FAILED: insufficient propellant"
                 audio.play("alarm")
@@ -2960,12 +3087,16 @@ def run(argv: list[str] | None = None) -> int:
         for fv in vessels:
             for note in fv.advance_to(t):
                 toast, toast_until = f"SOI {note}", t + 8
+                # avionics ED is capped per SOI leg (11 §3.5)
+                research.reset_avionics_leg(str(fv.vid))
             if fv.frame_id not in visited:
                 visited.add(fv.frame_id)
                 mult = science_multiplier(fv, crew)
                 sci = _FIRST_ENTRY_SCIENCE.get(fv.frame_id, 200.0) * mult
                 research.earn_science(sci)
-                research.earn_eng_data(sci * 0.25)
+                sci += research.award_milestone("flyby", fv.frame_id, t)
+                if fv.elements.alpha > 0.0 and fv.landed_at is None:
+                    sci += research.award_milestone("orbit", fv.frame_id, t)
                 toast = (f"FIRST ENTRY: {fv.frame_id.split(':')[1]} "
                          f"+{sci:.0f} science"
                          + (f" (x{mult:.1f} — scientist aboard)"
@@ -3015,18 +3146,39 @@ def run(argv: list[str] | None = None) -> int:
                           else 100.0 if cname in resident else 1_000.0)
                 member.dose.accrue(loc, days, areal_g_cm2=shield,
                                    material="water")
-            # engineering data tracks OPERATIONS, not wall-clock: every
-            # online module earns its keep (kills the Act IV warp-wall)
-            mods_on = sum(1 for b in bases for m in b.net.modules
-                          if m.state == "RUNNING")
-            if mods_on:
-                research.earn_eng_data(0.8 * days * mods_on)
+            # engineering data tracks OPERATIONS per part FAMILY (11 §3.5):
+            # running modules accrue to their family with √N damping and
+            # the ×3 novel-environment window per site class
+            fam_groups: dict[tuple[str, str], int] = {}
+            for b in bases:
+                env = _KIND_ENV.get(SITES[b.site_id].get("kind"),
+                                    "vacuum_dusty_surface")
+                for m in b.net.modules:
+                    if m.state == "RUNNING":
+                        fam = MODULE_FAMILY.get(m.module_id.rsplit("_", 1)[0])
+                        if fam:
+                            key = (fam, env)
+                            fam_groups[key] = fam_groups.get(key, 0) + 1
+            for (fam, env), n_units in fam_groups.items():
+                research.accrue_hours(db, fam, days * 24.0,
+                                      n_units=n_units, env_class=env)
+            # crewed habs log PressureStructures hours
+            for b in bases:
+                if b.crew:
+                    habs = sum(1 for m in b.net.modules
+                               if m.module_id.startswith("hab_module"))
+                    if habs:
+                        research.accrue_hours(
+                            db, "PressureStructures", days * 24.0,
+                            n_units=habs,
+                            env_class=_KIND_ENV.get(
+                                SITES[b.site_id].get("kind"),
+                                "vacuum_dusty_surface"))
             labs_on = sum(1 for b in bases for m in b.net.modules
                           if m.module_id.startswith("science_lab")
                           and m.state == "RUNNING")
             if labs_on:
                 research.earn_science(2.5 * days * labs_on)
-                research.earn_eng_data(2.5 * days * labs_on)
             # the program has a payroll: fixed ops + salaries + base upkeep
             burn = (_OVERHEAD_FIXED_M + _OVERHEAD_PER_CREW_M * len(crew)
                     + _OVERHEAD_PER_BASE_M * len(bases)) * 1e6 \
@@ -3071,8 +3223,13 @@ def run(argv: list[str] | None = None) -> int:
                     toast_until = t + 8
                     audio.play("alarm")
                 elif ev.kind == "repaired":
-                    research.earn_eng_data(10.0)   # lessons-learned report
-                    toast = f"{site.name}: {ev.subject} repaired (+10 ed)"
+                    # investigated failure: lessons learned pay family ED
+                    fam = MODULE_FAMILY.get(
+                        ev.subject.rsplit("_", 1)[0]) or "FabricationMachines"
+                    got = research.accrue_event(db, fam,
+                                                "failure_investigated")
+                    toast = (f"{site.name}: {ev.subject} repaired "
+                             f"(+{got:.0f} {fam} data)")
                     toast_until = t + 6
                     audio.play("blip")
 
@@ -3424,7 +3581,8 @@ def run(argv: list[str] | None = None) -> int:
         for chip_txt, chip_col in (
                 (f"$ {program.funds / 1e6:,.0f}M", theme.COLORS["gold"]),
                 (f"sci {research.science:,.0f}", theme.COLORS["accent"]),
-                (f"ed {research.eng_data:,.0f}", theme.COLORS["accent"]),
+                (f"tech {len(research.unlocked)}/{len(db.tech)}",
+                 theme.COLORS["accent"]),
                 (f"dose {worst_frac:.0%}",
                  theme.COLORS["danger"] if worst_frac > 0.8
                  else theme.COLORS["text_dim"]),
@@ -4259,105 +4417,231 @@ def run(argv: list[str] | None = None) -> int:
                 font="small")
 
         if research_open:
-            # the tech TREE: tier columns of state-colored node cards wired
-            # by prereq connector lines (keyboard cursor == card index)
-            tech_ids = _tech_order(db)
+            # R&D board (11): 10 branch columns of tier-sorted cards with
+            # fog-of-research ??? silhouettes; TAB cycles tree/data/codex
+            tech_ids = _tech_order(db, research)
+            all_ids = _tech_order(db)
             pw, ph = 1216, 576
             px0, py0 = size[0] // 2 - pw // 2, 72
             screen.blit(theme.panel(pw, ph, "RESEARCH"), (px0, py0))
             screen.blit(theme.chip(f"science {research.science:,.0f}",
                                    theme.COLORS["accent"]),
-                        (px0 + pw - 336, py0 + 3))
-            screen.blit(theme.chip(f"eng data {research.eng_data:,.0f}",
-                                   theme.COLORS["gold"]),
-                        (px0 + pw - 168, py0 + 3))
+                        (px0 + pw - 340, py0 + 3))
+            screen.blit(theme.chip(
+                f"tech {len(research.unlocked)}/{len(all_ids)}",
+                theme.COLORS["gold"]), (px0 + pw - 168, py0 + 3))
             overlay_rects["research"] = []
-            tier_of = {nid: int(db.tech[nid]["tier"][1]) for nid in tech_ids}
-            present = sorted(set(tier_of.values()))
-            col_w = (pw - 52) // max(1, len(present))
-            card_w, card_h = col_w - 18, 62
-            col_idx = {t: k for k, t in enumerate(present)}
-            stacked: dict[int, int] = {}
-            pos: dict[str, tuple[int, int]] = {}
-            for nid in tech_ids:
-                t = tier_of[nid]
-                j = stacked.get(t, 0)
-                stacked[t] = j + 1
-                pos[nid] = (px0 + 26 + col_idx[t] * col_w,
-                            py0 + 64 + j * (card_h + 14))
-            for t in present:
-                theme.draw_text(screen, px0 + 30 + col_idx[t] * col_w,
-                                py0 + 40, f"TIER {t}",
-                                color=theme.COLORS["text_dim"],
-                                font="ui_small")
-            for nid in tech_ids:        # connectors under the cards
-                x1, y1 = pos[nid]
-                for pre_id in db.tech[nid]["prereqs"]:
-                    if pre_id not in pos:
+            if research_view == "ed":
+                # ED dashboard: 22 family bars, maturity and saturation
+                theme.draw_text(
+                    screen, px0 + 24, py0 + 38,
+                    "ENGINEERING DATA — per-family flight experience; "
+                    "thresholds CHECK it, nothing spends it",
+                    color=theme.COLORS["text_dim"], font="ui_small")
+                from aphelion.sim.research import FAMILIES
+                half = (len(FAMILIES) + 1) // 2
+                for i, fam in enumerate(FAMILIES):
+                    cx = px0 + 24 + (0 if i < half else pw // 2)
+                    cy = py0 + 66 + (i % half) * 42
+                    d = research.d_f(fam)
+                    cap = research.ed_cap(db, fam)
+                    bdg = badge(d)
+                    theme.draw_text(screen, cx, cy, fam,
+                                    color=theme.COLORS["text"],
+                                    font="ui_small")
+                    tag = f"×{maturity(d, fam):.2f} failure"
+                    if bdg:
+                        tag += f"  ·  {bdg}"
+                    if d >= cap - 1e-9 and d > 0:
+                        tag += "  ·  DATA SATURATED"
+                    theme.draw_text(screen, cx + 226, cy, tag,
+                                    color=(theme.COLORS["good"] if bdg
+                                           else theme.COLORS["text_dim"]),
+                                    font="small")
+                    screen.blit(theme.bar(296, 9,
+                                          min(1.0, d / max(1.0, cap)),
+                                          theme.COLORS["accent"]),
+                                (cx, cy + 18))
+                    theme.draw_text(screen, cx + 306, cy + 14,
+                                    f"{d:,.0f} / {cap:,.0f}",
+                                    color=theme.COLORS["text_dim"],
+                                    font="small")
+                theme.draw_text(screen, px0 + 24, py0 + ph - 28,
+                                "TAB codex   ·   R close",
+                                color=theme.COLORS["text_dim"], font="small")
+            elif research_view == "codex":
+                theme.draw_text(
+                    screen, px0 + 24, py0 + 38,
+                    "DISCOVERY CODEX — location-gated firsts; each reveals "
+                    "and discounts technology",
+                    color=theme.COLORS["text_dim"], font="ui_small")
+                dscs = db.by_type("discoveries")
+                for i, did in enumerate(sorted(dscs)):
+                    dd = dscs[did]
+                    cy = py0 + 66 + i * 26
+                    got = did in research.discoveries
+                    if got:
+                        screen.blit(theme.icon("check", 13),
+                                    (px0 + 24, cy + 1))
+                    theme.draw_text(screen, px0 + 44, cy, dd["name"],
+                                    color=(theme.COLORS["good"] if got
+                                           else theme.COLORS["text"]),
+                                    font="ui_small")
+                    info = f"+{dd['sci']:,.0f} sci" + \
+                        ("  · staged" if dd.get("staged") else "")
+                    theme.draw_text(screen, px0 + 318, cy, info,
+                                    color=(theme.COLORS["gold"] if got
+                                           else theme.COLORS["text_dim"]),
+                                    font="small")
+                    req = "ACQUIRED" if got else dd["requirement"]
+                    theme.draw_text(screen, px0 + 452, cy, req[:96],
+                                    color=theme.COLORS["text_dim"],
+                                    font="small")
+                theme.draw_text(screen, px0 + 24, py0 + ph - 28,
+                                "TAB tree   ·   R close",
+                                color=theme.COLORS["text_dim"], font="small")
+            else:
+                col_w = (pw - 36) // 10
+                card_w, card_h, pitch = col_w - 10, 44, 50
+                col_of: dict[str, int] = {}
+                row_of: dict[str, int] = {}
+                rows_used: dict[str, int] = {}
+                for nid in all_ids:
+                    br = db.tech[nid].get("category", "SC")
+                    j = rows_used.get(br, 0)
+                    rows_used[br] = j + 1
+                    col_of[nid] = _BRANCH_ORDER.index(br)
+                    row_of[nid] = j
+                sel_nid = tech_ids[research_cursor % len(tech_ids)]
+                y_base = py0 + 84
+                view_h = ph - 140
+                sel_y = row_of[sel_nid] * pitch
+                scroll = max(0, sel_y - (view_h - pitch))
+                idx_of = {nid: i for i, nid in enumerate(tech_ids)}
+                for k, br in enumerate(_BRANCH_ORDER):
+                    done = sum(1 for n in all_ids
+                               if db.tech[n].get("category") == br
+                               and n in research.unlocked)
+                    tot = sum(1 for n in all_ids
+                              if db.tech[n].get("category") == br)
+                    hx = px0 + 18 + k * col_w
+                    theme.draw_text(screen, hx, py0 + 38,
+                                    f"{br}  {done}/{tot}",
+                                    color=(theme.COLORS["good"]
+                                           if done == tot
+                                           else theme.COLORS["text"]),
+                                    font="ui_small")
+                    theme.draw_text(screen, hx, py0 + 58, _BRANCH_NAMES[br],
+                                    color=theme.COLORS["text_dim"],
+                                    font="small")
+                clip = pygame.Rect(px0 + 12, y_base, pw - 24, view_h)
+                screen.set_clip(clip)
+                for nid in all_ids:
+                    x = px0 + 18 + col_of[nid] * col_w
+                    y = y_base + row_of[nid] * pitch - scroll
+                    if y + card_h < y_base or y > y_base + view_h:
                         continue
-                    x0c, y0c = pos[pre_id]
-                    a = (x0c + card_w, y0c + card_h // 2)
-                    b = (x1, y1 + card_h // 2)
-                    ccol = (theme.COLORS["good"]
-                            if pre_id in research.unlocked
-                            else theme.COLORS["panel_edge"])
-                    pygame.draw.lines(screen, ccol, False,
-                                      [a, (a[0] + 8, a[1]),
-                                       (a[0] + 8, b[1]), b], 2)
-            for i, nid in enumerate(tech_ids):
-                nd = db.tech[nid]
-                x, y = pos[nid]
-                unlocked = nid in research.unlocked
-                can = research.can_unlock(db, nid)
-                sel = i == research_cursor % len(tech_ids)
-                if unlocked:
-                    fill, edge = (14, 40, 28), theme.COLORS["good"]
-                elif can:
-                    fill, edge = (44, 36, 16), theme.COLORS["gold"]
-                else:
-                    fill, edge = (12, 18, 30), theme.COLORS["panel_edge"]
-                card = pygame.Rect(x, y, card_w, card_h)
-                pygame.draw.rect(screen, fill, card, border_radius=6)
-                pygame.draw.rect(screen, edge, card, width=1, border_radius=6)
-                if sel:
-                    pygame.draw.rect(screen, theme.COLORS["accent"],
-                                     card.inflate(6, 6), width=2,
-                                     border_radius=8)
-                line1, line2 = "", ""
-                for wd in nd["name"].split():       # word-aware 2-line wrap
-                    if not line2 and len(line1) + len(wd) < 24:
-                        line1 = (line1 + " " + wd).strip()
+                    nd = db.tech[nid]
+                    card = pygame.Rect(x, y, card_w, card_h)
+                    if nid not in idx_of:          # fogged: ??? silhouette
+                        pygame.draw.rect(screen, (8, 12, 20), card,
+                                         border_radius=6)
+                        pygame.draw.rect(screen, (26, 34, 50), card,
+                                         width=1, border_radius=6)
+                        theme.draw_text(screen, x + 8, y + 6, "???",
+                                        color=(60, 72, 96), font="ui_small")
+                        theme.draw_text(screen, x + 8, y + card_h - 17,
+                                        nd["tier"], color=(60, 72, 96),
+                                        font="small")
+                        continue
+                    unlocked = nid in research.unlocked
+                    can = research.can_unlock(db, nid)
+                    if unlocked:
+                        fill, edge = (14, 40, 28), theme.COLORS["good"]
+                    elif can:
+                        fill, edge = (44, 36, 16), theme.COLORS["gold"]
+                    elif nd.get("speculative"):
+                        fill, edge = (16, 13, 28), (74, 56, 104)
                     else:
-                        line2 = (line2 + " " + wd).strip()
-                ncol = (theme.COLORS["good"] if unlocked
-                        else theme.COLORS["text"])
-                theme.draw_text(screen, x + 10, y + 7, line1,
-                                color=ncol, font="ui_small")
-                if line2:
-                    theme.draw_text(screen, x + 10, y + 22, line2[:28],
-                                    color=ncol, font="ui_small")
-                if unlocked:
-                    screen.blit(theme.icon("check", 14),
-                                (x + card_w - 22, y + 7))
-                    state = "researched"
-                    scol = theme.COLORS["good"]
-                else:
-                    state = (f"{nd.get('cost_sci', 0):,.0f} sci · "
-                             f"{nd.get('cost_ed', 0):,.0f} ed")
-                    scol = (theme.COLORS["gold"] if can
-                            else theme.COLORS["text_dim"])
-                theme.draw_text(screen, x + 10, y + card_h - 21, state,
-                                color=scol, font="small")
-                overlay_rects["research"].append((card.copy(), i))
-            sel_nid = tech_ids[research_cursor % len(tech_ids)]
-            unl = ", ".join(p.split(":")[1]
-                            for p in db.tech[sel_nid].get("unlocks", [])) or "—"
-            pre = ", ".join(p.split(":")[1]
-                            for p in db.tech[sel_nid]["prereqs"]) or "none"
-            theme.draw_text(screen, px0 + 24, py0 + ph - 32,
-                            f"unlocks: {unl}    ·    prereqs: {pre}    ·    "
-                            "ENTER unlock   R close",
-                            color=theme.COLORS["text"], font="ui_small")
+                        fill, edge = (12, 18, 30), theme.COLORS["panel_edge"]
+                    pygame.draw.rect(screen, fill, card, border_radius=6)
+                    pygame.draw.rect(screen, edge, card, width=1,
+                                     border_radius=6)
+                    if nid == sel_nid:
+                        pygame.draw.rect(screen, theme.COLORS["accent"],
+                                         card.inflate(6, 6), width=2,
+                                         border_radius=8)
+                    line1, line2 = "", ""
+                    for wd in nd["name"].split():   # word-aware 2-line wrap
+                        if not line2 and len(line1) + len(wd) < 17:
+                            line1 = (line1 + " " + wd).strip()
+                        else:
+                            line2 = (line2 + " " + wd).strip()
+                    ncol = (theme.COLORS["good"] if unlocked
+                            else theme.COLORS["text"])
+                    theme.draw_text(screen, x + 8, y + 4, line1,
+                                    color=ncol, font="small")
+                    if line2:
+                        theme.draw_text(screen, x + 8, y + 16, line2[:18],
+                                        color=ncol, font="small")
+                    if nd.get("era"):
+                        theme.draw_text(screen, x + card_w - 14, y + 3, "*",
+                                        color=theme.COLORS["gold"],
+                                        font="ui_small")
+                    if unlocked:
+                        state, scol = "researched", theme.COLORS["good"]
+                    else:
+                        state = f"{research.discounted_cost(db, nid):,.0f}"
+                        if research.missing_ed(db, nid):
+                            state += " +data"
+                        if any(d not in research.discoveries
+                               for d in nd.get("discovery_prereqs", [])):
+                            state += " +dsc"
+                        scol = (theme.COLORS["gold"] if can
+                                else theme.COLORS["text_dim"])
+                    theme.draw_text(screen, x + 8, y + card_h - 15, state,
+                                    color=scol, font="small")
+                    theme.draw_text(screen, x + card_w - 22, y + card_h - 15,
+                                    nd["tier"],
+                                    color=theme.COLORS["text_dim"],
+                                    font="small")
+                    overlay_rects["research"].append((card.copy(),
+                                                      idx_of[nid]))
+                screen.set_clip(None)
+                # detail strip: the selected node, all gates explicit
+                nd = db.tech[sel_nid]
+                dscs = db.by_type("discoveries")
+                cost = research.discounted_cost(db, sel_nid)
+                bits = [nd["tier"], f"{cost:,.0f} sci"]
+                if cost < nd.get("cost_sci", 0.0) - 0.5:
+                    bits[-1] += f" (was {nd.get('cost_sci', 0.0):,.0f})"
+                for th in nd.get("ed_thresholds", []):
+                    bits.append(f"{th['family']} "
+                                f"{research.d_f(th['family']):,.0f}"
+                                f"/{th['value']:,.0f}")
+                for d in nd.get("discovery_prereqs", []):
+                    mark = "ok:" if d in research.discoveries else "needs"
+                    bits.append(f"{mark} {dscs[d]['name']}")
+                if nd.get("speculative"):
+                    bits.append("[SPECULATIVE]")
+                if nd.get("era"):
+                    bits.append("ERA-DEFINING")
+                theme.draw_text(screen, px0 + 24, py0 + ph - 50,
+                                (nd["name"] + "   ·   "
+                                 + "   ".join(bits))[:158],
+                                color=theme.COLORS["text"], font="ui_small")
+                pres = []
+                for term in nd["prereqs"]:
+                    if isinstance(term, list):
+                        pres.append(" / ".join(db.tech[p]["name"]
+                                               for p in term))
+                    else:
+                        pres.append(db.tech[term]["name"])
+                info2 = ("needs: " + (", ".join(pres) or "—") + "   ·   "
+                         + nd.get("anchor", "")
+                         + "   ·   ENTER research  TAB data  R close")
+                theme.draw_text(screen, px0 + 24, py0 + ph - 28, info2[:170],
+                                color=theme.COLORS["text_dim"], font="small")
 
         # tutorial rail draws ABOVE every content overlay so guidance is
         # never hidden by the very screen it is teaching. Overlays whose
