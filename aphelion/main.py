@@ -304,6 +304,9 @@ def run(argv: list[str] | None = None) -> int:
     builder = Builder(db, research)
     builder_open = False
 
+    # maneuver node (01 §3.7): plan -> preview -> arm -> auto-execute
+    node = None           # dict(t_node, dvp, dvr, armed)
+
     frame_count = 0
     running = True
     while running:
@@ -367,6 +370,43 @@ def run(argv: list[str] | None = None) -> int:
                     running = False
                 elif event.key == pygame.K_b:
                     builder_open = True
+                elif event.key == pygame.K_n:
+                    if node is None:
+                        node = {"t_node": t + 600.0, "dvp": 0.0, "dvr": 0.0,
+                                "armed": False}
+                        toast, toast_until = ("NODE placed +10 min: arrows set dv, "
+                                              "[/] move time, ENTER arm, N cancel"), t + 8
+                    else:
+                        node = None
+                        toast, toast_until = "node cancelled", t + 4
+                elif node is not None and not node["armed"] and event.key in (
+                        pygame.K_UP, pygame.K_DOWN, pygame.K_LEFT, pygame.K_RIGHT,
+                        pygame.K_LEFTBRACKET, pygame.K_RIGHTBRACKET,
+                        pygame.K_RETURN):
+                    nstep = 100.0 if shift else 10.0
+                    if event.key == pygame.K_UP:
+                        node["dvp"] += nstep
+                    elif event.key == pygame.K_DOWN:
+                        node["dvp"] -= nstep
+                    elif event.key == pygame.K_RIGHT:
+                        node["dvr"] += nstep
+                    elif event.key == pygame.K_LEFT:
+                        node["dvr"] -= nstep
+                    elif event.key == pygame.K_LEFTBRACKET:
+                        node["t_node"] = max(t + 60.0,
+                                             node["t_node"] - (600.0 if shift else 60.0))
+                    elif event.key == pygame.K_RIGHTBRACKET:
+                        node["t_node"] += 600.0 if shift else 60.0
+                    elif event.key == pygame.K_RETURN:
+                        need = math.hypot(node["dvp"], node["dvr"])
+                        if need > craft.dv_remaining:
+                            toast, toast_until = "node exceeds dv budget", t + 5
+                            audio.play("alarm")
+                        else:
+                            node["armed"] = True
+                            toast, toast_until = ("node ARMED — warp on; burn "
+                                                  "executes on time"), t + 6
+                            audio.play("blip")
                 elif event.key == pygame.K_F2:
                     base_screen = not base_screen
                 elif event.key == pygame.K_g:
@@ -426,9 +466,25 @@ def run(argv: list[str] | None = None) -> int:
                 elif event.y < 0:
                     cam.zoom_out(-event.y)
 
+        # armed-node warp guard (01 §3.6): step down so the burn lands on time
+        if node is not None and node["armed"]:
+            while (warp_idx > 0
+                   and node["t_node"] - t < _WARP_LADDER[warp_idx] * 5.0):
+                warp_idx -= 1
         if not paused:
             clock.advance_analytic(clock.t + _WARP_LADDER[warp_idx] * real_dt)
         t = clock.t
+        # node execution at its instant (the plan IS the burn at rails fidelity)
+        if node is not None and node["armed"] and t >= node["t_node"]:
+            if craft.burn(node["t_node"], node["dvp"], node["dvr"]):
+                toast = (f"NODE EXECUTED: {math.hypot(node['dvp'], node['dvr']):,.0f}"
+                         f" m/s")
+                audio.play("burn")
+            else:
+                toast = "NODE FAILED: insufficient dv"
+                audio.play("alarm")
+            toast_until = t + 6
+            node = None
         for note in craft.advance_to(t):
             toast, toast_until = f"SOI {note}", t + 8
         # campaign hooks: first-entry science + contract completion
@@ -514,6 +570,34 @@ def run(argv: list[str] | None = None) -> int:
                     pygame.draw.circle(screen, _BODY_COLORS.get(mid, _DEFAULT_COLOR), mpx, 2)
                     screen.blit(font.render(mid.split(":")[1], True, (120, 130, 150)),
                                 (mpx[0] + 5, mpx[1] - 5))
+
+        # node preview: post-burn legs in magenta + node marker
+        if node is not None:
+            from aphelion.sim.flight.node_exec import ManeuverNode, apply_node_impulsive
+            try:
+                post = apply_node_impulsive(
+                    craft.elements,
+                    ManeuverNode(node["t_node"], node["dvp"], node["dvr"]))
+                node_legs = predict_trajectory(tree, craft.frame_id, post,
+                                               node["t_node"], _PREDICT_HORIZON)
+                for leg in node_legs:
+                    lfx, lfy = body_root(leg.frame_id)
+                    r_soi_l = tree.body(leg.frame_id).soi_radius
+                    draw_conic(screen, leg.elements, cam, (255, 120, 220),
+                               r_max=r_soi_l if math.isfinite(r_soi_l) else None,
+                               origin=(lfx, lfy))
+                nfx, nfy = body_root(craft.frame_id)
+                nx, ny, _, _ = elements_to_state(craft.elements, node["t_node"])
+                npx = cam.world_to_screen(nfx + nx, nfy + ny)
+                pygame.draw.circle(screen, (255, 120, 220), npx, 5, width=2)
+            except Exception:
+                pass
+            state_txt = "ARMED" if node["armed"] else "editing"
+            screen.blit(font.render(
+                f"NODE [{state_txt}] T-{max(0.0, node['t_node'] - t):,.0f} s   "
+                f"prograde {node['dvp']:+,.0f}  radial {node['dvr']:+,.0f}  "
+                f"({math.hypot(node['dvp'], node['dvr']):,.0f} m/s)",
+                True, (255, 120, 220)), (10, size[1] - 48))
 
         # craft: predicted legs + marker
         for i, leg in enumerate(craft.predict(t)):
