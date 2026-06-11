@@ -1,0 +1,12 @@
+id        = "core:engine_h102"
+type      = "engine"
+tier      = "T0"
+name      = "H-102 Crane hydrolox upper (RL10C-1)"
+mass_t    = 0.19
+[engine]
+thrust_kN  = 101.8
+isp_s      = 449.7
+isp_sl_s   = 110.0
+throttle   = [1.0, 1.0]
+gimbal_deg = 4.0
+propellant = { Oxygen = 0.857, Hydrogen = 0.143 }

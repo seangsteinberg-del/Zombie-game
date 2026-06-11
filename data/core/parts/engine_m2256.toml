@@ -1,0 +1,12 @@
+id        = "core:engine_m2256"
+type      = "engine"
+tier      = "T1"
+name      = "M-2256 Drayhorse methalox (Raptor 2)"
+mass_t    = 1.63
+[engine]
+thrust_kN  = 2394.0
+isp_s      = 347.0
+isp_sl_s   = 327.0
+throttle   = [0.4, 1.0]
+gimbal_deg = 15.0
+propellant = { Oxygen = 0.783, Methane = 0.217 }

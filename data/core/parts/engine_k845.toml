@@ -1,0 +1,12 @@
+id        = "core:engine_k845"
+type      = "engine"
+tier      = "T0"
+name      = "K-845 Mule kerolox booster (Merlin 1D)"
+mass_t    = 0.47
+[engine]
+thrust_kN  = 914.0
+isp_s      = 311.0
+isp_sl_s   = 282.0
+throttle   = [0.4, 1.0]
+gimbal_deg = 5.0
+propellant = { Oxygen = 0.702, RP1 = 0.298 }

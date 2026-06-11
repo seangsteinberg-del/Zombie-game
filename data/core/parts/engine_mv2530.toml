@@ -1,0 +1,12 @@
+id        = "core:engine_mv2530"
+type      = "engine"
+tier      = "T1"
+name      = "MV-2530 Drayhorse-V methalox vacuum (Raptor V)"
+mass_t    = 2.1
+[engine]
+thrust_kN  = 2530.0
+isp_s      = 380.0
+isp_sl_s   = 100.0
+throttle   = [0.4, 1.0]
+gimbal_deg = 3.0
+propellant = { Oxygen = 0.783, Methane = 0.217 }

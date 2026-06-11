@@ -1,0 +1,12 @@
+id        = "core:engine_lnd71"
+type      = "engine"
+tier      = "T1"
+name      = "LND-71 Ibex storable lander (SuperDraco)"
+mass_t    = 0.12
+[engine]
+thrust_kN  = 73.0
+isp_s      = 243.0
+isp_sl_s   = 235.0
+throttle   = [0.2, 1.0]
+gimbal_deg = 0.0
+propellant = { NTO = 0.623, MMH = 0.377 }

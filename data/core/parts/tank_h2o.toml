@@ -1,0 +1,8 @@
+id     = "core:tank_h2o"
+type   = "tank"
+tier   = "T0"
+name   = "Water tank"
+mass_t = 0.1
+[tank]
+capacity_t = 2.0
+mixture    = { Water = 1.0 }

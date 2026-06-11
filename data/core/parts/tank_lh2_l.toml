@@ -1,0 +1,8 @@
+id     = "core:tank_lh2_l"
+type   = "tank"
+tier   = "T2"
+name   = "LH2 tank L (ZBO)"
+mass_t = 3.0
+[tank]
+capacity_t = 20.0
+mixture    = { Hydrogen = 1.0 }

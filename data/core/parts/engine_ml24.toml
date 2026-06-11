@@ -1,0 +1,12 @@
+id        = "core:engine_ml24"
+type      = "engine"
+tier      = "T2"
+name      = "ML-24 Gopher methalox lander (Morpheus HD)"
+mass_t    = 0.08
+[engine]
+thrust_kN  = 24.0
+isp_s      = 320.0
+isp_sl_s   = 295.0
+throttle   = [0.25, 1.0]
+gimbal_deg = 5.0
+propellant = { Oxygen = 0.783, Methane = 0.217 }

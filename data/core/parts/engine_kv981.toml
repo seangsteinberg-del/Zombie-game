@@ -1,0 +1,12 @@
+id        = "core:engine_kv981"
+type      = "engine"
+tier      = "T0"
+name      = "KV-981 Mule-V kerolox vacuum (Merlin Vacuum)"
+mass_t    = 0.63
+[engine]
+thrust_kN  = 981.0
+isp_s      = 348.0
+isp_sl_s   = 90.0
+throttle   = [0.6, 1.0]
+gimbal_deg = 3.0
+propellant = { Oxygen = 0.702, RP1 = 0.298 }

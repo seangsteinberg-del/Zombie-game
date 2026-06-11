@@ -1,0 +1,8 @@
+id     = "core:tank_xe_s"
+type   = "tank"
+tier   = "T0"
+name   = "Xenon COPV S"
+mass_t = 0.025
+[tank]
+capacity_t = 0.42
+mixture    = { Xenon = 1.0 }

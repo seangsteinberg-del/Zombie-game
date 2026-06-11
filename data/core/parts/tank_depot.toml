@@ -1,0 +1,8 @@
+id     = "core:tank_depot"
+type   = "tank"
+tier   = "T1"
+name   = "Cryo depot tank"
+mass_t = 14.0
+[tank]
+capacity_t = 200.0
+mixture    = { Oxygen = 0.783, Methane = 0.217 }

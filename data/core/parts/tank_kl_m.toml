@@ -1,0 +1,8 @@
+id     = "core:tank_kl_m"
+type   = "tank"
+tier   = "T0"
+name   = "Kerolox tank M"
+mass_t = 0.7
+[tank]
+capacity_t = 14.0
+mixture    = { Oxygen = 0.702, RP1 = 0.298 }

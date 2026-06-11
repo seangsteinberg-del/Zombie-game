@@ -7,6 +7,6 @@ mass_t    = 0.75
 thrust_kN  = 765.0
 isp_s      = 329.0
 isp_sl_s   = 315.0
-throttle   = [0.40, 1.0]
+throttle   = [0.4, 1.0]
 gimbal_deg = 5.0
 propellant = { Oxygen = 0.783, Methane = 0.217 }

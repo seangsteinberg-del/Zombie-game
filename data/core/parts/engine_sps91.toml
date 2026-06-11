@@ -1,0 +1,12 @@
+id        = "core:engine_sps91"
+type      = "engine"
+tier      = "T0"
+name      = "SPS-91 Pelican storable service engine (Apollo)"
+mass_t    = 0.293
+[engine]
+thrust_kN  = 91.0
+isp_s      = 314.0
+isp_sl_s   = 60.0
+throttle   = [1.0, 1.0]
+gimbal_deg = 6.0
+propellant = { NTO = 0.623, MMH = 0.377 }

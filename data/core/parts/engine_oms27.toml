@@ -1,0 +1,12 @@
+id        = "core:engine_oms27"
+type      = "engine"
+tier      = "T0"
+name      = "OMS-27 Vireo storable OMS (Shuttle OMS)"
+mass_t    = 0.118
+[engine]
+thrust_kN  = 26.7
+isp_s      = 316.0
+isp_sl_s   = 100.0
+throttle   = [1.0, 1.0]
+gimbal_deg = 6.0
+propellant = { NTO = 0.623, MMH = 0.377 }

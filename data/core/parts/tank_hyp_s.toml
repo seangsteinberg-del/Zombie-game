@@ -1,0 +1,8 @@
+id     = "core:tank_hyp_s"
+type   = "tank"
+tier   = "T0"
+name   = "Storable-prop tank S"
+mass_t = 0.1
+[tank]
+capacity_t = 1.6
+mixture    = { NTO = 0.623, MMH = 0.377 }

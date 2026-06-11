@@ -1,0 +1,12 @@
+id        = "core:engine_hl67"
+type      = "engine"
+tier      = "T1"
+name      = "HL-67 Heron hydrolox lander (CECE)"
+mass_t    = 0.23
+[engine]
+thrust_kN  = 67.0
+isp_s      = 445.0
+isp_sl_s   = 120.0
+throttle   = [0.06, 1.0]
+gimbal_deg = 4.0
+propellant = { Oxygen = 0.857, Hydrogen = 0.143 }

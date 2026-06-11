@@ -1,0 +1,12 @@
+id        = "core:engine_h2280"
+type      = "engine"
+tier      = "T1"
+name      = "H-2280 Shire hydrolox sustainer (RS-25)"
+mass_t    = 3.177
+[engine]
+thrust_kN  = 2279.0
+isp_s      = 452.0
+isp_sl_s   = 366.0
+throttle   = [0.67, 1.0]
+gimbal_deg = 10.5
+propellant = { Oxygen = 0.857, Hydrogen = 0.143 }

@@ -1,0 +1,8 @@
+id     = "core:tank_lox_m"
+type   = "tank"
+tier   = "T0"
+name   = "LOX tank M"
+mass_t = 0.4
+[tank]
+capacity_t = 8.0
+mixture    = { Oxygen = 1.0 }
