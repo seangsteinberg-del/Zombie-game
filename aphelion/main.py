@@ -25,6 +25,7 @@ Dev flags: --frames N  --screenshot PATH  --headless  --scene S
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 import sys
@@ -180,41 +181,172 @@ class BaseSite:
 
 
 class Builder:
-    """The Engineer screen (12 §5.4 / 06 §3): pick parts (research-gated),
-    group into stages, watch live Tsiolkovsky/TWR, then fly the real
-    ascent sim. Pricing is the 12-owned placeholder $2M/t dry + $0.5M/t
-    propellant until the economy pass lands final tags."""
+    """The Engineer screen (12 §5.4 / 06 §3): a real VAB. Categorized,
+    filterable catalog with a stats card; a stack you can edit ANYWHERE
+    (cursor, insert, remove, reorder, split); per-part pricing from
+    sim.economy; crew assignment before launch; the flown ascent after."""
+
+    CATS = ("ALL", "engine", "tank", "crew", "structure")
+    CAT_LABELS = {"engine": "ENGINES", "tank": "TANKS",
+                  "crew": "CREW & PAYLOAD", "structure": "STRUCTURE"}
 
     def __init__(self, db, research) -> None:
         self.db = db
         self.research = research
-        self.catalog = sorted(
-            [pid for pid, p in db.parts.items()
-             if p["type"] in ("engine", "tank", "structure", "crew")])
-        self.cursor = 0
+        self.filter_idx = 0
+        self.focus = "catalog"                # or "stack"
         self.stack: list[list[str]] = [[]]    # stages, bottom first
+        self.stack_cursor = 0                 # index into flat()
+        self.cursor = 0                       # index into entries
+        self.crew_pick: list[str] = []
+        self.assign_open = False
+        self.assign_cursor = 0
         self.message = "assemble a vessel from the catalog, then L to launch it"
+        self._rebuild()
+
+    # -- catalog ---------------------------------------------------------
+    def _rebuild(self) -> None:
+        want = self.CATS[self.filter_idx]
+        entries: list[tuple[str, str]] = []
+        for ty in ("engine", "tank", "crew", "structure"):
+            if want != "ALL" and ty != want:
+                continue
+            pids = sorted((pid for pid, p in self.db.parts.items()
+                           if p["type"] == ty),
+                          key=lambda i: (self.db.parts[i]["tier"],
+                                         self.db.parts[i]["name"]))
+            if pids:
+                entries.append(("header", self.CAT_LABELS[ty]))
+                entries.extend(("part", pid) for pid in pids)
+        self.entries = entries
+        self.catalog = [pid for kind, pid in entries if kind == "part"]
+        self.cursor = min(self.cursor, max(0, len(entries) - 1))
+        if entries and entries[self.cursor][0] == "header":
+            self.move_cursor(+1)
+
+    def move_cursor(self, delta: int) -> None:
+        if not self.entries:
+            return
+        i = self.cursor
+        for _ in range(len(self.entries)):
+            i = (i + delta) % len(self.entries)
+            if self.entries[i][0] == "part":
+                self.cursor = i
+                return
+
+    def cycle_filter(self, delta: int) -> None:
+        self.filter_idx = (self.filter_idx + delta) % len(self.CATS)
+        self.cursor = 0
+        self._rebuild()
+
+    @property
+    def selected_pid(self) -> str | None:
+        if self.entries and self.entries[self.cursor][0] == "part":
+            return self.entries[self.cursor][1]
+        return None
+
+    def select(self, pid: str) -> bool:
+        for i, (kind, payload) in enumerate(self.entries):
+            if kind == "part" and payload == pid:
+                self.cursor = i
+                return True
+        return False
 
     def locked(self, part_id: str) -> bool:
         return not self.research.part_available(self.db, part_id)
 
+    # -- stack editing ----------------------------------------------------
+    def flat(self) -> list[tuple[int, int, str]]:
+        """Flattened (stage_idx, part_idx, pid) rows, bottom stage first."""
+        return [(si, pi, pid)
+                for si, stage in enumerate(self.stack)
+                for pi, pid in enumerate(stage)]
+
     def add(self) -> None:
-        pid = self.catalog[self.cursor]
+        pid = self.selected_pid
+        if pid is None:
+            return
         if self.locked(pid):
             self.message = f"{pid.split(':')[1]} is research-locked"
             return
-        self.stack[-1].append(pid)
+        rows = self.flat()
+        if self.focus == "stack" and rows:
+            si, pi, _ = rows[min(self.stack_cursor, len(rows) - 1)]
+            self.stack[si].insert(pi + 1, pid)
+            self.stack_cursor = self.flat().index((si, pi + 1, pid))
+        else:
+            self.stack[-1].append(pid)
         self.message = f"added {pid.split(':')[1]}"
 
     def remove(self) -> None:
-        if self.stack[-1]:
+        rows = self.flat()
+        if self.focus == "stack" and rows:
+            si, pi, pid = rows[min(self.stack_cursor, len(rows) - 1)]
+            self.stack[si].pop(pi)
+            if not self.stack[si] and len(self.stack) > 1:
+                self.stack.pop(si)
+            self.stack_cursor = max(0, min(self.stack_cursor,
+                                           len(self.flat()) - 1))
+            self.message = f"removed {pid.split(':')[1]}"
+        elif self.stack[-1]:
             self.stack[-1].pop()
         elif len(self.stack) > 1:
             self.stack.pop()
 
+    def move_part(self, delta: int) -> None:
+        """Shift the highlighted part up/down, across stage boundaries."""
+        rows = self.flat()
+        if not rows:
+            return
+        si, pi, pid = rows[min(self.stack_cursor, len(rows) - 1)]
+        if 0 <= pi + delta < len(self.stack[si]):
+            stage = self.stack[si]
+            stage[pi], stage[pi + delta] = stage[pi + delta], stage[pi]
+        elif 0 <= si + delta < len(self.stack):
+            self.stack[si].pop(pi)
+            tgt = self.stack[si + delta]
+            tgt.insert(len(tgt) if delta < 0 else 0, pid)
+            if not self.stack[si] and len(self.stack) > 1:
+                self.stack.pop(si)
+        else:
+            return
+        for i, row in enumerate(self.flat()):
+            if row[2] == pid and (row[0] != si or row[1] != pi):
+                self.stack_cursor = i
+                break
+
+    def split_stage(self) -> None:
+        """Split the highlighted part's stage at the cursor (it and parts
+        above it become a new upper stage)."""
+        rows = self.flat()
+        if not rows:
+            return
+        si, pi, _ = rows[min(self.stack_cursor, len(rows) - 1)]
+        if pi == 0:
+            self.message = "already a stage boundary"
+            return
+        stage = self.stack[si]
+        self.stack[si] = stage[:pi]
+        self.stack.insert(si + 1, stage[pi:])
+        self.message = f"stage split — now {len(self.stack)} stages"
+
     def new_stage(self) -> None:
         if self.stack[-1]:
             self.stack.append([])
+
+    def load_stack(self, stack) -> bool:
+        """Restore a blueprint/saved stack, dropping unknown part ids."""
+        clean = [[pid for pid in stage if pid in self.db.parts]
+                 for stage in stack]
+        clean = [s for s in clean if s] or [[]]
+        self.stack = clean
+        self.stack_cursor = 0
+        return True
+
+    # -- vessel & money ---------------------------------------------------
+    def crew_capacity(self) -> int:
+        return sum(int(self.db.parts[pid].get("crew", {}).get("capacity", 0))
+                   for stage in self.stack for pid in stage)
 
     def build_vessel(self):
         from aphelion.sim.vessels.vessel import Vessel
@@ -229,12 +361,17 @@ class Builder:
                 plan.append(idxs)
         if not plan:
             return None
-        return Vessel(self.db, rows, stage_plan=plan, cd_a_m2=3.2)
+        from aphelion.render.vessel_art import vessel_frontal_area
+        return Vessel(self.db, rows, stage_plan=plan,
+                      cd_a_m2=vessel_frontal_area(self.db, self.stack))
+
+    def part_cost(self, pid: str) -> float:
+        from aphelion.sim.economy import part_cost_usd
+        return part_cost_usd(self.db.parts[pid])
 
     def price(self, vessel) -> float:
-        dry = vessel.dry_mass_kg() / 1_000.0
-        prop = (vessel.total_mass_kg() - vessel.dry_mass_kg()) / 1_000.0
-        return (2.0 * dry + 0.5 * prop) * 1e6
+        from aphelion.sim.economy import vessel_cost_usd
+        return vessel_cost_usd(vessel)
 
 
 def run(argv: list[str] | None = None) -> int:
@@ -256,7 +393,7 @@ def run(argv: list[str] | None = None) -> int:
     from aphelion.render.draw_conics import draw_conic
     from aphelion.render.postfx import Bloom, Nebula, soi_ring, vignette
     from aphelion.render.vessel_art import (
-        app_icon, craft_icon, part_thumb, vessel_sprite)
+        app_icon, craft_icon, part_thumb, vessel_metrics, vessel_sprite)
     from aphelion.sim.environment.atmosphere import density as atmo_density
     from aphelion.sim.flight.ascent_live import LiveAscent
     from aphelion.ui import theme
@@ -348,14 +485,18 @@ def run(argv: list[str] | None = None) -> int:
                     crew=got["crew"], research=got["research"],
                     visited=got["visited"],
                     visited_surface=got["visited_surface"],
-                    milestones=got["milestones"], tutorial=tut)
+                    milestones=got["milestones"], tutorial=tut,
+                    builder_stack=got.get("builder_stack", []))
 
     def campaign_tuple(st: dict):
         """One unpack shape for new game, quickload, and startup."""
+        b = Builder(db, st["research"])
+        if st.get("builder_stack"):
+            b.load_stack(st["builder_stack"])
         return (st["clock"], st["vessels"], st["active_idx"], st["next_vid"],
                 st["program"], st["rng"], st["bases"], st["crew"],
                 st["research"], st["visited"], st["visited_surface"],
-                st["milestones"], st["tutorial"], Builder(db, st["research"]),
+                st["milestones"], st["tutorial"], b,
                 None, 0, False, False, False, False, False, 0.0, "", 0.0)
 
     (clock, vessels, active_idx, next_vid, program, campaign_rng, bases,
@@ -370,7 +511,8 @@ def run(argv: list[str] | None = None) -> int:
             next_vid=next_vid, program=program, research=research,
             crew=crew, visited=visited, visited_surface=visited_surface,
             milestones=milestones, bases=bases,
-            tutorial_done=tutorial.completed, rng=campaign_rng)
+            tutorial_done=tutorial.completed, rng=campaign_rng,
+            builder_stack=builder.stack)
         write_campaign(path or qs_path, snap)
         return label
 
@@ -427,6 +569,23 @@ def run(argv: list[str] | None = None) -> int:
     live: LiveAscent | None = None
     live_stack: list[list[str]] = []
     launch_cost = 0.0
+    pending_crew: list[str] = []
+    pending_assigned = False
+
+    # blueprint slots (designs.json beside the saves)
+    bp_path = save_dir / "designs.json"
+
+    def load_designs() -> dict:
+        try:
+            return json.loads(bp_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+
+    def save_designs(d: dict) -> None:
+        try:
+            bp_path.write_text(json.dumps(d, indent=1), encoding="utf-8")
+        except Exception:
+            pass
     ascent_warp = 1.0
     ascent_acc = 0.0
     rot_cache: dict = {}
@@ -735,22 +894,110 @@ def run(argv: list[str] | None = None) -> int:
                         toast_until = t + 5.0
                         audio.play("alarm")
             elif event.type == pygame.KEYDOWN and builder_open:
-                if event.key in (pygame.K_b, pygame.K_ESCAPE):
+                ground = sorted(n for n in crew
+                                if n not in {x for v in vessels
+                                             for x in v.crew})
+                do_launch = False
+                if builder.assign_open:
+                    cap = builder.crew_capacity()
+                    if event.key == pygame.K_ESCAPE:
+                        builder.assign_open = False
+                        builder.message = "crew assignment cancelled"
+                    elif event.key == pygame.K_UP and ground:
+                        builder.assign_cursor = (builder.assign_cursor - 1) % len(ground)
+                        audio.play("tick")
+                    elif event.key == pygame.K_DOWN and ground:
+                        builder.assign_cursor = (builder.assign_cursor + 1) % len(ground)
+                        audio.play("tick")
+                    elif event.key in (pygame.K_RETURN, pygame.K_SPACE) and ground:
+                        name = ground[builder.assign_cursor % len(ground)]
+                        if name in builder.crew_pick:
+                            builder.crew_pick.remove(name)
+                        elif len(builder.crew_pick) < cap:
+                            builder.crew_pick.append(name)
+                        else:
+                            builder.message = f"capacity is {cap}"
+                            audio.play("warn")
+                        audio.play("tick")
+                    elif event.key == pygame.K_l:
+                        do_launch = True
+                elif event.key in (pygame.K_b, pygame.K_ESCAPE):
                     builder_open = False
+                elif event.key == pygame.K_TAB:
+                    builder.focus = ("stack" if builder.focus == "catalog"
+                                     else "catalog")
+                    audio.play("tick")
                 elif event.key == pygame.K_UP:
-                    builder.cursor = (builder.cursor - 1) % len(builder.catalog)
+                    if builder.focus == "stack" and builder.flat():
+                        builder.stack_cursor = max(0, builder.stack_cursor - 1)
+                    else:
+                        builder.move_cursor(-1)
                     audio.play("tick")
                 elif event.key == pygame.K_DOWN:
-                    builder.cursor = (builder.cursor + 1) % len(builder.catalog)
+                    if builder.focus == "stack" and builder.flat():
+                        builder.stack_cursor = min(len(builder.flat()) - 1,
+                                                   builder.stack_cursor + 1)
+                    else:
+                        builder.move_cursor(+1)
                     audio.play("tick")
+                elif event.key in (pygame.K_LEFT, pygame.K_RIGHT):
+                    builder.cycle_filter(
+                        1 if event.key == pygame.K_RIGHT else -1)
+                    audio.play("tick")
+                elif event.key == pygame.K_LEFTBRACKET:
+                    builder.focus = "stack"
+                    builder.move_part(-1)
+                elif event.key == pygame.K_RIGHTBRACKET:
+                    builder.focus = "stack"
+                    builder.move_part(+1)
                 elif event.key == pygame.K_RETURN:
                     builder.add()
                     audio.play("blip")
-                elif event.key == pygame.K_BACKSPACE:
+                elif event.key in (pygame.K_BACKSPACE, pygame.K_DELETE):
                     builder.remove()
+                elif event.key == pygame.K_s and (
+                        event.mod & pygame.KMOD_SHIFT):
+                    builder.split_stage()
                 elif event.key == pygame.K_s:
                     builder.new_stage()
+                elif pygame.K_1 <= event.key <= pygame.K_6:
+                    slot = str(event.key - pygame.K_0)
+                    designs = load_designs()
+                    if event.mod & pygame.KMOD_CTRL:
+                        vessel = builder.build_vessel()
+                        if vessel is not None:
+                            stats_bp = vessel.stage_stats()
+                            total = sum(s["dv_vac"] for s in stats_bp)
+                            top = next((s for s in reversed(builder.stack)
+                                        if s), ["?"])
+                            nm = (f"{db.parts[top[-1]]['name'].split(' (')[0]}"
+                                  f" / {total:,.0f} m/s")
+                            designs[slot] = {
+                                "name": nm,
+                                "stack": [list(s) for s in builder.stack]}
+                            save_designs(designs)
+                            builder.message = f"blueprint {slot} saved: {nm}"
+                            audio.play("blip")
+                    elif slot in designs:
+                        builder.load_stack(designs[slot]["stack"])
+                        builder.message = (f"blueprint {slot} loaded: "
+                                           f"{designs[slot]['name']}")
+                        audio.play("blip")
+                    else:
+                        builder.message = f"blueprint slot {slot} is empty"
                 elif event.key == pygame.K_l:
+                    cap = builder.crew_capacity()
+                    if (cap > 0 and ground
+                            and builder.build_vessel() is not None):
+                        builder.assign_open = True
+                        builder.assign_cursor = 0
+                        builder.crew_pick = [n for n in builder.crew_pick
+                                             if n in ground][:cap]
+                        builder.message = (f"assign up to {cap} crew "
+                                           f"(ENTER toggles) — L launches")
+                    else:
+                        do_launch = True
+                if do_launch:
                     vessel = builder.build_vessel()
                     if vessel is None:
                         builder.message = "nothing to launch"
@@ -768,6 +1015,9 @@ def run(argv: list[str] | None = None) -> int:
                                 tree.body("core:earth").radius, 86_164.1)
                             live_stack = [list(s) for s in builder.stack if s]
                             launch_cost = cost
+                            pending_crew = list(builder.crew_pick)
+                            pending_assigned = builder.assign_open
+                            builder.assign_open = False
                             ascent_warp, ascent_acc = 1.0, 0.0
                             ascent_event_count = 0
                             node = None
@@ -983,7 +1233,16 @@ def run(argv: list[str] | None = None) -> int:
                     elif top == "research":
                         research_cursor = idx
                     elif top == "builder":
-                        builder.cursor = idx
+                        if idx >= 20_000:
+                            pass                   # filter tabs: click-only
+                        elif builder.assign_open:
+                            builder.assign_cursor = idx
+                        elif idx >= 10_000:        # stack rows offset
+                            builder.focus = "stack"
+                            builder.stack_cursor = idx - 10_000
+                        else:
+                            builder.focus = "catalog"
+                            builder.cursor = idx
 
                 if event.type == pygame.MOUSEMOTION:
                     idx = _row_at(event.pos)
@@ -992,11 +1251,25 @@ def run(argv: list[str] | None = None) -> int:
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1:
                         idx = _row_at(event.pos)
-                        if idx is not None:
+                        if (top == "builder" and idx is not None
+                                and idx >= 20_000):
+                            builder.filter_idx = ((idx - 20_000)
+                                                  % len(builder.CATS))
+                            builder.cursor = 0
+                            builder._rebuild()
+                            audio.play("tick")
+                        elif idx is not None:
                             _set_cursor(idx)
                             _post(pygame.K_RETURN)
                     elif event.button == 3:
-                        _post(pygame.K_ESCAPE)
+                        idx = _row_at(event.pos)
+                        if (top == "builder" and idx is not None
+                                and idx >= 10_000):
+                            builder.focus = "stack"   # right-click removes
+                            builder.stack_cursor = idx - 10_000
+                            _post(pygame.K_BACKSPACE)
+                        else:
+                            _post(pygame.K_ESCAPE)
                 elif event.type == pygame.MOUSEWHEEL and event.y:
                     _post(pygame.K_UP if event.y > 0 else pygame.K_DOWN)
             elif (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
@@ -1077,10 +1350,16 @@ def run(argv: list[str] | None = None) -> int:
                                  live.vessel, f"Vessel-{next_vid}",
                                  next_vid, t_now=t)
                 next_vid += 1
-                # crew board up to capacity (those not already flying)
+                # crew board: the pre-launch assignment when one was made,
+                # else auto-board whoever is free (legacy convenience)
                 aboard_elsewhere = {n for v in vessels for n in v.crew}
                 free = [n for n in crew if n not in aboard_elsewhere]
-                fv.crew = free[:fv.crew_capacity]
+                if pending_assigned:
+                    fv.crew = [n for n in pending_crew
+                               if n in free][:fv.crew_capacity]
+                else:
+                    fv.crew = free[:fv.crew_capacity]
+                pending_crew, pending_assigned = [], False
                 vessels.append(fv)
                 active_idx = len(vessels) - 1
                 milestones.add("orbited")
@@ -1816,75 +2095,227 @@ def run(argv: list[str] | None = None) -> int:
             dimmer = pygame.Surface(size, pygame.SRCALPHA)
             dimmer.fill((6, 9, 16, 242))
             screen.blit(dimmer, (0, 0))
-            screen.blit(theme.panel(560, size[1] - 80, "PART CATALOG"),
+            cat_focus = builder.focus == "catalog" and not builder.assign_open
+            screen.blit(theme.panel(560, size[1] - 80,
+                                    "PART CATALOG" + (" ◄" if cat_focus else "")),
                         (16, 16))
-            screen.blit(theme.panel(360, size[1] - 80, "STACK"), (592, 16))
+            screen.blit(theme.panel(360, size[1] - 80,
+                                    "STACK" + ("" if cat_focus else " ◄")),
+                        (592, 16))
             screen.blit(theme.panel(296, size[1] - 80, "VESSEL"), (968, 16))
-            rows_fit = (size[1] - 150) // 30
-            top = max(0, min(builder.cursor - rows_fit // 2,
-                             len(builder.catalog) - rows_fit))
             overlay_rects["builder"] = []
-            for i, pid in enumerate(builder.catalog):
+
+            # category filter tabs (LEFT/RIGHT or click)
+            tab_x = 28
+            for ci, cat in enumerate(builder.CATS):
+                label = cat.upper() if cat != "ALL" else "ALL"
+                col = (theme.COLORS["gold"] if ci == builder.filter_idx
+                       else theme.COLORS["text_dim"])
+                cs = theme.chip(label, col)
+                screen.blit(cs, (tab_x, 44))
+                overlay_rects["builder"].append(
+                    (pygame.Rect(tab_x, 44, cs.get_width(), 20),
+                     20_000 + ci))
+                tab_x += cs.get_width() + 8
+
+            detail_h = 152
+            list_y0 = 74
+            row_h = 27
+            rows_fit = (size[1] - 80 - detail_h - 60 - (list_y0 - 16)) // row_h
+            top = max(0, min(builder.cursor - rows_fit // 2,
+                             len(builder.entries) - rows_fit))
+            for i, (kind, payload) in enumerate(builder.entries):
                 if i < top or i >= top + rows_fit:
                     continue
+                ry = list_y0 + (i - top) * row_h
+                if kind == "header":
+                    theme.draw_text(screen, 32, ry + 6, payload,
+                                    color=theme.COLORS["gold"], font="small")
+                    pygame.draw.line(screen, theme.COLORS["panel_edge"],
+                                     (140, ry + 13), (552, ry + 13))
+                    continue
+                pid = payload
                 p = db.parts[pid]
                 locked = builder.locked(pid)
-                ry = 54 + (i - top) * 30
                 overlay_rects["builder"].append(
-                    (pygame.Rect(26, ry - 2, 540, 29), i))
-                if i == builder.cursor:
-                    screen.blit(theme.row_glow(540, 28), (26, ry - 2))
-                screen.blit(part_thumb(p, pid, 26), (32, ry))
+                    (pygame.Rect(26, ry - 1, 540, row_h - 1), i))
+                if i == builder.cursor and cat_focus:
+                    screen.blit(theme.row_glow(540, row_h - 2), (26, ry - 1))
+                screen.blit(part_thumb(p, pid, 22), (32, ry + 1))
                 tcol = (theme.COLORS["text_dim"] if locked
                         else theme.COLORS["text"])
-                theme.draw_text(screen, 66, ry + 4, p["name"][:46], color=tcol,
+                theme.draw_text(screen, 62, ry + 5, p["name"][:38],
+                                color=tcol, font="small")
+                theme.draw_text(screen, 408, ry + 5,
+                                f"${builder.part_cost(pid)/1e6:6,.1f}M",
+                                color=(theme.COLORS["text_dim"] if locked
+                                       else theme.COLORS["gold"]),
                                 font="small")
                 screen.blit(theme.chip(p["tier"], theme.COLORS["accent"]),
-                            (470, ry + 2))
+                            (492, ry + 2))
                 if locked:
-                    screen.blit(theme.icon("lock", 14), (530, ry + 5))
+                    screen.blit(theme.icon("lock", 14), (538, ry + 4))
+
+            # part detail card (the stats that make choices informed)
+            sel_pid = builder.selected_pid
+            dy0 = size[1] - 80 - detail_h
+            pygame.draw.line(screen, theme.COLORS["panel_edge"],
+                             (24, dy0), (560, dy0))
+            if sel_pid is not None:
+                p = db.parts[sel_pid]
+                screen.blit(part_thumb(p, sel_pid, 56), (32, dy0 + 12))
+                theme.draw_text(screen, 100, dy0 + 10, p["name"],
+                                color=theme.COLORS["accent"], font="body")
+                lines = [f"mass {p['mass_t']:.2f} t    "
+                         f"unit ${builder.part_cost(sel_pid)/1e6:,.1f}M"]
+                if "engine" in p:
+                    eng = p["engine"]
+                    fam = ", ".join(eng["propellant"])
+                    lines.append(
+                        f"thrust {eng['thrust_kN']:,.0f} kN   Isp "
+                        f"{eng['isp_s']:,.0f}s vac"
+                        + (f" / {eng['isp_sl_s']:,.0f}s asl"
+                           if eng.get("isp_sl_s") else ""))
+                    lines.append(f"burns {fam}")
+                elif "tank" in p:
+                    tank = p["tank"]
+                    mix = " + ".join(f"{frac:.0%} {res}"
+                                     for res, frac in tank["mixture"].items())
+                    lines.append(f"capacity {tank['capacity_t']:,.1f} t")
+                    lines.append(f"holds {mix}")
+                elif "crew" in p:
+                    cc = p["crew"]
+                    lines.append(f"seats {cc.get('capacity', 0)}   life "
+                                 f"support {cc.get('endurance_days', 0):,.0f}"
+                                 f" crew-days")
+                if builder.locked(sel_pid):
+                    need = next((nd["name"] for nd in db.tech.values()
+                                 if sel_pid in nd.get("unlocks", [])),
+                                "unknown research")
+                    lines.append(f"LOCKED — requires: {need}")
+                for li, line in enumerate(lines):
+                    theme.draw_text(
+                        screen, 100, dy0 + 34 + li * 19, line,
+                        color=(theme.COLORS["warn"]
+                               if line.startswith("LOCKED")
+                               else theme.COLORS["text"]), font="small")
+
+            # the stack: stage headers + cursor-editable part rows
             sx0 = 608
-            yy = 54
+            yy = 48
             vessel = builder.build_vessel()
             stats = vessel.stage_stats() if vessel else []
+            flat_i = 0
             for si, stage in enumerate(builder.stack):
                 stat = stats[si] if si < len(stats) else None
-                line = f"STAGE {si + 1}: " + (
-                    f"dv {stat['dv_vac']:,.0f} m/s  TWR {stat['twr']:.2f}"
-                    if stat else "(empty)")
+                if stat and si == 0:
+                    line = (f"S{si + 1}  dv {stat['dv_vac']:,.0f}"
+                            f" ({stat['dv_sl']:,.0f} asl)  TWR "
+                            f"{stat['twr_sl']:.2f}  {stat['burn_s']:,.0f}s")
+                elif stat:
+                    line = (f"S{si + 1}  dv {stat['dv_vac']:,.0f} m/s  TWR "
+                            f"{stat['twr']:.2f}  burn {stat['burn_s']:,.0f}s")
+                else:
+                    line = f"S{si + 1}  (empty)"
                 theme.draw_text(screen, sx0, yy, line,
                                 color=theme.COLORS["accent"], font="small")
                 yy += 20
-                for pid in stage:
+                for pi, pid in enumerate(stage):
                     p = db.parts[pid]
-                    screen.blit(part_thumb(p, pid, 18), (sx0 + 6, yy))
-                    theme.draw_text(screen, sx0 + 30, yy + 2,
+                    sel_row = (not cat_focus
+                               and flat_i == builder.stack_cursor)
+                    overlay_rects["builder"].append(
+                        (pygame.Rect(sx0 - 4, yy - 2, 336, 21),
+                         10_000 + flat_i))
+                    if sel_row:
+                        screen.blit(theme.row_glow(336, 20), (sx0 - 4, yy - 2))
+                    screen.blit(part_thumb(p, pid, 16), (sx0 + 4, yy))
+                    theme.draw_text(screen, sx0 + 26, yy + 2,
                                     p["name"][:32],
                                     color=theme.COLORS["text"], font="small")
-                    yy += 22
-                yy += 8
+                    yy += 21
+                    flat_i += 1
+                yy += 7
             if vessel:
                 total_dv = sum(s["dv_vac"] for s in stats)
                 cost = builder.price(vessel)
+                h_m, d_m = vessel_metrics(db, builder.stack)
                 for ci, (txt, col) in enumerate((
                         (f"dv {total_dv:,.0f} m/s", theme.COLORS["good"]),
-                        (f"{vessel.total_mass_kg()/1e3:,.1f} t",
+                        (f"{vessel.total_mass_kg()/1e3:,.1f} t   "
+                         f"drag {vessel.cd_a_m2:.1f} m²",
                          theme.COLORS["accent"]),
                         (f"${cost/1e6:,.0f}M of ${program.funds/1e6:,.0f}M",
                          theme.COLORS["gold"] if cost <= program.funds
                          else theme.COLORS["danger"]))):
-                    screen.blit(theme.chip(txt, col), (sx0, size[1] - 132 + ci * 26))
+                    screen.blit(theme.chip(txt, col), (sx0, size[1] - 138 + ci * 26))
+                # the rocket, as large as the bay allows (crisp nearest)
                 vspr = vessel_sprite(db, builder.stack)
+                if vspr.get_width() > 4:
+                    k = min(2.5, (size[1] - 210) / vspr.get_height(),
+                            252 / vspr.get_width())
+                    if k > 1.05:
+                        vspr = pygame.transform.scale_by(vspr, int(k * 4) / 4)
                 vx = 968 + (296 - vspr.get_width()) // 2
-                vy = 54 + max(0, (size[1] - 150 - vspr.get_height()) // 2)
+                vy = 48 + max(0, (size[1] - 190 - vspr.get_height()) // 2)
                 screen.blit(vspr, (vx, vy))
+                theme.draw_text(screen, 984, size[1] - 116,
+                                f"{h_m:,.1f} m tall · {d_m:,.1f} m wide",
+                                color=theme.COLORS["text_dim"], font="small")
+                cap = builder.crew_capacity()
+                if cap:
+                    theme.draw_text(screen, 984, size[1] - 96,
+                                    f"seats {cap}"
+                                    + (f" — crew: {len(builder.crew_pick)}"
+                                       f" assigned" if builder.crew_pick
+                                       else ""),
+                                    color=theme.COLORS["accent"],
+                                    font="small")
             theme.draw_text(screen, 24, size[1] - 52, builder.message,
                             color=theme.COLORS["accent"])
             theme.draw_text(
                 screen, 24, size[1] - 30,
-                "UP/DOWN browse   ENTER add   S new stage   BACKSPACE remove   "
-                "L launch   B/ESC close", color=theme.COLORS["text_dim"],
+                "TAB stack  ◄► filter  ENTER add  BKSP del  [/] reorder  "
+                "S stage  ⇧S split  1-6 blueprints (CTRL saves)  L launch  "
+                "ESC close", color=theme.COLORS["text_dim"],
                 font="small", shadow=False)
+
+            # crew assignment (L with seats aboard): pick who flies
+            if builder.assign_open:
+                ground = sorted(n for n in crew
+                                if n not in {x for v in vessels
+                                             for x in v.crew})
+                cap = builder.crew_capacity()
+                apan = theme.panel(520, 110 + 34 * max(1, len(ground)),
+                                   f"CREW ASSIGNMENT — {cap} SEAT"
+                                   + ("S" if cap != 1 else ""))
+                apx, apy = size[0] // 2 - 260, 120
+                screen.blit(apan, (apx, apy))
+                overlay_rects["builder"] = []
+                ayy = apy + 38
+                for i, name in enumerate(ground):
+                    member = crew[name]
+                    sel = i == builder.assign_cursor % max(1, len(ground))
+                    picked = name in builder.crew_pick
+                    if sel:
+                        screen.blit(theme.row_glow(488, 30), (apx + 16, ayy - 3))
+                    screen.blit(theme.portrait(name, 26), (apx + 22, ayy - 1))
+                    box = "[x]" if picked else "[ ]"
+                    theme.draw_text(
+                        screen, apx + 58, ayy + 4,
+                        f"{box} {name:18s} {member.role:9s} "
+                        f"skill {member.skill}  dose "
+                        f"{member.dose.career_fraction:4.0%}",
+                        color=(theme.COLORS["good"] if picked
+                               else theme.COLORS["gold"] if sel
+                               else theme.COLORS["text"]), font="small")
+                    overlay_rects["builder"].append(
+                        (pygame.Rect(apx + 16, ayy - 3, 488, 32), i))
+                    ayy += 34
+                theme.draw_text(
+                    screen, apx + 16, ayy + 8,
+                    "ENTER/click toggle   L launch   ESC back",
+                    color=theme.COLORS["text_dim"], font="small")
 
         if surface_open and av is not None:
             opts = _surface_options(av, bases)

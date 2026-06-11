@@ -155,7 +155,11 @@ class Vessel:
     # -- builder readouts (06 §3: live dv/TWR per stage) ----------------------
 
     def stage_stats(self, g_surface: float = 9.80665) -> list[dict]:
-        """Per-stage (Tsiolkovsky vac dv, liftoff TWR) walking the plan."""
+        """Per-stage readouts walking the plan. Mixed-engine stages use the
+        THRUST-WEIGHTED effective Isp (isp_eff = F_total / (g0 * sum mdot_i),
+        mdot_i = F_i / (g0 * isp_i)) — an arithmetic Isp mean overstates dv
+        for booster+sustainer stages. Sea-level figures scale each engine by
+        its isp_sl_s/isp_s back-pressure loss."""
         stats = []
         remaining = self.total_mass_kg()
         for stage in self.stage_plan:
@@ -167,16 +171,31 @@ class Vessel:
             prop = sum(sum(r.fill.values()) for r in tanks)
             thrust = sum(self.part(r)["engine"]["thrust_kN"] * 1_000.0
                          for r in engines)
-            if engines:
-                isp = sum(self.part(r)["engine"]["isp_s"] for r in engines) / len(engines)
-                ve = isp * G0
-                dv = ve * (0.0 if remaining <= prop else
-                           math.log(remaining / (remaining - prop)))
-            else:
-                dv = 0.0
+            dv = dv_sl = burn_s = thrust_sl = 0.0
+            if engines and thrust > 0.0:
+                mdot = sum(self.part(r)["engine"]["thrust_kN"] * 1_000.0
+                           / (G0 * self.part(r)["engine"]["isp_s"])
+                           for r in engines)
+                thrust_sl = sum(
+                    self.part(r)["engine"]["thrust_kN"] * 1_000.0
+                    * (self.part(r)["engine"].get("isp_sl_s",
+                                                  self.part(r)["engine"]["isp_s"])
+                       / self.part(r)["engine"]["isp_s"])
+                    for r in engines)
+                ve = thrust / mdot                      # = g0 * isp_eff
+                ve_sl = thrust_sl / mdot
+                lnr = (0.0 if remaining <= prop else
+                       math.log(remaining / (remaining - prop)))
+                dv = ve * lnr
+                dv_sl = ve_sl * lnr
+                burn_s = prop / mdot
             stats.append({
                 "dv_vac": dv,
+                "dv_sl": dv_sl,
                 "twr": thrust / (remaining * g_surface) if remaining else 0.0,
+                "twr_sl": (thrust_sl / (remaining * g_surface)
+                           if remaining else 0.0),
+                "burn_s": burn_s,
                 "prop_kg": prop,
                 "stage_mass_kg": remaining,
             })

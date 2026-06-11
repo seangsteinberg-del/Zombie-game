@@ -1,4 +1,4 @@
-"""Builder (Engineer screen) logic tests: catalog gating, stack/stage
+﻿"""Builder (Engineer screen) logic tests: catalog gating, stack/stage
 assembly, live stats, pricing, and the launch-integration vessel."""
 
 import os
@@ -32,7 +32,7 @@ def test_research_gating_in_builder(db):
     b = Builder(db, rs)
     assert b.locked("core:engine_ml111")          # gated by isru_large
     assert not b.locked("core:engine_m733")
-    b.cursor = b.catalog.index("core:engine_ml111")
+    assert b.select("core:engine_ml111")
     b.add()
     assert b.stack == [[]]                        # refused
     rs.earn_science(10_000.0)
@@ -45,11 +45,11 @@ def test_research_gating_in_builder(db):
 def test_stack_stages_and_stats(db):
     b = Builder(db, ResearchState())
     for pid in ("core:engine_m733", "core:engine_m733", "core:tank_ml_xl"):
-        b.cursor = b.catalog.index(pid)
+        assert b.select(pid)
         b.add()
     b.new_stage()
     for pid in ("core:engine_mv815", "core:tank_ml_m", "core:payload_2t"):
-        b.cursor = b.catalog.index(pid)
+        assert b.select(pid)
         b.add()
     v = b.build_vessel()
     assert v is not None
@@ -63,7 +63,8 @@ def test_stack_stages_and_stats(db):
 def test_remove_and_empty_guard(db):
     b = Builder(db, ResearchState())
     assert b.build_vessel() is None
-    b.cursor = b.catalog.index("core:tank_ml_s")
+    assert b.select("core:tank_ml_s")
     b.add()
     b.remove()
     assert b.build_vessel() is None
+

@@ -51,7 +51,8 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
                       visited: set[str], bases: list,
                       tutorial_done: bool, rng=None,
                       visited_surface: set[str] | None = None,
-                      milestones: set[str] | None = None) -> dict:
+                      milestones: set[str] | None = None,
+                      builder_stack: list | None = None) -> dict:
     """bases: objects with .name .last_t .pending_repairs .net (BaseSite)."""
     save = {
         "schema_version": SCHEMA_VERSION,
@@ -92,6 +93,7 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
             "visited_surface": sorted(visited_surface or set()),
             "milestones": sorted(milestones or set()),
             "tutorial_done": tutorial_done,
+            "builder_stack": [list(s) for s in (builder_stack or [])],
             "bases": [{
                 "name": b.name,
                 "site_id": getattr(b, "site_id", "site:peary"),
@@ -172,6 +174,7 @@ def restore_campaign(save: dict, db, tree):
         "visited_surface": set(c.get("visited_surface", [])),
         "milestones": set(c.get("milestones", [])),
         "tutorial_done": c["tutorial_done"],
+        "builder_stack": c.get("builder_stack", []),
         "bases": bases,
         "rng_state": save.get("rng"),
     }

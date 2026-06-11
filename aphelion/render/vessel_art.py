@@ -448,6 +448,54 @@ def vessel_sprite(db, stack: list[list[str]],
     return surf
 
 
+def _part_dims_m(part: dict) -> tuple[float, float]:
+    """(diameter, length) for ANY part, using the same sizing the art uses
+    — so the aero cross-section below matches what the player sees."""
+    if "engine" in part:
+        return _engine_dims_m(part)
+    if "tank" in part:
+        d, body = _tank_dims_m(part)
+        return d, body
+    # structure / crew block: scale with mass like _build_fairing does
+    d = min(max(1.2 + 0.35 * math.sqrt(part.get("mass_t", 1.0)), 1.0), 6.0)
+    return d, 1.4 * d
+
+
+def vessel_metrics(db, stack: list[list[str]]) -> tuple[float, float]:
+    """(overall height m, max diameter m) of the assembled stack."""
+    height = 0.0
+    dia = 0.0
+    for stage in stack:
+        eng_h = 0.0
+        for pid in stage:
+            part = db.parts[pid]
+            d, length = _part_dims_m(part)
+            if "engine" in part:
+                eng_h = max(eng_h, length)
+            else:
+                height += length
+            dia = max(dia, d)
+        height += eng_h
+    return height, dia
+
+
+def vessel_frontal_area(db, stack: list[list[str]]) -> float:
+    """Aero reference area (Cd*A proxy) from the stack's real max diameter.
+    A pointed nose (topmost part of the TOP stage is a structure fairing or
+    crew capsule) earns a 0.7 shape discount; a blunt tank/engine nose does
+    not. Returns m² for Vessel(cd_a_m2=...)."""
+    _, dia = vessel_metrics(db, stack)
+    if dia <= 0.0:
+        return 3.2
+    area = math.pi * (dia / 2.0) ** 2 * 0.5         # Cd 0.5 baseline
+    top_stage = next((s for s in reversed(stack) if s), None)
+    if top_stage:
+        nose = db.parts[top_stage[-1]]
+        if nose.get("type") in ("structure", "crew"):
+            area *= 0.7
+    return max(0.8, area)
+
+
 def craft_icon(heading_rad: float, size: int = 18,
                burning: bool = False) -> pygame.Surface:
     """In-flight map marker, nose along heading_rad (screen coords, y-down).
