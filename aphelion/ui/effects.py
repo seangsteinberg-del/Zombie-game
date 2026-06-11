@@ -57,6 +57,11 @@ class Particles:
 
     def emit_burn(self, x: float, y: float, dir_x: float, dir_y: float,
                   n: int = 14, color=(255, 200, 90)) -> None:
+        # screen-space emitters can be handed huge/non-finite coords when
+        # the camera is focused far from the craft — refuse those quietly
+        if not (math.isfinite(x) and math.isfinite(y)
+                and -1.0e4 < x < 1.0e4 and -1.0e4 < y < 1.0e4):
+            return
         rng = np.random.default_rng(self._next)     # deterministic enough for FX
         for _ in range(n):
             i = self._next % self.cap
@@ -76,9 +81,17 @@ class Particles:
             return
         self.pos[alive] += self.vel[alive] * dt
         self.vel[alive] *= (1.0 - 1.8 * dt)
+        w, h = screen.get_width(), screen.get_height()
         for i in np.nonzero(alive)[0]:
+            x = float(self.pos[i, 0])
+            y = float(self.pos[i, 1])
+            # pygame.draw.circle raises on non-finite / C-int-overflow
+            # centers; anything in that regime is off-screen anyway
+            if not (math.isfinite(x) and math.isfinite(y)
+                    and -50.0 < x < w + 50.0 and -50.0 < y < h + 50.0):
+                continue
             f = 1.0 - self.age[i] / self.life[i]
             c = (int(self.color[i, 0] * f), int(self.color[i, 1] * f),
                  int(self.color[i, 2] * f))
             r = max(1, int(2.5 * f))
-            pygame.draw.circle(screen, c, self.pos[i], r)
+            pygame.draw.circle(screen, c, (x, y), r)

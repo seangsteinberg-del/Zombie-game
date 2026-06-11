@@ -913,7 +913,11 @@ def run(argv: list[str] | None = None) -> int:
                 nfx, nfy = body_root(craft.frame_id)
                 nx, ny, _, _ = elements_to_state(craft.elements, node["t_node"])
                 npx = cam.world_to_screen(nfx + nx, nfy + ny)
-                pygame.draw.circle(screen, (255, 120, 220), npx, 5, width=2)
+                if (math.isfinite(npx[0]) and math.isfinite(npx[1])
+                        and -100 < npx[0] < size[0] + 100
+                        and -100 < npx[1] < size[1] + 100):
+                    pygame.draw.circle(screen, (255, 120, 220), npx, 5,
+                                       width=2)
             except Exception:
                 pass
             state_txt = "ARMED" if node["armed"] else "editing"
@@ -934,12 +938,15 @@ def run(argv: list[str] | None = None) -> int:
         frx, fry = body_root(craft.frame_id)
         crx, cry, cvx, cvy = craft.state(t)
         cpx = cam.world_to_screen(frx + crx, fry + cry)
-        heading = math.atan2(-cvy, cvx)        # nose along velocity, y-down
-        cspr = craft_icon(heading, size=14, burning=burn_glow > 0.0)
-        screen.blit(cspr, (cpx[0] - cspr.get_width() // 2,
-                           cpx[1] - cspr.get_height() // 2))
+        if (math.isfinite(cpx[0]) and math.isfinite(cpx[1])
+                and -200 < cpx[0] < size[0] + 200
+                and -200 < cpx[1] < size[1] + 200):
+            heading = math.atan2(-cvy, cvx)    # nose along velocity, y-down
+            cspr = craft_icon(heading, size=14, burning=burn_glow > 0.0)
+            screen.blit(cspr, (cpx[0] - cspr.get_width() // 2,
+                               cpx[1] - cspr.get_height() // 2))
+            body_click_pts.append((cpx[0], cpx[1], 0))
         burn_glow = max(0.0, burn_glow - real_dt)
-        body_click_pts.append((cpx[0], cpx[1], 0))
 
         el = craft.elements
         body = tree.body(craft.frame_id)
