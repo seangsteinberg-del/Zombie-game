@@ -24,7 +24,7 @@ DAY = 86_400.0
 # canonical baselines, kg per person per day (08 §3.0)
 O2_KG_DAY = 0.84
 FOOD_KG_DAY = 0.62
-WATER_KG_DAY = 3.0
+WATER_KG_DAY = 3.5               # 2.5 drink+prep + 1.0 hygiene (08 §1.1)
 CO2_KG_DAY = 1.00
 CREW_HEAT_WT = 100.0
 
@@ -35,7 +35,7 @@ WASTE_WATER = "WasteWater"
 
 def crew_module(crew: int) -> Module:
     """Crew metabolism as a transformer (primary output = CO2). Mass balance:
-    in 0.84 O2 + 0.62 Food + 3.0 Water = 4.46; out 1.0 CO2 + 3.46 WasteWater
+    in 0.84 O2 + 0.62 Food + 3.5 Water = 4.96; out 1.0 CO2 + 3.96 WasteWater
     (respiration + urine + hygiene reclaim stream; BVAD-consistent lumping)."""
     rate = CO2_KG_DAY * crew / DAY      # kg CO2 / s
     return Module(
@@ -100,9 +100,9 @@ def build_iss_grade_hab(crew: int, *, water_store: float, o2_store: float,
     net.add_buffer("Battery", battery_kwh, max(battery_kwh, 1.0))
 
     net.add_module(crew_module(crew))
-    # processor sized to keep up with crew wastewater (3.46 kg/p/d)
+    # processor sized to keep up with crew wastewater (3.96 kg/p/d)
     net.add_module(water_processor(
-        rate_kgps=2.0 * crew * 3.46 / DAY))
+        rate_kgps=2.0 * crew * 3.96 / DAY))
     # OGA sized to crew O2 demand x2 margin
     net.add_module(oga_electrolysis(
         rate_o2_kgps=2.0 * crew * O2_KG_DAY / DAY,
