@@ -61,6 +61,25 @@ CATALOG: dict[str, dict] = {
         "name": "Fission reactor (100 kWe)", "price_m": 40.0,
         "power_kw": -100.0, "primary": None, "inputs": {}, "outputs": {},
         "mtbf_d": None, "kinds": "*", "tech": "core:tech_fission_100kwe",
+        "heat_kw": 250.0,           # thermal waste (09 H-0)
+    },
+    "battery_pack": {
+        "name": "Battery pack (400 kWh)", "price_m": 5.0, "power_kw": 0.0,
+        "primary": None, "inputs": {}, "outputs": {},
+        "mtbf_d": None, "kinds": "*", "tech": None,
+        "cap_add": {"Battery": 400.0},
+    },
+    "radiator_wing": {
+        "name": "Radiator wing", "price_m": 4.0, "power_kw": 0.0,
+        "primary": None, "inputs": {}, "outputs": {},
+        "mtbf_d": None, "kinds": "*", "tech": None,
+        "heat_kw": -160.0,          # rejection capacity
+    },
+    "science_lab": {
+        "name": "Field science lab", "price_m": 22.0, "power_kw": 15.0,
+        "primary": None, "inputs": {}, "outputs": {},
+        "mtbf_d": 70.0, "kinds": "*", "tech": None,
+        "sci_per_day": 1.5, "ed_per_day": 1.5,
     },
     "hab_module": {
         "name": "Habitat module (4 beds)", "price_m": 25.0, "power_kw": 5.0,
@@ -92,6 +111,8 @@ def starter_network(site: dict, rng=None) -> LedgerNetwork:
                      ("CO2", 30_000.0)):
         net.buffers[res] = Buffer(level=0.0, capacity=cap)
     net.buffers["Water"].level = 2_000.0          # founding reserve
+    # founding battery: 50 kWh rides down with the lander (09 §3.2)
+    net.buffers["Battery"] = Buffer(level=50.0, capacity=50.0)
     # relief vent BELOW one electrolyzer's H2 co-product (0.0025 kg/s):
     # consumers (sabatier) get first call; without one the tank still
     # blocks eventually — build storage or burn it (the Phase-3 lesson)
@@ -113,6 +134,7 @@ def add_module(net: LedgerNetwork, key: str, site: dict,
         outputs=dict(spec["outputs"]),
         rate_kgps=rate,
         power_kw=power,
+        heat_kw=spec.get("heat_kw", 0.0),
     )
     if spec["mtbf_d"]:
         mod.mtbf_s = spec["mtbf_d"] * DAY

@@ -135,10 +135,23 @@ def _surface_options(av, bases) -> list[tuple[tuple, str]]:
     if av.landed_at is not None:
         site = SITES[av.landed_at]
         opts.append((("relaunch",),
-                     f"RELAUNCH to 100 km orbit   ({site['ascent_dv']:,.0f} m/s)"))
-        if not any(getattr(b, "site_id", None) == av.landed_at for b in bases):
+                     f"RELAUNCH — fly the ascent   (~{site['ascent_dv']:,.0f} m/s)"))
+        home = next((b for b in bases
+                     if getattr(b, "site_id", None) == av.landed_at), None)
+        if home is None:
             opts.append((("found",),
-                         "FOUND A BASE here (vessel becomes base hardware)"))
+                         "FOUND A BASE here (tanks + crew become the colony)"))
+        else:
+            banked = {res: buf.level for res, buf in home.net.buffers.items()
+                      if res != "Battery" and buf.level > 1.0}
+            if banked:
+                inv = "  ".join(f"{res} {kg / 1e3:,.1f}t"
+                                for res, kg in sorted(banked.items()))
+                opts.append((("refuel",),
+                             f"REFUEL FROM BASE   ({inv})"))
+            if home.crew:
+                opts.append((("board",),
+                             f"BOARD CREW   ({', '.join(home.crew[:4])})"))
     else:
         body = av.tree.body(av.frame_id)
         g_local = body.mu / (body.radius ** 2)
@@ -161,14 +174,19 @@ def _surface_options(av, bases) -> list[tuple[tuple, str]]:
 class BaseSite:
     """A founded surface base: a live ledger network advanced to sim time
     every frame (warp-exact by construction), failures pre-rolled, repairs
-    on a 48 h maintenance turnaround (Phase 3 acceptance machinery)."""
+    on a maintenance turnaround that resident ENGINEERS shorten. Bases now
+    have residents, a bounded event log, day/night power scheduling, and
+    player-toggleable modules."""
 
     REPAIR_TURNAROUND = 48.0 * 3_600.0
+    LOG_CAP = 200
+    DAY_HORIZON = 365.25 * 86_400.0
 
     def __init__(self, name: str, t_founded: float, rng,
                  site_id: str = "site:peary") -> None:
         self.site_id = site_id
         self._init_net(name, t_founded, rng)
+        self._schedule_daynight(t_founded)
 
     def _init_net(self, name: str, t_founded: float, rng) -> None:
         from aphelion.game.basebuild import starter_network
@@ -177,7 +195,83 @@ class BaseSite:
         self.events: list = []
         self.pending_repairs: list[tuple[float, str]] = []
         self.built: list[str] = ["solar_array"]
+        self.crew: list[str] = []
+        self.day_sched_until = t_founded
+        self.day_anchor = t_founded
         self.net = starter_network(SITES[self.site_id], rng=rng)
+
+    # -- residents ------------------------------------------------------------
+    def beds(self) -> int:
+        from aphelion.game.basebuild import CATALOG
+        return sum(CATALOG[k].get("beds", 0) for k in self.built)
+
+    def engineer_skill(self, crew_db: dict) -> int:
+        return max((crew_db[n].skill for n in self.crew
+                    if n in crew_db and crew_db[n].role == "engineer"),
+                   default=0)
+
+    def apply_crew_effects(self, crew_db: dict) -> None:
+        """Resident engineers raise every producer's labor factor."""
+        f = 1.0 + 0.05 * self.engineer_skill(crew_db)
+        for m in self.net.modules:
+            if m.rate_kgps > 0.0:
+                m.f_labor = f
+
+    def repair_turnaround(self, crew_db: dict) -> float:
+        return self.REPAIR_TURNAROUND / (
+            1.0 + 0.25 * self.engineer_skill(crew_db))
+
+    # -- power scheduling -------------------------------------------------
+    def _schedule_daynight(self, t0: float) -> None:
+        from aphelion.sim.power import schedule_day_night
+        day_s = SITES[self.site_id].get("day_s")
+        if not day_s:
+            self.day_sched_until = t0 + self.DAY_HORIZON * 100.0
+            return
+        arrays = [m.module_id for m in self.net.modules
+                  if m.module_id.startswith("solar_array")]
+        if arrays:
+            schedule_day_night(self.net, arrays, t0, day_s,
+                               self.DAY_HORIZON)
+        self.day_sched_until = t0 + self.DAY_HORIZON
+
+    def daylight(self, t: float) -> float:
+        """1.0 in day, 0.0 in night (terminator phase for the scene sky)."""
+        day_s = SITES[self.site_id].get("day_s")
+        if not day_s:
+            return 1.0
+        phase = ((t - self.day_anchor) % day_s) / day_s
+        return 1.0 if phase < 0.5 else 0.0
+
+    # -- alerts / inspection ----------------------------------------------
+    def alert(self, t: float) -> str | None:
+        """Highest-severity standing problem, or None."""
+        for m in self.net.modules:
+            if m.state == "FAILED":
+                return f"{m.module_id} FAILED"
+        _, rates, f_power = self.net.solve_rates()
+        if f_power < 0.999:
+            return f"POWER DEFICIT (f={f_power:.2f})"
+        for res, buf in self.net.buffers.items():
+            rate = rates.get(res, 0.0)
+            if rate < 0.0 and buf.level > 0.0:
+                eta = buf.level / -rate
+                if eta < 48.0 * 3_600.0:
+                    return f"{res} EMPTY in {eta / 3_600.0:,.0f} h"
+        return None
+
+    def toggle_module(self, module_id: str, t: float) -> str:
+        self.advance(t)
+        for m in self.net.modules:
+            if m.module_id == module_id:
+                if m.state == "OFF":
+                    m.state = "RUNNING"
+                    return f"{module_id} ONLINE"
+                if m.state in ("RUNNING", "STARVED", "BLOCKED"):
+                    m.state = "OFF"
+                    return f"{module_id} shut down"
+                return f"{module_id} is FAILED — repair bot en route"
+        return "module not found"
 
     def build(self, key: str, t: float, research, program) -> tuple[bool, str]:
         """Buy and install a module from the base catalog."""
@@ -189,27 +283,42 @@ class BaseSite:
         if not program.spend(t, cost, f"base module {key}"):
             return False, f"insufficient funds (${spec['price_m']:,.0f}M)"
         self.advance(t)                       # settle the ledger first
-        add_module(self.net, key, SITES[self.site_id], serial=len(self.built))
+        mod = add_module(self.net, key, SITES[self.site_id],
+                         serial=len(self.built))
         self.built.append(key)
+        if key == "solar_array" and SITES[self.site_id].get("day_s"):
+            from aphelion.sim.power import schedule_day_night
+            schedule_day_night(self.net, [mod.module_id], t,
+                               SITES[self.site_id]["day_s"],
+                               max(self.day_sched_until - t, 86_400.0))
         return True, f"{spec['name']} ONLINE (${spec['price_m']:,.0f}M)"
 
     @classmethod
     def from_restore(cls, name: str, last_t: float,
                      pending_repairs: list, net,
                      site_id: str = "site:peary",
-                     built: list[str] | None = None) -> "BaseSite":
+                     built: list[str] | None = None,
+                     crew: list[str] | None = None) -> "BaseSite":
         site = cls.__new__(cls)
         site.site_id = site_id
         site.built = list(built or ["solar_array"])
+        site.crew = list(crew or [])
         site.name = name
         site.last_t = last_t
         site.events = []
         site.pending_repairs = list(pending_repairs)
         site.net = net
+        site.day_sched_until = last_t
+        site.day_anchor = last_t
+        site._schedule_daynight(last_t)   # boundaries are not serialized
         return site
 
-    def advance(self, t: float) -> list:
+    def advance(self, t: float, crew_db: dict | None = None) -> list:
         from aphelion.sim.ledger.network import LedgerEvent
+        if t > self.day_sched_until - 30.0 * 86_400.0:
+            self._schedule_daynight(self.day_sched_until)
+        turnaround = (self.repair_turnaround(crew_db)
+                      if crew_db is not None else self.REPAIR_TURNAROUND)
         new_events = []
         guard = 0
         while self.last_t < t - 1e-6 and guard < 600:
@@ -228,7 +337,7 @@ class BaseSite:
             for e in evs:
                 if e.kind == "module_failed":
                     self.pending_repairs.append(
-                        (e.t + self.REPAIR_TURNAROUND, e.subject))
+                        (e.t + turnaround, e.subject))
             if t_rep <= t_stop + 1e-6:
                 due = min(self.pending_repairs)
                 self.pending_repairs.remove(due)
@@ -237,6 +346,8 @@ class BaseSite:
                 new_events.append(LedgerEvent(due[0], "repaired", due[1]))
             self.last_t = t_stop
         self.events.extend(new_events)
+        if len(self.events) > self.LOG_CAP:       # bounded log
+            del self.events[:len(self.events) - self.LOG_CAP]
         return new_events
 
 
@@ -449,7 +560,10 @@ def run(argv: list[str] | None = None) -> int:
 
     import numpy as np
     import pygame
+    from aphelion.render.base_art import (
+        module_sprite, sky_strip, terrain_strip, walker_sprite)
     from aphelion.render.body_art import body_sprite, marker_dot, sun_sprite
+    from aphelion.sim.power import thermal_balance_kw
     from aphelion.render.draw_conics import draw_conic
     from aphelion.render.postfx import Bloom, Nebula, soi_ring, vignette
     from aphelion.render.vessel_art import (
@@ -544,7 +658,8 @@ def run(argv: list[str] | None = None) -> int:
                     bases=[BaseSite.from_restore(b["name"], b["last_t"],
                                                  b["pending_repairs"], b["net"],
                                                  b.get("site_id", "site:peary"),
-                                                 b.get("built"))
+                                                 b.get("built"),
+                                                 b.get("crew"))
                            for b in got["bases"]],
                     crew=got["crew"], research=got["research"],
                     visited=got["visited"],
@@ -611,6 +726,10 @@ def run(argv: list[str] | None = None) -> int:
     planner_cursor = 0
     warp_to_node = False
     ca_cache = {"at": -1e9, "tgt": None, "d": None, "t": 0.0}
+    # colony scene state
+    base_focus = "construct"          # or "modules"
+    module_cursor = 0
+    base_log_open = False
     autosave_acc = 0.0
     gold_flash = 0.0
     ascent_event_count = 0
@@ -1057,16 +1176,88 @@ def run(argv: list[str] | None = None) -> int:
                     elif action[0] == "found":
                         site_id = av0.landed_at
                         site = SITES[site_id]
-                        bases.append(BaseSite(
+                        new_base = BaseSite(
                             f"{site['name'].split(' (')[0]} Base", t,
-                            campaign_rng, site_id=site_id))
+                            campaign_rng, site_id=site_id)
+                        # the lander IS the colony: remaining tank contents
+                        # pour into the buffers, the crew become residents
+                        poured: dict[str, float] = {}
+                        for row in av0.vessel.rows:
+                            for res, kg in row.fill.items():
+                                buf = new_base.net.buffers.get(res)
+                                if buf is not None and kg > 0.0:
+                                    take = min(kg, buf.capacity - buf.level)
+                                    buf.level += take
+                                    poured[res] = poured.get(res, 0.0) + take
+                        new_base.crew = list(av0.crew)
+                        new_base.apply_crew_effects(crew)
+                        bases.append(new_base)
                         vessels.remove(av0)
                         active_idx = 0
                         node = None
                         surface_open = False
-                        toast = f"BASE FOUNDED at {site['name']} (F2 to build)"
-                        toast_until = t + 10
+                        det = "  ".join(f"+{kg / 1e3:,.1f}t {res}"
+                                        for res, kg in sorted(poured.items())
+                                        if kg > 50.0)
+                        who = (f"   residents: {', '.join(new_base.crew)}"
+                               if new_base.crew else "")
+                        toast = (f"BASE FOUNDED at {site['name']}  {det}"
+                                 f"{who}  (F2 to build)")
+                        toast_until = t + 12
                         audio.play("paid")
+                    elif action[0] == "refuel":
+                        home = next(b for b in bases
+                                    if b.site_id == av0.landed_at)
+                        home.advance(t, crew)
+                        moved: dict[str, float] = {}
+                        for row in av0.vessel.rows:
+                            tank = av0.vessel.part(row).get("tank")
+                            if not tank:
+                                continue
+                            cap_kg = tank["capacity_t"] * 1_000.0
+                            for res, share in tank["mixture"].items():
+                                buf = home.net.buffers.get(res)
+                                if buf is None:
+                                    continue
+                                room = cap_kg * share - row.fill.get(res, 0.0)
+                                take = min(max(room, 0.0), buf.level)
+                                if take > 0.0:
+                                    buf.level -= take
+                                    row.fill[res] = (row.fill.get(res, 0.0)
+                                                     + take)
+                                    moved[res] = moved.get(res, 0.0) + take
+                        if moved:
+                            det = "  ".join(f"+{kg / 1e3:,.2f}t {res}" for
+                                            res, kg in sorted(moved.items()))
+                            toast = (f"REFUELED FROM {home.name}: {det} — "
+                                     f"dv {av0.dv_remaining:,.0f} m/s")
+                            toast_until = t + 10
+                            surface_open = False
+                            audio.play("paid")
+                        else:
+                            toast = ("nothing transferred — tanks full or "
+                                     "buffers empty")
+                            toast_until = t + 5
+                            audio.play("warn")
+                    elif action[0] == "board":
+                        home = next(b for b in bases
+                                    if b.site_id == av0.landed_at)
+                        room = av0.crew_capacity - len(av0.crew)
+                        taking = home.crew[:max(room, 0)]
+                        if taking:
+                            home.crew = home.crew[len(taking):]
+                            av0.crew.extend(taking)
+                            apply_crew_bonuses(av0, crew)
+                            home.apply_crew_effects(crew)
+                            toast = (f"BOARDED: {', '.join(taking)} — "
+                                     f"LSS {av0.lss_margin_days:,.0f} d")
+                            toast_until = t + 8
+                            surface_open = False
+                            audio.play("blip")
+                        else:
+                            toast = "no seats free for the colonists"
+                            toast_until = t + 5
+                            audio.play("warn")
                     elif action[0] == "land":
                         sid = action[1]
                         site = SITES[sid]
@@ -1189,21 +1380,46 @@ def run(argv: list[str] | None = None) -> int:
                     base_screen = False
                 else:
                     avail = catalog_for_kind(SITES[site_b.site_id]["kind"])
-                    if event.key == pygame.K_TAB:
+                    mods = site_b.net.modules
+                    if event.key == pygame.K_n:
                         base_idx = (base_idx + 1) % len(bases)
-                        base_cursor = 0
+                        base_cursor = module_cursor = 0
+                        audio.play("tick")
+                    elif event.key == pygame.K_TAB:
+                        base_focus = ("construct"
+                                      if base_focus == "modules"
+                                      else "modules")
+                        audio.play("tick")
+                    elif event.key == pygame.K_l:
+                        base_log_open = not base_log_open
+                    elif event.key == pygame.K_LEFT and mods:
+                        base_focus = "modules"
+                        module_cursor = (module_cursor - 1) % len(mods)
+                        audio.play("tick")
+                    elif event.key == pygame.K_RIGHT and mods:
+                        base_focus = "modules"
+                        module_cursor = (module_cursor + 1) % len(mods)
+                        audio.play("tick")
                     elif event.key == pygame.K_UP:
+                        base_focus = "construct"
                         base_cursor = (base_cursor - 1) % len(avail)
                         audio.play("tick")
                     elif event.key == pygame.K_DOWN:
+                        base_focus = "construct"
                         base_cursor = (base_cursor + 1) % len(avail)
                         audio.play("tick")
-                    elif event.key == pygame.K_RETURN and avail:
-                        ok, msg = site_b.build(
-                            avail[base_cursor % len(avail)], t, research,
-                            program)
-                        toast, toast_until = msg, t + 6
-                        audio.play("paid" if ok else "alarm")
+                    elif event.key == pygame.K_RETURN:
+                        if base_focus == "construct" and avail:
+                            ok, msg = site_b.build(
+                                avail[base_cursor % len(avail)], t,
+                                research, program)
+                            toast, toast_until = msg, t + 6
+                            audio.play("paid" if ok else "alarm")
+                        elif mods:
+                            msg = site_b.toggle_module(
+                                mods[module_cursor % len(mods)].module_id, t)
+                            toast, toast_until = msg, t + 5
+                            audio.play("blip")
             elif event.type == pygame.KEYDOWN and research_open:
                 tech_ids = _tech_order(db)
                 if event.key in (pygame.K_ESCAPE, pygame.K_r):
@@ -1602,15 +1818,20 @@ def run(argv: list[str] | None = None) -> int:
                 def _set_cursor(idx) -> None:
                     nonlocal pause_cursor, surface_cursor, crew_cursor
                     nonlocal base_cursor, research_cursor, planner_cursor
+                    nonlocal base_focus, module_cursor
                     if top == "pause":
                         pause_cursor = idx
                     elif top == "planner":
                         planner_cursor = idx
+                    elif top == "base" and idx >= 30_000:
+                        base_focus = "modules"
+                        module_cursor = idx - 30_000
                     elif top == "surface":
                         surface_cursor = idx
                     elif top == "crew":
                         crew_cursor = idx
                     elif top == "base":
+                        base_focus = "construct"
                         base_cursor = idx
                     elif top == "research":
                         research_cursor = idx
@@ -1639,6 +1860,10 @@ def run(argv: list[str] | None = None) -> int:
                                                   % len(builder.CATS))
                             builder.cursor = 0
                             builder._rebuild()
+                            audio.play("tick")
+                        elif (top == "base" and idx is not None
+                              and idx >= 30_000):
+                            _set_cursor(idx)   # select module; ENTER toggles
                             audio.play("tick")
                         elif idx is not None:
                             _set_cursor(idx)
@@ -2446,16 +2671,28 @@ def run(argv: list[str] | None = None) -> int:
             for fv in vessels:
                 for n in fv.crew:
                     aboard[n] = fv.frame_id
+            resident: dict[str, str] = {}
+            for b in bases:
+                for n in b.crew:
+                    resident[n] = SITES[b.site_id]["body"]
             for cname, member in crew.items():
-                loc = aboard.get(cname, "core:earth")
+                loc = aboard.get(cname, resident.get(cname, "core:earth"))
                 if loc not in AMBIENT_MSV_DAY:
                     loc = "deep_space"
-                shield = 20.0 if cname in aboard else 1_000.0
+                # flying: hull only; resident: regolith-bermed hab; Earth: sky
+                shield = (20.0 if cname in aboard
+                          else 100.0 if cname in resident else 1_000.0)
                 member.dose.accrue(loc, days, areal_g_cm2=shield,
                                    material="water")
             # operating bases generate engineering data (11: ops currency)
             if bases:
                 research.earn_eng_data(2.0 * days * len(bases))
+                labs_on = sum(1 for b in bases for m in b.net.modules
+                              if m.module_id.startswith("science_lab")
+                              and m.state == "RUNNING")
+                if labs_on:
+                    research.earn_science(1.5 * days * labs_on)
+                    research.earn_eng_data(1.5 * days * labs_on)
             last_dose_t = t
             for fv in vessels:
                 for ev_txt in fv.tick_lss(t):
@@ -2483,9 +2720,12 @@ def run(argv: list[str] | None = None) -> int:
 
         # bases tick on the ledger (warp-exact); contracts watch via sweep
         for site in bases:
-            for ev in site.advance(t):
+            for ev in site.advance(t, crew):
                 if ev.kind == "module_failed":
-                    toast, toast_until = f"{site.name}: {ev.subject} FAILED — bot dispatched", t + 8
+                    eta_h = site.repair_turnaround(crew) / 3_600.0
+                    toast = (f"{site.name}: {ev.subject} FAILED — repair in "
+                             f"{eta_h:,.0f} h")
+                    toast_until = t + 8
                     audio.play("alarm")
                 elif ev.kind == "repaired":
                     toast, toast_until = f"{site.name}: {ev.subject} repaired", t + 6
@@ -2986,89 +3226,247 @@ def run(argv: list[str] | None = None) -> int:
                     color=theme.COLORS["text_dim"], font="small")
 
         if base_screen and bases:
+            # THE COLONY, DRAWN: terrain, sky, module structures with live
+            # status lights and residents — the spreadsheet retired
             from aphelion.game.basebuild import CATALOG, catalog_for_kind
             site_b = bases[base_idx % len(bases)]
             site_def = SITES[site_b.site_id]
-            _, rates, f_power = site_b.net.solve_rates()
+            module_rates, rates, f_power = site_b.net.solve_rates()
             avail = catalog_for_kind(site_def["kind"])
-            n_left = 5 + len(site_b.net.modules)
-            n_right = len(avail)
-            ph = 110 + 24 * max(n_left, n_right + 1)
-            bpanel = theme.panel(440, ph, f"{site_b.name} — OPERATIONS")
-            screen.blit(bpanel, (size[0] - 904, 80))
-            cpanel = theme.panel(440, ph, "CONSTRUCT (funds-built)")
-            screen.blit(cpanel, (size[0] - 454, 80))
-            bx, by = size[0] - 888, 116
-            theme.draw_text(screen, bx, by,
-                            f"{site_def['name']}  ·  sun x{site_def['solar']:.2f}"
-                            + (f"  ·  base {base_idx + 1}/{len(bases)} (TAB)"
-                               if len(bases) > 1 else ""),
-                            color=theme.COLORS["text_dim"], font="small")
-            by += 24
+            mods = site_b.net.modules
+            daylight = site_b.daylight(t)
+            overlay_rects["base"] = []
+
+            scene_h = 444
+            screen.fill((6, 8, 14))      # opaque: the map fully yields
+            screen.blit(sky_strip(site_def["kind"], size[0], scene_h,
+                                  daylight * site_def["solar"]), (0, 0))
+            terr, ridge = terrain_strip(site_b.site_id, site_def["kind"],
+                                        size[0], 300)
+            screen.blit(terr, (0, scene_h - 300))
+            state_cols = {"RUNNING": theme.COLORS["good"],
+                          "FAILED": theme.COLORS["danger"],
+                          "STARVED": theme.COLORS["warn"],
+                          "BLOCKED": theme.COLORS["warn"],
+                          "OFF": theme.COLORS["text_dim"]}
+            mod_sel = module_cursor % max(1, len(mods))
+            for mi, m in enumerate(mods):
+                key = m.module_id.rsplit("_", 1)[0]
+                spr = module_sprite(key)
+                mx0 = 56 + mi * 102
+                gy = (scene_h - 300
+                      + ridge[min(mx0 + 44, size[0] - 1)])
+                bob = (int(2.0 * math.sin(ui_t * 3.0 + mi))
+                       if key == "drill_ice" and m.state == "RUNNING" else 0)
+                my0 = gy - spr.get_height() + 10 + bob
+                screen.blit(spr, (mx0, my0))
+                col = state_cols.get(m.state, theme.COLORS["text"])
+                pulse = (0.55 + 0.45 * math.sin(ui_t * 4.0 + mi)
+                         if m.state != "OFF" else 0.25)
+                pygame.draw.circle(screen, tuple(int(c * pulse) for c in col),
+                                   (mx0 + 44, my0 - 8), 5)
+                if key == "tank_farm":     # aggregate storage fill readout
+                    tot = sum(b2.level for r2, b2 in
+                              site_b.net.buffers.items() if r2 != "Battery")
+                    cap = sum(b2.capacity for r2, b2 in
+                              site_b.net.buffers.items() if r2 != "Battery")
+                    screen.blit(theme.bar(64, 6, tot / max(cap, 1.0),
+                                          theme.COLORS["accent"]),
+                                (mx0 + 12, my0 + spr.get_height() - 4))
+                if mi == mod_sel and mods:
+                    pygame.draw.rect(screen, theme.COLORS["gold"],
+                                     (mx0 - 4, my0 - 16, 96, spr.get_height()
+                                      + 24), 1)
+                overlay_rects["base"].append(
+                    (pygame.Rect(mx0 - 4, my0 - 16, 96,
+                                 spr.get_height() + 24), 30_000 + mi))
+            # residents stroll between the structures
+            for wi, wname in enumerate(site_b.crew[:6]):
+                span = max(len(mods), 1) * 102
+                wx = 70 + int((wi * 97 + ui_t * 11.0) % max(span, 120))
+                wy = (scene_h - 300
+                      + ridge[min(wx, size[0] - 1)] - 16)
+                screen.blit(walker_sprite(wname, int(ui_t * 2.0) + wi),
+                            (wx, wy))
+
+            # header strip
+            screen.blit(theme.panel(size[0], 54), (0, 0))
+            emitted, capacity = thermal_balance_kw(site_b.net)
+            alert_txt = site_b.alert(t)
+            head = (f"{site_b.name}   ·   {site_def['name']}   ·   "
+                    f"{'DAY' if daylight > 0.5 else 'NIGHT'}  sun x"
+                    f"{site_def['solar'] * daylight:.2f}   ·   power f="
+                    f"{f_power:.2f}   ·   heat {emitted:,.0f}/"
+                    f"{capacity:,.0f} kW   ·   crew {len(site_b.crew)}/"
+                    f"{site_b.beds()} beds")
+            theme.draw_text(screen, 14, 8, head,
+                            color=theme.COLORS["text"], font="small")
+            theme.draw_text(
+                screen, 14, 30,
+                f"${program.funds / 1e6:,.0f}M"
+                + (f"   ·   base {base_idx + 1}/{len(bases)} (N)"
+                   if len(bases) > 1 else "")
+                + (f"   ·   ⚠ {alert_txt}" if alert_txt else ""),
+                color=(theme.COLORS["danger"] if alert_txt
+                       else theme.COLORS["text_dim"]), font="small")
+
+            # resources panel
+            rp = theme.panel(396, 250, "RESOURCES")
+            screen.blit(rp, (16, scene_h + 6))
             res_icons = {"Water": "water", "Oxygen": "oxygen",
                          "Hydrogen": "hydrogen", "Methane": "tank",
-                         "CO2": "signal"}
-            for res in ("Water", "Oxygen", "Hydrogen", "Methane", "CO2"):
+                         "CO2": "dot", "Battery": "power"}
+            ry0 = scene_h + 40
+            for res in ("Water", "Oxygen", "Hydrogen", "Methane", "CO2",
+                        "Battery"):
                 buf = site_b.net.buffers.get(res)
                 if buf is None:
                     continue
                 rate = rates.get(res, 0.0)
                 frac = min(1.0, buf.level / max(buf.capacity, 1e-9))
-                screen.blit(theme.icon(res_icons[res], 14), (bx, by))
-                screen.blit(theme.bar(140, 10, frac, theme.COLORS["good"]),
-                            (bx + 22, by + 2))
+                screen.blit(theme.icon(res_icons.get(res, "dot"), 14),
+                            (30, ry0))
+                theme.draw_text(screen, 50, ry0, f"{res:9s}",
+                                color=theme.COLORS["text"], font="small")
+                screen.blit(theme.bar(110, 9, frac, theme.COLORS["good"]),
+                            (128, ry0 + 3))
+                if res == "Battery":
+                    line = (f"{buf.level:6.0f} kWh "
+                            f"{rate * 3_600.0:+5.1f} kW")
+                else:
+                    line = (f"{buf.level / 1e3:6.1f} t "
+                            f"{rate * 86_400.0 / 1e3:+6.2f} t/d")
+                # time-to-full/empty: the ledger knows, so say it
+                eta = ""
+                if rate > 1e-9 and frac < 1.0:
+                    eta = f" full {theme.fmt_duration((buf.capacity - buf.level) / rate)}"
+                elif rate < -1e-9 and buf.level > 0.0:
+                    eta_s = buf.level / -rate
+                    eta = f" empty {theme.fmt_duration(eta_s)}"
                 theme.draw_text(
-                    screen, bx + 172, by,
-                    f"{buf.level/1e3:7.1f} t {rate * 86_400.0 / 1e3:+6.2f} t/d",
-                    color=theme.COLORS["text"], font="small")
-                by += 22
-            by += 6
-            for m in site_b.net.modules:
-                color = {"RUNNING": theme.COLORS["good"],
-                         "FAILED": theme.COLORS["danger"],
-                         "STARVED": theme.COLORS["warn"],
-                         "BLOCKED": theme.COLORS["warn"],
-                         "OFF": theme.COLORS["text_dim"]}.get(
-                             m.state, theme.COLORS["text"])
-                pygame.draw.circle(screen, color, (bx + 6, by + 8), 4)
-                theme.draw_text(screen, bx + 20, by,
-                                f"{m.module_id:18s} {m.state}", color=color,
-                                font="small")
-                by += 22
-            screen.blit(theme.icon("power", 14), (bx, by + 2))
-            theme.draw_text(
-                screen, bx + 22, by + 2,
-                f"power f={f_power:.2f}   repairs pending: "
-                f"{len(site_b.pending_repairs)}",
-                color=theme.COLORS["accent"], font="small")
+                    screen, 246, ry0, line + eta,
+                    color=(theme.COLORS["danger"]
+                           if "empty" in eta and eta_s < 86_400.0
+                           else theme.COLORS["text"]), font="small")
+                ry0 += 24
+            theme.draw_text(screen, 30, ry0 + 2,
+                            f"vent: h2 relief −0.001 kg/s   ·   repairs "
+                            f"pending {len(site_b.pending_repairs)}",
+                            color=theme.COLORS["text_dim"], font="small")
 
-            cx, cy = size[0] - 438, 116
-            overlay_rects["base"] = []
+            # module inspect / event log panel
+            mp = theme.panel(424, 250,
+                             "EVENT LOG (L)" if base_log_open
+                             else "MODULE — ENTER toggles")
+            screen.blit(mp, (420, scene_h + 6))
+            if base_log_open:
+                ly = scene_h + 38
+                for ev in site_b.events[-9:]:
+                    theme.draw_text(
+                        screen, 434, ly,
+                        f"{ev.t / SECONDS_PER_DAY:9.2f} d  {ev.kind:14s} "
+                        f"{ev.subject}",
+                        color=theme.COLORS["text"], font="small")
+                    ly += 22
+                if not site_b.events:
+                    theme.draw_text(screen, 434, ly, "no events yet",
+                                    color=theme.COLORS["text_dim"],
+                                    font="small")
+            elif mods:
+                m = mods[mod_sel]
+                key = m.module_id.rsplit("_", 1)[0]
+                spec = CATALOG.get(key, {})
+                col = state_cols.get(m.state, theme.COLORS["text"])
+                iy = scene_h + 38
+                theme.draw_text(screen, 434, iy,
+                                f"{spec.get('name', key)}  [{m.state}]",
+                                color=col, font="body")
+                iy += 24
+                lines2 = []
+                if m.rate_kgps > 0.0:
+                    act = module_rates.get(m.module_id, 0.0)
+                    pri = (spec.get("primary") or ("?", 0))[0]
+                    lines2.append(f"rate {act:,.3f} / {m.rate_kgps:,.3f} "
+                                  f"kg/s {pri}  (labor x{m.f_labor:.2f})")
+                if spec.get("inputs") or spec.get("outputs"):
+                    rec_in = " + ".join(f"{v:g} {k2}" for k2, v in
+                                        spec.get("inputs", {}).items())
+                    rec_out = " + ".join(f"{v:g} {k2}" for k2, v in
+                                         spec.get("outputs", {}).items())
+                    lines2.append(f"{rec_in or 'nothing'} → "
+                                  f"{rec_out or 'nothing'}")
+                pw = m.power_kw
+                lines2.append(f"power {'+' if pw < 0 else '−'}"
+                              f"{abs(pw):,.0f} kW"
+                              + (f"   heat {m.heat_kw:+,.0f} kW"
+                                 if m.heat_kw else ""))
+                if m.mtbf_s:
+                    lines2.append(f"MTBF {m.mtbf_s / 86_400.0:,.0f} d")
+                    if site_b.engineer_skill(crew) > 0 and m.failure_t:
+                        lines2.append(
+                            f"engineer's forecast: next fault in "
+                            f"{theme.fmt_duration(max(0.0, m.failure_t - t))}")
+                if m.state == "FAILED":
+                    eta_rep = min((r[0] for r in site_b.pending_repairs
+                                   if r[1] == m.module_id),
+                                  default=None)
+                    if eta_rep is not None:
+                        lines2.append(f"repair ETA "
+                                      f"{theme.fmt_duration(max(0.0, eta_rep - t))}")
+                if m.state == "STARVED":
+                    starving = [k2 for k2 in spec.get("inputs", {})
+                                if site_b.net.buffers.get(k2)
+                                and site_b.net.buffers[k2].level <= 0.0]
+                    if starving:
+                        lines2.append("starved of: " + ", ".join(starving))
+                for line2 in lines2:
+                    theme.draw_text(screen, 434, iy, line2,
+                                    color=theme.COLORS["text"], font="small")
+                    iy += 21
+
+            # construct panel
+            cpanel = theme.panel(420, 250, "CONSTRUCT")
+            screen.blit(cpanel, (848, scene_h + 6))
+            cx, cy = 862, scene_h + 38
+            rows_fit_b = 7
+            top_b = max(0, min(base_cursor - rows_fit_b // 2,
+                               len(avail) - rows_fit_b))
             for i, key in enumerate(avail):
+                if i < top_b or i >= top_b + rows_fit_b:
+                    continue
                 spec = CATALOG[key]
-                sel = i == base_cursor % len(avail)
+                sel = (i == base_cursor % len(avail)
+                       and base_focus == "construct")
                 locked = (spec["tech"] is not None
                           and spec["tech"] not in research.unlocked)
                 color = (theme.COLORS["text_dim"] if locked
                          else theme.COLORS["gold"] if sel
                          else theme.COLORS["text"])
                 pw = spec["power_kw"]
-                pw_txt = (f"+{-pw:,.0f} kW" if pw < 0 else f"{pw:,.0f} kW")
+                pw_txt = (f"+{-pw:,.0f}kW" if pw < 0 else f"{pw:,.0f}kW")
+                yy2 = cy + (i - top_b) * 24
                 if sel:
-                    screen.blit(theme.row_glow(424, 22),
-                                (cx - 4, cy + i * 24 - 3))
+                    screen.blit(theme.row_glow(396, 22), (858, yy2 - 3))
                 theme.draw_text(
-                    screen, cx, cy + i * 24,
-                    f"{'>' if sel else ' '} {spec['name'][:28]:29s}"
-                    f"${spec['price_m']:>4,.0f}M  {pw_txt}"
-                    + ("  LOCKED" if locked else ""),
+                    screen, cx, yy2,
+                    f"{spec['name'][:24]:25s}${spec['price_m']:>3,.0f}M "
+                    f"{pw_txt}" + ("  LOCKED" if locked else ""),
                     color=color, font="small")
                 overlay_rects["base"].append(
-                    (pygame.Rect(cx - 4, cy + i * 24 - 3, 424, 23), i))
+                    (pygame.Rect(858, yy2 - 3, 396, 23), i))
+            sel_spec = CATALOG[avail[base_cursor % len(avail)]]
+            need_line = (" + ".join(f"{v:g} {k2}" for k2, v in
+                                    sel_spec.get("inputs", {}).items())
+                         or "no feedstock")
+            theme.draw_text(screen, cx, cy + rows_fit_b * 24 + 6,
+                            f"needs: {need_line}",
+                            color=theme.COLORS["text_dim"], font="small")
+            screen.blit(theme.panel(size[0], 26), (0, size[1] - 26))
             theme.draw_text(
-                screen, cx, cy + len(avail) * 24 + 8,
-                "pick + ENTER/click build   TAB next base   F2 close",
-                color=theme.COLORS["text_dim"], font="small")
+                screen, 14, size[1] - 21,
+                "◄► select module  ENTER toggle/build  TAB focus  "
+                "UP/DOWN catalog  L log  N next base  F2/ESC close",
+                color=theme.COLORS["text_dim"], font="small", shadow=False)
 
         if builder_open:
             dimmer = pygame.Surface(size, pygame.SRCALPHA)
