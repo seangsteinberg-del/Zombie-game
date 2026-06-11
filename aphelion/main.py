@@ -104,31 +104,36 @@ class BaseSite:
         self._init_net(name, t_founded, rng)
 
     def _init_net(self, name: str, t_founded: float, rng) -> None:
-        from aphelion.sim.habitat.lsc import oga_electrolysis
-        from aphelion.sim.ledger.network import LedgerNetwork, Module, Source
+        from aphelion.game.basebuild import starter_network
         self.name = name
         self.last_t = t_founded
         self.events: list = []
         self.pending_repairs: list[tuple[float, str]] = []
-        net = LedgerNetwork(rng=rng)
-        net.add_buffer("Water", 200.0, 50_000.0)
-        net.add_buffer("Oxygen", 0.0, 200_000.0)
-        net.add_buffer("Hydrogen", 0.0, 20_000.0)
-        net.add_source(Source("psr_ice", "Water", 0.03, remaining=1.0e6))
-        net.add_source(Source("h2_vent", "Hydrogen", -0.005))
-        oga = oga_electrolysis(rate_o2_kgps=0.02, power_kw=80.0)
-        oga.mtbf_s = 45.0 * 86_400.0
-        net.add_module(oga)
-        net.add_module(Module("reactor", inputs={}, outputs={}, rate_kgps=0.0,
-                              power_kw=-120.0))
-        self.net = net
+        self.built: list[str] = ["solar_array"]
+        self.net = starter_network(SITES[self.site_id], rng=rng)
+
+    def build(self, key: str, t: float, research, program) -> tuple[bool, str]:
+        """Buy and install a module from the base catalog."""
+        from aphelion.game.basebuild import CATALOG, add_module
+        spec = CATALOG[key]
+        if spec["tech"] and spec["tech"] not in research.unlocked:
+            return False, f"{spec['name']} needs research: {spec['tech'].split(':')[1]}"
+        cost = spec["price_m"] * 1e6
+        if not program.spend(t, cost, f"base module {key}"):
+            return False, f"insufficient funds (${spec['price_m']:,.0f}M)"
+        self.advance(t)                       # settle the ledger first
+        add_module(self.net, key, SITES[self.site_id], serial=len(self.built))
+        self.built.append(key)
+        return True, f"{spec['name']} ONLINE (${spec['price_m']:,.0f}M)"
 
     @classmethod
     def from_restore(cls, name: str, last_t: float,
                      pending_repairs: list, net,
-                     site_id: str = "site:peary") -> "BaseSite":
+                     site_id: str = "site:peary",
+                     built: list[str] | None = None) -> "BaseSite":
         site = cls.__new__(cls)
         site.site_id = site_id
+        site.built = list(built or ["solar_array"])
         site.name = name
         site.last_t = last_t
         site.events = []
@@ -325,7 +330,8 @@ def run(argv: list[str] | None = None) -> int:
                     program=got["program"], rng=rng,
                     bases=[BaseSite.from_restore(b["name"], b["last_t"],
                                                  b["pending_repairs"], b["net"],
-                                                 b.get("site_id", "site:peary"))
+                                                 b.get("site_id", "site:peary"),
+                                                 b.get("built"))
                            for b in got["bases"]],
                     crew=got["crew"], research=got["research"],
                     visited=got["visited"],
@@ -373,6 +379,8 @@ def run(argv: list[str] | None = None) -> int:
     research_cursor = 0
     surface_open = False
     surface_cursor = 0
+    base_cursor = 0
+    base_idx = 0
     body_click_pts: list = []
     vessel_click_pts: list = []
     burn_glow = 0.0
@@ -593,6 +601,27 @@ def run(argv: list[str] | None = None) -> int:
                                      f" m/s — not enough propellant")
                             toast_until = t + 6
                             audio.play("alarm")
+            elif event.type == pygame.KEYDOWN and base_screen:
+                from aphelion.game.basebuild import CATALOG, catalog_for_kind
+                site_b = bases[base_idx % len(bases)] if bases else None
+                if site_b is None or event.key in (pygame.K_ESCAPE,
+                                                   pygame.K_F2):
+                    base_screen = False
+                else:
+                    avail = catalog_for_kind(SITES[site_b.site_id]["kind"])
+                    if event.key == pygame.K_TAB:
+                        base_idx = (base_idx + 1) % len(bases)
+                        base_cursor = 0
+                    elif event.key == pygame.K_UP:
+                        base_cursor = (base_cursor - 1) % len(avail)
+                    elif event.key == pygame.K_DOWN:
+                        base_cursor = (base_cursor + 1) % len(avail)
+                    elif event.key == pygame.K_RETURN and avail:
+                        ok, msg = site_b.build(
+                            avail[base_cursor % len(avail)], t, research,
+                            program)
+                        toast, toast_until = msg, t + 6
+                        audio.play("paid" if ok else "alarm")
             elif event.type == pygame.KEYDOWN and research_open:
                 tech_ids = _tech_order(db)
                 if event.key in (pygame.K_ESCAPE, pygame.K_r):
@@ -1439,28 +1468,44 @@ def run(argv: list[str] | None = None) -> int:
             screen.blit(tut, (tx, 120))
 
         if base_screen and bases:
-            site = bases[0]
-            _, rates, f_power = site.net.solve_rates()
-            n_rows = 3 + len(site.net.modules)
-            bpanel = theme.panel(460, 96 + 24 * n_rows, site.name)
-            screen.blit(bpanel, (size[0] - 474, 90))
-            bx, by = size[0] - 458, 126
+            from aphelion.game.basebuild import CATALOG, catalog_for_kind
+            site_b = bases[base_idx % len(bases)]
+            site_def = SITES[site_b.site_id]
+            _, rates, f_power = site_b.net.solve_rates()
+            avail = catalog_for_kind(site_def["kind"])
+            n_left = 5 + len(site_b.net.modules)
+            n_right = len(avail)
+            ph = 110 + 24 * max(n_left, n_right + 1)
+            bpanel = theme.panel(440, ph, f"{site_b.name} — OPERATIONS")
+            screen.blit(bpanel, (size[0] - 904, 80))
+            cpanel = theme.panel(440, ph, "CONSTRUCT (funds-built)")
+            screen.blit(cpanel, (size[0] - 454, 80))
+            bx, by = size[0] - 888, 116
+            theme.draw_text(screen, bx, by,
+                            f"{site_def['name']}  ·  sun x{site_def['solar']:.2f}"
+                            + (f"  ·  base {base_idx + 1}/{len(bases)} (TAB)"
+                               if len(bases) > 1 else ""),
+                            color=theme.COLORS["text_dim"], font="small")
+            by += 24
             res_icons = {"Water": "water", "Oxygen": "oxygen",
-                         "Hydrogen": "hydrogen"}
-            for res in ("Water", "Oxygen", "Hydrogen"):
-                buf = site.net.buffers[res]
+                         "Hydrogen": "hydrogen", "Methane": "tank",
+                         "CO2": "signal"}
+            for res in ("Water", "Oxygen", "Hydrogen", "Methane", "CO2"):
+                buf = site_b.net.buffers.get(res)
+                if buf is None:
+                    continue
                 rate = rates.get(res, 0.0)
                 frac = min(1.0, buf.level / max(buf.capacity, 1e-9))
-                screen.blit(theme.icon(res_icons[res], 16), (bx, by))
-                screen.blit(theme.bar(170, 11, frac, theme.COLORS["good"]),
-                            (bx + 24, by + 2))
+                screen.blit(theme.icon(res_icons[res], 14), (bx, by))
+                screen.blit(theme.bar(140, 10, frac, theme.COLORS["good"]),
+                            (bx + 22, by + 2))
                 theme.draw_text(
-                    screen, bx + 204, by,
-                    f"{buf.level/1e3:8.1f} t  {rate * 86_400.0 / 1e3:+6.2f} t/d",
+                    screen, bx + 172, by,
+                    f"{buf.level/1e3:7.1f} t {rate * 86_400.0 / 1e3:+6.2f} t/d",
                     color=theme.COLORS["text"], font="small")
-                by += 24
+                by += 22
             by += 6
-            for m in site.net.modules:
+            for m in site_b.net.modules:
                 color = {"RUNNING": theme.COLORS["good"],
                          "FAILED": theme.COLORS["danger"],
                          "STARVED": theme.COLORS["warn"],
@@ -1469,15 +1514,37 @@ def run(argv: list[str] | None = None) -> int:
                              m.state, theme.COLORS["text"])
                 pygame.draw.circle(screen, color, (bx + 6, by + 8), 4)
                 theme.draw_text(screen, bx + 20, by,
-                                f"{m.module_id:14s} {m.state}", color=color,
+                                f"{m.module_id:18s} {m.state}", color=color,
                                 font="small")
-                by += 24
-            screen.blit(theme.icon("power", 16), (bx, by + 2))
+                by += 22
+            screen.blit(theme.icon("power", 14), (bx, by + 2))
             theme.draw_text(
-                screen, bx + 24, by + 2,
+                screen, bx + 22, by + 2,
                 f"power f={f_power:.2f}   repairs pending: "
-                f"{len(site.pending_repairs)}   (F2 hide)",
+                f"{len(site_b.pending_repairs)}",
                 color=theme.COLORS["accent"], font="small")
+
+            cx, cy = size[0] - 438, 116
+            for i, key in enumerate(avail):
+                spec = CATALOG[key]
+                sel = i == base_cursor % len(avail)
+                locked = (spec["tech"] is not None
+                          and spec["tech"] not in research.unlocked)
+                color = (theme.COLORS["text_dim"] if locked
+                         else theme.COLORS["gold"] if sel
+                         else theme.COLORS["text"])
+                pw = spec["power_kw"]
+                pw_txt = (f"+{-pw:,.0f} kW" if pw < 0 else f"{pw:,.0f} kW")
+                theme.draw_text(
+                    screen, cx, cy + i * 24,
+                    f"{'>' if sel else ' '} {spec['name'][:28]:29s}"
+                    f"${spec['price_m']:>4,.0f}M  {pw_txt}"
+                    + ("  LOCKED" if locked else ""),
+                    color=color, font="small")
+            theme.draw_text(
+                screen, cx, cy + len(avail) * 24 + 8,
+                "UP/DOWN pick   ENTER build   TAB next base   F2 close",
+                color=theme.COLORS["text_dim"], font="small")
 
         if builder_open:
             dimmer = pygame.Surface(size, pygame.SRCALPHA)

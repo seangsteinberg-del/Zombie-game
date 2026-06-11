@@ -91,6 +91,7 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
             "bases": [{
                 "name": b.name,
                 "site_id": getattr(b, "site_id", "site:peary"),
+                "built": list(getattr(b, "built", ["solar_array"])),
                 "last_t": b.last_t,
                 "pending_repairs": [list(r) for r in b.pending_repairs],
                 "ledger": ledger_to_dict(b.net),
@@ -145,6 +146,7 @@ def restore_campaign(save: dict, db, tree):
         bases.append({
             "name": bd["name"], "last_t": bd["last_t"],
             "site_id": bd.get("site_id", "site:peary"),
+            "built": bd.get("built", ["solar_array"]),
             "pending_repairs": [tuple(r) for r in bd["pending_repairs"]],
             "net": net,
         })

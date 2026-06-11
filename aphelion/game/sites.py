@@ -14,31 +14,31 @@ SITES: dict[str, dict] = {
     "site:peary": {
         "body": "core:moon", "name": "Peary crater rim (lunar pole)",
         "kind": "psr_ice", "land_dv": 1_900.0, "ascent_dv": 1_900.0,
-        "science": 600.0, "aero": False,
+        "science": 600.0, "aero": False, "solar": 0.85,
         "blurb": "PSR ice 200 m away; near-eternal solar on the rim",
     },
     "site:jezero": {
         "body": "core:mars", "name": "Jezero delta (Mars)",
         "kind": "mars_ice", "land_dv": 1_000.0, "ascent_dv": 4_100.0,
-        "science": 1_200.0, "aero": True,
+        "science": 1_200.0, "aero": True, "solar": 0.40,
         "blurb": "entry burns the atmosphere, not your tanks; CO2 + ice",
     },
     "site:venus_cloud": {
         "body": "core:venus", "name": "55 km cloud deck (Venus)",
         "kind": "aerostat", "land_dv": 300.0, "ascent_dv": 8_000.0,
-        "science": 2_000.0, "aero": True,
+        "science": 2_000.0, "aero": True, "solar": 1.30,
         "blurb": "HAVOC altitude: 1 bar, 27 C — the only shirt-sleeve sky",
     },
     "site:titan_shore": {
         "body": "core:titan", "name": "Ligeia Mare shoreline (Titan)",
         "kind": "methane_lake", "land_dv": 350.0, "ascent_dv": 2_400.0,
-        "science": 2_500.0, "aero": True,
+        "science": 2_500.0, "aero": True, "solar": 0.04,
         "blurb": "thick air, soft gravity; LCH4 to drink for your engines",
     },
     "site:europa_burrow": {
         "body": "core:europa", "name": "Conamara chaos (Europa)",
         "kind": "ice_burrow", "land_dv": 1_500.0, "ascent_dv": 1_450.0,
-        "science": 2_500.0, "aero": False,
+        "science": 2_500.0, "aero": False, "solar": 0.03,
         "blurb": "5.4 Sv/day on the surface — dig 14 m or die",
     },
 }
