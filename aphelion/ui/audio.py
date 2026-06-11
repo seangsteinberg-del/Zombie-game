@@ -28,6 +28,11 @@ class AudioCues:
                                   decay=4.0, vol=0.4),
                 "alarm": self._tone([(310.0, 1.0), (370.0, 0.8)], 0.4,
                                     decay=2.0, vol=0.4),
+                # UI micro-feedback: cursor tick + soft refusal warn
+                "tick": self._tone([(880.0, 1.0)], 0.03, decay=60.0,
+                                   vol=0.08),
+                "warn": self._tone([(600.0, 1.0)], 0.12, decay=18.0,
+                                   vol=0.2),
             }
             self.ok = True
         except Exception:

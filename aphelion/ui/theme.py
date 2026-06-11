@@ -439,6 +439,45 @@ def portrait(name: str, size: int = 40) -> pygame.Surface:
     return surf
 
 
+# -- formatting & selection chrome --------------------------------------------
+
+def fmt_duration(seconds: float) -> str:
+    """Human-readable duration: '38m 12s', '2d 04:11', '1y 112d'."""
+    s = abs(float(seconds))
+    sign = "-" if seconds < 0 else ""
+    if s < 60.0:
+        return f"{sign}{s:.0f}s"
+    if s < 3_600.0:
+        return f"{sign}{int(s // 60)}m {int(s % 60):02d}s"
+    if s < 86_400.0:
+        return f"{sign}{int(s // 3600)}h {int(s % 3600 // 60):02d}m"
+    if s < 365.25 * 86_400.0:
+        d = int(s // 86_400)
+        rem = s - d * 86_400
+        return f"{sign}{d}d {int(rem // 3600):02d}:{int(rem % 3600 // 60):02d}"
+    y = int(s // (365.25 * 86_400))
+    d = int((s - y * 365.25 * 86_400) // 86_400)
+    return f"{sign}{y}y {d}d"
+
+
+_GLOW_CACHE: dict[tuple, pygame.Surface] = {}
+
+
+def row_glow(w: int, h: int, color: tuple = ACCENT) -> pygame.Surface:
+    """Selected-row highlight bar: translucent tint + 2px leading edge."""
+    key = (w, h, tuple(color[:3]))
+    cached = _GLOW_CACHE.get(key)
+    if cached is not None:
+        return cached
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    pygame.draw.rect(surf, (*color[:3], 28), pygame.Rect(0, 0, w, h),
+                     border_radius=4)
+    pygame.draw.rect(surf, (*color[:3], 90), pygame.Rect(0, 0, 3, h),
+                     border_top_left_radius=4, border_bottom_left_radius=4)
+    _GLOW_CACHE[key] = surf
+    return surf
+
+
 # -- toasts & text ------------------------------------------------------------
 
 def toast_surface(text: str, kind: str = "info") -> pygame.Surface:

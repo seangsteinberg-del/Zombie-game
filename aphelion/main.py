@@ -61,6 +61,7 @@ _LEG_COLORS = [(120, 255, 170), (255, 200, 60), (255, 120, 200),
                (140, 200, 255), (255, 160, 90), (200, 140, 255)]
 _WARP_LADDER = (1.0,) + RAILS_RATES
 _PREDICT_HORIZON = 60.0 * SECONDS_PER_DAY
+_REVERT_WINDOW_S = 20.0      # pad-scrub window: ESC refunds only this long
 _PAUSE_ITEMS = ("RESUME", "QUICKSAVE", "LOAD QUICKSAVE", "VOLUME -",
                 "VOLUME +", "EXIT TO MAIN MENU", "QUIT TO DESKTOP")
 
@@ -397,12 +398,30 @@ def run(argv: list[str] | None = None) -> int:
     base_idx = 0
     crew_open = False
     crew_cursor = 0
+    help_open = False
     autosave_acc = 0.0
     gold_flash = 0.0
     ascent_event_count = 0
     body_click_pts: list = []
     vessel_click_pts: list = []
     burn_glow = 0.0
+    # overlay row hitboxes, rebuilt by each overlay's draw pass (mouse UX)
+    overlay_rects: dict[str, list] = {}
+    # scene fade-in + real-time toast animation (toasts must outlive warp)
+    fade = 0.0
+    prev_scene = ""
+    ui_t = 0.0
+    toast_key: tuple = ("", 0.0)
+    toast_real0 = -10.0
+
+    def apply_fade() -> None:
+        nonlocal fade
+        if fade > 0.0:
+            fs = pygame.Surface(size)
+            fs.fill((4, 6, 10))
+            fs.set_alpha(int(255 * min(1.0, fade)))
+            screen.blit(fs, (0, 0))
+            fade = max(0.0, fade - 2.6 * real_dt)
 
     # ascent scene state (KSP-style flown launch)
     live: LiveAscent | None = None
@@ -505,11 +524,13 @@ def run(argv: list[str] | None = None) -> int:
                         if not live.ignited:
                             live.ignite()
                             audio.play("burn")
+                        elif live.t < 2.0:
+                            pass        # debounce: SPACE-spam must not stage
                         elif live.stage():
                             audio.play("blip")
-                    elif event.key == pygame.K_z:
-                        live.throttle_cmd = 1.0
                     elif event.key == pygame.K_x:
+                        live.throttle_cmd = 1.0     # X = burn, as in flight
+                    elif event.key == pygame.K_z:
                         live.throttle_cmd = 0.0
                     elif event.key == pygame.K_p:
                         live.prog = not live.prog
@@ -531,7 +552,17 @@ def run(argv: list[str] | None = None) -> int:
                           and live.outcome is not None):
                         ascent_done = True
                     elif event.key == pygame.K_ESCAPE:
-                        ascent_abort = True
+                        # revert is a pad-scrub, not an undo: once the tower
+                        # is cleared (or the die is cast) the money is spent
+                        if live.outcome is not None:
+                            ascent_done = True
+                        elif live.t < _REVERT_WINDOW_S:
+                            ascent_abort = True
+                        else:
+                            toast = (f"revert window closed "
+                                     f"(T+{_REVERT_WINDOW_S:.0f}s) — fly it out")
+                            toast_until = t + 4
+                            audio.play("warn")
             elif scene == "victory":
                 if event.type == pygame.KEYDOWN and event.key in (
                         pygame.K_RETURN, pygame.K_ESCAPE):
@@ -539,13 +570,19 @@ def run(argv: list[str] | None = None) -> int:
                     toast = ("the program continues — the sky is not the "
                              "limit anymore")
                     toast_until = t + 10
+            elif event.type == pygame.KEYDOWN and help_open:
+                if event.key in (pygame.K_F1, pygame.K_ESCAPE,
+                                 pygame.K_RETURN, pygame.K_h):
+                    help_open = False
             elif event.type == pygame.KEYDOWN and pause_open:
                 if event.key == pygame.K_ESCAPE:
                     pause_open = False
                 elif event.key == pygame.K_UP:
                     pause_cursor = (pause_cursor - 1) % len(_PAUSE_ITEMS)
+                    audio.play("tick")
                 elif event.key == pygame.K_DOWN:
                     pause_cursor = (pause_cursor + 1) % len(_PAUSE_ITEMS)
+                    audio.play("tick")
                 elif event.key == pygame.K_RETURN:
                     choice = _PAUSE_ITEMS[pause_cursor]
                     if choice == "RESUME":
@@ -576,8 +613,10 @@ def run(argv: list[str] | None = None) -> int:
                     surface_open = False
                 elif event.key == pygame.K_UP:
                     surface_cursor = (surface_cursor - 1) % len(opts)
+                    audio.play("tick")
                 elif event.key == pygame.K_DOWN:
                     surface_cursor = (surface_cursor + 1) % len(opts)
+                    audio.play("tick")
                 elif event.key == pygame.K_RETURN:
                     action = opts[surface_cursor % len(opts)][0]
                     if action[0] == "relaunch":
@@ -633,8 +672,10 @@ def run(argv: list[str] | None = None) -> int:
                     crew_open = False
                 elif event.key == pygame.K_UP and cands:
                     crew_cursor = (crew_cursor - 1) % len(cands)
+                    audio.play("tick")
                 elif event.key == pygame.K_DOWN and cands:
                     crew_cursor = (crew_cursor + 1) % len(cands)
+                    audio.play("tick")
                 elif event.key == pygame.K_RETURN and cands:
                     cand = cands[crew_cursor % len(cands)]
                     if program.spend(t, cand.hire_cost,
@@ -663,8 +704,10 @@ def run(argv: list[str] | None = None) -> int:
                         base_cursor = 0
                     elif event.key == pygame.K_UP:
                         base_cursor = (base_cursor - 1) % len(avail)
+                        audio.play("tick")
                     elif event.key == pygame.K_DOWN:
                         base_cursor = (base_cursor + 1) % len(avail)
+                        audio.play("tick")
                     elif event.key == pygame.K_RETURN and avail:
                         ok, msg = site_b.build(
                             avail[base_cursor % len(avail)], t, research,
@@ -677,8 +720,10 @@ def run(argv: list[str] | None = None) -> int:
                     research_open = False
                 elif event.key == pygame.K_UP:
                     research_cursor = (research_cursor - 1) % len(tech_ids)
+                    audio.play("tick")
                 elif event.key == pygame.K_DOWN:
                     research_cursor = (research_cursor + 1) % len(tech_ids)
+                    audio.play("tick")
                 elif event.key == pygame.K_RETURN:
                     nid = tech_ids[research_cursor % len(tech_ids)]
                     if research.unlock(db, nid, t):
@@ -694,8 +739,10 @@ def run(argv: list[str] | None = None) -> int:
                     builder_open = False
                 elif event.key == pygame.K_UP:
                     builder.cursor = (builder.cursor - 1) % len(builder.catalog)
+                    audio.play("tick")
                 elif event.key == pygame.K_DOWN:
                     builder.cursor = (builder.cursor + 1) % len(builder.catalog)
+                    audio.play("tick")
                 elif event.key == pygame.K_RETURN:
                     builder.add()
                     audio.play("blip")
@@ -783,6 +830,10 @@ def run(argv: list[str] | None = None) -> int:
                             audio.play("blip")
                 elif event.key == pygame.K_F2:
                     base_screen = not base_screen
+                elif event.key in (pygame.K_v, pygame.K_e, pygame.K_u,
+                                   pygame.K_t) and not vessels:
+                    toast, toast_until = "no vessel — build one (B)", t + 5
+                    audio.play("warn")
                 elif event.key == pygame.K_v and vessels:
                     active_idx = (active_idx + 1) % len(vessels)
                     node = None
@@ -856,6 +907,8 @@ def run(argv: list[str] | None = None) -> int:
                 elif event.key == pygame.K_c:
                     focus_idx = 0
                 elif event.key == pygame.K_F1:
+                    help_open = True
+                elif event.key == pygame.K_h:
                     tutorial.visible = not tutorial.visible
                 elif event.key == pygame.K_k:
                     crew_open = True
@@ -892,8 +945,64 @@ def run(argv: list[str] | None = None) -> int:
                     sgn = -1.0 if event.key == pygame.K_x else 1.0
                     particles.emit_burn(px0[0], px0[1],
                                         sgn * cvx0 / v0n, -sgn * cvy0 / v0n)
+            elif (event.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN,
+                                 pygame.MOUSEWHEEL)
+                  and (pause_open or help_open or surface_open or crew_open
+                       or base_screen or research_open or builder_open)
+                  and scene == "flight"):
+                # every overlay is mouse-first: hover selects, click acts,
+                # wheel scrolls, right-click closes — by re-posting the
+                # exact key the keyboard path already handles
+                top = ("pause" if pause_open else "help" if help_open
+                       else "surface" if surface_open
+                       else "crew" if crew_open
+                       else "base" if base_screen
+                       else "research" if research_open else "builder")
+
+                def _post(key_const):
+                    pygame.event.post(pygame.event.Event(
+                        pygame.KEYDOWN, key=key_const, mod=0))
+
+                def _row_at(pos):
+                    for rect, idx in overlay_rects.get(top, []):
+                        if rect.collidepoint(pos):
+                            return idx
+                    return None
+
+                def _set_cursor(idx) -> None:
+                    nonlocal pause_cursor, surface_cursor, crew_cursor
+                    nonlocal base_cursor, research_cursor
+                    if top == "pause":
+                        pause_cursor = idx
+                    elif top == "surface":
+                        surface_cursor = idx
+                    elif top == "crew":
+                        crew_cursor = idx
+                    elif top == "base":
+                        base_cursor = idx
+                    elif top == "research":
+                        research_cursor = idx
+                    elif top == "builder":
+                        builder.cursor = idx
+
+                if event.type == pygame.MOUSEMOTION:
+                    idx = _row_at(event.pos)
+                    if idx is not None:
+                        _set_cursor(idx)
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1:
+                        idx = _row_at(event.pos)
+                        if idx is not None:
+                            _set_cursor(idx)
+                            _post(pygame.K_RETURN)
+                    elif event.button == 3:
+                        _post(pygame.K_ESCAPE)
+                elif event.type == pygame.MOUSEWHEEL and event.y:
+                    _post(pygame.K_UP if event.y > 0 else pygame.K_DOWN)
             elif (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
-                  and not (pause_open or builder_open or research_open)):
+                  and not (pause_open or builder_open or research_open
+                           or base_screen or crew_open or surface_open
+                           or help_open)):
                 mx, my = event.pos
                 best_v = None
                 best_d = 16.0 ** 2
@@ -989,6 +1098,12 @@ def run(argv: list[str] | None = None) -> int:
             live = None
             scene = "flight"
 
+        # cut-to-black fade-in on every scene change (no hard cuts)
+        ui_t += real_dt
+        if scene != prev_scene:
+            fade = 1.0 if prev_scene else 0.0
+            prev_scene = scene
+
         if scene == "ascent" and live is not None:
             # continuous stick: SHIFT/CTRL throttle, arrows pitch
             keys = pygame.key.get_pressed()
@@ -1031,7 +1146,24 @@ def run(argv: list[str] | None = None) -> int:
 
             px_per_m = max(0.0022, 0.26 * 1500.0 / (1500.0 + live.h))
             rocket_y = int(size[1] * 0.62)
-            ground_y = rocket_y + int(max(live.h, 0.0) * px_per_m)
+
+            stack_now = live_stack[live.stages_spent:]
+            tilt = -(90.0 - live.gamma_deg)
+            rs = max(0.12, 1500.0 / (1500.0 + 1.2 * live.h))
+            rkey = (live.stages_spent, int(tilt // 4), round(rs, 2))
+            if rkey not in rot_cache:
+                if len(rot_cache) > 160:
+                    rot_cache.clear()
+                base = (vessel_sprite(db, stack_now) if stack_now
+                        else craft_icon(math.radians(live.gamma_deg), 16))
+                rot_cache[rkey] = pygame.transform.rotozoom(base, tilt, rs)
+            rspr = rot_cache[rkey]
+            rx = size[0] // 2 - rspr.get_width() // 2
+            ry = rocket_y - rspr.get_height() // 2 - int(12 * rs)
+            # ground anchors to the rocket's BASE so the vehicle never
+            # draws buried in the terrain at low altitude
+            ground_y = ry + rspr.get_height() + int(max(live.h, 0.0)
+                                                    * px_per_m)
             theta = math.atan2(live.y, live.x)
             pad_ang = (theta - live.omega * live.t + math.pi) % (
                 2.0 * math.pi) - math.pi
@@ -1046,21 +1178,6 @@ def run(argv: list[str] | None = None) -> int:
                                      (pad_x - 52, ground_y - 6, 104, 8))
                     pygame.draw.rect(screen, (96, 60, 48),
                                      (pad_x + 58, ground_y - 70, 8, 66))
-
-            stack_now = live_stack[live.stages_spent:]
-            tilt = -(90.0 - live.gamma_deg)
-            rs = max(0.12, 1500.0 / (1500.0 + 1.2 * live.h))
-            rkey = (live.stages_spent, int(tilt // 4), round(rs, 2))
-            if rkey not in rot_cache:
-                if len(rot_cache) > 160:
-                    rot_cache.clear()
-                base = (vessel_sprite(db, stack_now) if stack_now
-                        else craft_icon(math.radians(live.gamma_deg), 16))
-                rot_cache[rkey] = pygame.transform.rotozoom(base, tilt, rs)
-            rspr = rot_cache[rkey]
-            rx = size[0] // 2 - rspr.get_width() // 2
-            ry = rocket_y - rspr.get_height() // 2 - int(
-                12 * rs) if live.h > 1.0 else ground_y - rspr.get_height()
             screen.blit(rspr, (rx, ry))
             if live.throttle_eff > 0.0:
                 ang = math.radians(live.gamma_deg)
@@ -1083,6 +1200,7 @@ def run(argv: list[str] | None = None) -> int:
                         audio.play("soi")
                 ascent_event_count = len(live.events)
             particles.update_draw(screen, real_dt)
+            bloom.apply(screen)        # bloom the world, not the HUD glass
 
             # ---- HUD ----
             screen.blit(theme.panel(258, 308, "ASCENT"), (16, 16))
@@ -1137,12 +1255,12 @@ def run(argv: list[str] | None = None) -> int:
             screen.blit(theme.panel(size[0], 26), (0, size[1] - 26))
             theme.draw_text(
                 screen, 10, size[1] - 21,
-                "SPACE ignite/stage   SHIFT/CTRL throttle   Z/X max/cut   "
+                "SPACE ignite/stage   SHIFT/CTRL throttle   X/Z max/cut   "
                 "arrows pitch (manual)   P autopilot   C circularize   "
-                "./, warp   ESC revert",
+                "./, warp   ESC revert (T+20s)",
                 color=theme.COLORS["text_dim"], font="small", shadow=False)
-            bloom.apply(screen)
             screen.blit(vig, (0, 0))
+            apply_fade()
             pygame.display.flip()
             frame_count += 1
             if args.frames and frame_count >= args.frames:
@@ -1178,6 +1296,7 @@ def run(argv: list[str] | None = None) -> int:
                 screen.blit(txt, (size[0] // 2 - 290, 220 + i * 30))
             bloom.apply(screen)
             screen.blit(vig, (0, 0))
+            apply_fade()
             pygame.display.flip()
             frame_count += 1
             if args.frames and frame_count >= args.frames:
@@ -1213,6 +1332,7 @@ def run(argv: list[str] | None = None) -> int:
                                size[1] - 60))
             bloom.apply(screen)
             screen.blit(vig, (0, 0))
+            apply_fade()
             pygame.display.flip()
             frame_count += 1
             if args.frames and frame_count >= args.frames:
@@ -1455,12 +1575,6 @@ def run(argv: list[str] | None = None) -> int:
                                        width=2)
             except Exception:
                 pass
-            state_txt = "ARMED" if node["armed"] else "editing"
-            screen.blit(font.render(
-                f"NODE [{state_txt}] T-{max(0.0, node['t_node'] - t):,.0f} s   "
-                f"prograde {node['dvp']:+,.0f}  radial {node['dvr']:+,.0f}  "
-                f"({math.hypot(node['dvp'], node['dvr']):,.0f} m/s)",
-                True, (255, 120, 220)), (10, size[1] - 48))
 
         # the fleet: active vessel gets trajectory legs + big icon; the
         # rest draw as dim markers with names (click to take command)
@@ -1503,6 +1617,18 @@ def run(argv: list[str] | None = None) -> int:
             vessel_click_pts.append((vpx[0], vpx[1], vi))
         burn_glow = max(0.0, burn_glow - real_dt)
 
+        # world is done — bloom it, then draw the HUD glass on top
+        particles.update_draw(screen, real_dt)
+        bloom.apply(screen)
+
+        if node is not None:
+            state_txt = "ARMED" if node["armed"] else "editing"
+            screen.blit(font.render(
+                f"NODE [{state_txt}] T-{theme.fmt_duration(max(0.0, node['t_node'] - t))}   "
+                f"prograde {node['dvp']:+,.0f}  radial {node['dvr']:+,.0f}  "
+                f"({math.hypot(node['dvp'], node['dvr']):,.0f} m/s)",
+                True, (255, 120, 220)), (10, size[1] - 48))
+
         hud1 = (f"t {t / SECONDS_PER_DAY:9.3f} d   warp {_WARP_LADDER[warp_idx]:>9,.0f}x"
                 f"{'  [PAUSED]' if paused else ''}   focus: {focus.split(':')[-1]}"
                 f"   fleet: {len(vessels)}")
@@ -1542,7 +1668,14 @@ def run(argv: list[str] | None = None) -> int:
                 ("funds", hud3, 48, theme.COLORS["gold"])):
             screen.blit(theme.icon(icon_name, 14), (10, yy + 1))
             theme.draw_text(screen, 30, yy, line, color=color)
-        if t < toast_until and toast:
+        # toasts are latched on REAL time so they survive 1,000,000x warp,
+        # slide in, and fade out instead of teleporting
+        if toast and (toast, toast_until) != toast_key:
+            toast_key = (toast, toast_until)
+            toast_real0 = ui_t
+        t_age = ui_t - toast_real0
+        rem = (3.0 - t_age) if t >= toast_until else 1.0
+        if toast and rem > 0.0 and t_age < 30.0:
             up = toast.upper()
             kind = ("paid" if ("PAID" in up or "QUICKSAVE" in up or "ORBIT" in up)
                     else "alarm" if any(w in up for w in (
@@ -1551,7 +1684,11 @@ def run(argv: list[str] | None = None) -> int:
                     else "science" if ("FIRST ENTRY" in up or "RESEARCHED" in up)
                     else "info")
             ts = theme.toast_surface(toast, kind)
-            screen.blit(ts, (size[0] // 2 - ts.get_width() // 2, 84))
+            slide = min(1.0, t_age / 0.18)
+            ts.set_alpha(int(255 * min(1.0, slide, max(0.0, rem / 0.35))))
+            screen.blit(ts, (size[0] // 2 - ts.get_width() // 2,
+                             64 + int(20 * slide)))
+            ts.set_alpha(255)
 
         # crew panel (08): portraits + role + career-dose gauges (K = roster)
         cw = 216
@@ -1579,18 +1716,16 @@ def run(argv: list[str] | None = None) -> int:
         theme.draw_text(
             screen, 10, size[1] - 21,
             "X/Z A/D burn  B build  N node  V ship  E dock  U undock  "
-            "T crossfeed  R research  G base  F2 base  F5/F9 save  "
-            "TAB/click focus  ./, warp  ESC menu",
+            "T xfeed  G surface  F2 colony  R research  K crew  "
+            "SPACE pause  ./, warp  F5/F9 save  F1 help  ESC menu",
             color=theme.COLORS["text_dim"], font="small", shadow=False)
 
-        particles.update_draw(screen, real_dt)
-        if tutorial.visible and tutorial.current_text:
-            tut = font.render(tutorial.current_text, True, (140, 235, 255))
-            tbg = pygame.Surface((tut.get_width() + 20, 24), pygame.SRCALPHA)
-            tbg.fill((10, 16, 28, 180))
-            tx = size[0] // 2 - tut.get_width() // 2
-            screen.blit(tbg, (tx - 10, 116))
-            screen.blit(tut, (tx, 120))
+        # one shared dimmer under any content overlay (kills HUD bleed-through)
+        if (base_screen and bases) or research_open or crew_open or (
+                surface_open and av is not None):
+            dimmer = pygame.Surface(size, pygame.SRCALPHA)
+            dimmer.fill((4, 6, 10, 168))
+            screen.blit(dimmer, (0, 0))
 
         if base_screen and bases:
             from aphelion.game.basebuild import CATALOG, catalog_for_kind
@@ -1650,6 +1785,7 @@ def run(argv: list[str] | None = None) -> int:
                 color=theme.COLORS["accent"], font="small")
 
             cx, cy = size[0] - 438, 116
+            overlay_rects["base"] = []
             for i, key in enumerate(avail):
                 spec = CATALOG[key]
                 sel = i == base_cursor % len(avail)
@@ -1660,15 +1796,20 @@ def run(argv: list[str] | None = None) -> int:
                          else theme.COLORS["text"])
                 pw = spec["power_kw"]
                 pw_txt = (f"+{-pw:,.0f} kW" if pw < 0 else f"{pw:,.0f} kW")
+                if sel:
+                    screen.blit(theme.row_glow(424, 22),
+                                (cx - 4, cy + i * 24 - 3))
                 theme.draw_text(
                     screen, cx, cy + i * 24,
                     f"{'>' if sel else ' '} {spec['name'][:28]:29s}"
                     f"${spec['price_m']:>4,.0f}M  {pw_txt}"
                     + ("  LOCKED" if locked else ""),
                     color=color, font="small")
+                overlay_rects["base"].append(
+                    (pygame.Rect(cx - 4, cy + i * 24 - 3, 424, 23), i))
             theme.draw_text(
                 screen, cx, cy + len(avail) * 24 + 8,
-                "UP/DOWN pick   ENTER build   TAB next base   F2 close",
+                "pick + ENTER/click build   TAB next base   F2 close",
                 color=theme.COLORS["text_dim"], font="small")
 
         if builder_open:
@@ -1682,16 +1823,17 @@ def run(argv: list[str] | None = None) -> int:
             rows_fit = (size[1] - 150) // 30
             top = max(0, min(builder.cursor - rows_fit // 2,
                              len(builder.catalog) - rows_fit))
+            overlay_rects["builder"] = []
             for i, pid in enumerate(builder.catalog):
                 if i < top or i >= top + rows_fit:
                     continue
                 p = db.parts[pid]
                 locked = builder.locked(pid)
                 ry = 54 + (i - top) * 30
+                overlay_rects["builder"].append(
+                    (pygame.Rect(26, ry - 2, 540, 29), i))
                 if i == builder.cursor:
-                    hi = pygame.Surface((540, 28), pygame.SRCALPHA)
-                    hi.fill((140, 235, 255, 26))
-                    screen.blit(hi, (26, ry - 2))
+                    screen.blit(theme.row_glow(540, 28), (26, ry - 2))
                 screen.blit(part_thumb(p, pid, 26), (32, ry))
                 tcol = (theme.COLORS["text_dim"] if locked
                         else theme.COLORS["text"])
@@ -1755,11 +1897,17 @@ def run(argv: list[str] | None = None) -> int:
                                 f"no surveyed sites at "
                                 f"{av.frame_id.split(':')[1]} — explore on",
                                 color=theme.COLORS["text_dim"])
+            overlay_rects["surface"] = []
             for i, (action, label) in enumerate(opts):
                 sel = i == surface_cursor % len(opts)
                 color = theme.COLORS["gold"] if sel else theme.COLORS["text"]
+                if sel:
+                    screen.blit(theme.row_glow(588, 26),
+                                (spx + 12, spy + 34 + i * 30))
                 theme.draw_text(screen, spx + 16, spy + 38 + i * 30,
                                 ("> " if sel else "  ") + label, color=color)
+                overlay_rects["surface"].append(
+                    (pygame.Rect(spx + 12, spy + 34 + i * 30, 588, 28), i))
             if opts:
                 action = opts[surface_cursor % len(opts)][0]
                 blurb = ""
@@ -1797,8 +1945,11 @@ def run(argv: list[str] | None = None) -> int:
                             "CANDIDATES — ENTER hires (boards next launch):",
                             color=theme.COLORS["gold"], font="small")
             yy += 26
+            overlay_rects["crew"] = []
             for i, cand in enumerate(cands):
                 sel = i == crew_cursor % len(cands) if cands else False
+                if sel:
+                    screen.blit(theme.row_glow(608, 26), (kx + 10, yy - 4))
                 theme.draw_text(
                     screen, kx + 14, yy,
                     f"{'>' if sel else ' '} {cand.name:18s} "
@@ -1806,6 +1957,8 @@ def run(argv: list[str] | None = None) -> int:
                     f"${cand.hire_cost/1e6:,.0f}M",
                     color=(theme.COLORS["gold"] if sel
                            else theme.COLORS["text"]), font="small")
+                overlay_rects["crew"].append(
+                    (pygame.Rect(kx + 10, yy - 4, 608, 28), i))
                 yy += 30
             theme.draw_text(
                 screen, kx + 14, yy + 4,
@@ -1825,6 +1978,7 @@ def run(argv: list[str] | None = None) -> int:
                 f"{research.eng_data:,.0f}   —   ENTER unlock, R close",
                 color=theme.COLORS["accent"], font="small")
             yy = py0 + 62
+            overlay_rects["research"] = []
             for i, nid in enumerate(tech_ids):
                 nd = db.tech[nid]
                 unlocked = nid in research.unlocked
@@ -1835,10 +1989,14 @@ def run(argv: list[str] | None = None) -> int:
                 state = ("UNLOCKED" if unlocked else
                          f"{nd.get('cost_sci', 0):,.0f} sci / "
                          f"{nd.get('cost_ed', 0):,.0f} ed")
+                if sel:
+                    screen.blit(theme.row_glow(628, 22), (px0 + 12, yy - 3))
                 screen.blit(font.render(
                     f"{'>' if sel else ' '} {nd['tier']:3s} "
                     f"{nd['name'][:36]:37s} {state}", True, color),
                     (px0 + 16, yy))
+                overlay_rects["research"].append(
+                    (pygame.Rect(px0 + 12, yy - 3, 628, 24), i))
                 yy += 24
             sel_nid = tech_ids[research_cursor % len(tech_ids)]
             unl = ", ".join(p.split(":")[1]
@@ -1848,6 +2006,16 @@ def run(argv: list[str] | None = None) -> int:
             screen.blit(font.render(f"unlocks: {unl}   prereqs: {pre}",
                                     True, (200, 210, 224)), (px0 + 16, yy + 4))
 
+        # tutorial rail draws ABOVE every content overlay so guidance is
+        # never hidden by the very screen it is teaching
+        if tutorial.visible and tutorial.current_text:
+            tut = font.render(tutorial.current_text, True, (140, 235, 255))
+            tbg = pygame.Surface((tut.get_width() + 20, 24), pygame.SRCALPHA)
+            tbg.fill((10, 16, 28, 200))
+            tx = size[0] // 2 - tut.get_width() // 2
+            screen.blit(tbg, (tx - 10, 116))
+            screen.blit(tut, (tx, 120))
+
         if pause_open:
             dim = pygame.Surface(size, pygame.SRCALPHA)
             dim.fill((4, 6, 10, 170))
@@ -1856,20 +2024,75 @@ def run(argv: list[str] | None = None) -> int:
             ppx = size[0] // 2 - 170
             ppy = 200
             screen.blit(ppan, (ppx, ppy))
+            overlay_rects["pause"] = []
             for i, label in enumerate(_PAUSE_ITEMS):
                 sel = i == pause_cursor
                 color = theme.COLORS["gold"] if sel else theme.COLORS["text"]
+                if sel:
+                    screen.blit(theme.row_glow(296, 30),
+                                (ppx + 20, ppy + 44 + i * 34))
                 txt = font_med.render(("> " if sel else "  ") + label, True,
                                       color)
                 screen.blit(txt, (ppx + 28, ppy + 48 + i * 34))
+                overlay_rects["pause"].append(
+                    (pygame.Rect(ppx + 20, ppy + 44 + i * 34, 296, 32), i))
 
-        bloom.apply(screen)
+        if help_open:
+            dim = pygame.Surface(size, pygame.SRCALPHA)
+            dim.fill((4, 6, 10, 200))
+            screen.blit(dim, (0, 0))
+            hp = theme.panel(880, 540, "CONTROLS")
+            hpx, hpy = size[0] // 2 - 440, size[1] // 2 - 270
+            screen.blit(hp, (hpx, hpy))
+            cols = (
+                ("FLIGHT", (
+                    ("X / Z", "burn prograde / retrograde"),
+                    ("A / D", "burn radial out / in  (SHIFT = 100 m/s)"),
+                    ("N", "maneuver node — arrows dv, [/] time, ENTER arm"),
+                    ("V / click", "switch command between vessels"),
+                    ("E / U / T", "dock · undock · crossfeed propellant"),
+                    ("G", "surface ops: land, relaunch, found a base"),
+                    ("TAB / click", "camera focus   ·   C your craft"),
+                    ("wheel", "zoom   ·   . , time warp   ·   SPACE pause"),
+                )),
+                ("ASCENT", (
+                    ("SPACE", "ignition, then stage"),
+                    ("SHIFT/CTRL", "throttle up / down   ·   X/Z max / cut"),
+                    ("arrows", "pitch (manual)   ·   P autopilot"),
+                    ("C", "circularize assist   ·   ESC revert (T+20s)"),
+                )),
+                ("PROGRAM", (
+                    ("B", "vessel builder"),
+                    ("R / K", "research tree · crew roster"),
+                    ("F2", "colony operations + construction"),
+                    ("F5 / F9", "quicksave / quickload (autosaves 5 min)"),
+                    ("H / F1", "tutorial rail · this screen"),
+                    ("M / F11", "mute · fullscreen"),
+                )),
+            )
+            hy = hpy + 40
+            for title2, rows2 in cols:
+                theme.draw_text(screen, hpx + 28, hy, title2,
+                                color=theme.COLORS["gold"], font="title")
+                hy += 28
+                for keys2, what2 in rows2:
+                    theme.draw_text(screen, hpx + 40, hy, f"{keys2:12s}",
+                                    color=theme.COLORS["accent"], font="small")
+                    theme.draw_text(screen, hpx + 150, hy, what2,
+                                    color=theme.COLORS["text"], font="small")
+                    hy += 21
+                hy += 8
+            theme.draw_text(screen, hpx + 28, hpy + 506,
+                            "F1 / ESC — close",
+                            color=theme.COLORS["text_dim"], font="small")
+
         screen.blit(vig, (0, 0))
         if gold_flash > 0.0:
             fl = pygame.Surface(size, pygame.SRCALPHA)
             fl.fill((255, 215, 130, int(56 * gold_flash)))
             screen.blit(fl, (0, 0))
             gold_flash = max(0.0, gold_flash - 1.6 * real_dt)
+        apply_fade()
         pygame.display.flip()
         frame_count += 1
         if args.frames and frame_count >= args.frames:
