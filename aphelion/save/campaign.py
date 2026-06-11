@@ -48,7 +48,8 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
                       active_idx: int, next_vid: int, program: Program,
                       research: ResearchState, crew: dict[str, CrewDose],
                       visited: set[str], bases: list,
-                      tutorial_done: bool, rng=None) -> dict:
+                      tutorial_done: bool, rng=None,
+                      visited_surface: set[str] | None = None) -> dict:
     """bases: objects with .name .last_t .pending_repairs .net (BaseSite)."""
     save = {
         "schema_version": SCHEMA_VERSION,
@@ -85,9 +86,11 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
             },
             "crew": {name: d.accumulated_msv for name, d in crew.items()},
             "visited": sorted(visited),
+            "visited_surface": sorted(visited_surface or set()),
             "tutorial_done": tutorial_done,
             "bases": [{
                 "name": b.name,
+                "site_id": getattr(b, "site_id", "site:peary"),
                 "last_t": b.last_t,
                 "pending_repairs": [list(r) for r in b.pending_repairs],
                 "ledger": ledger_to_dict(b.net),
@@ -141,6 +144,7 @@ def restore_campaign(save: dict, db, tree):
                 m.heat_kw = extra["heat_kw"]
         bases.append({
             "name": bd["name"], "last_t": bd["last_t"],
+            "site_id": bd.get("site_id", "site:peary"),
             "pending_repairs": [tuple(r) for r in bd["pending_repairs"]],
             "net": net,
         })
@@ -153,6 +157,7 @@ def restore_campaign(save: dict, db, tree):
         "research": research,
         "crew": crew,
         "visited": set(c["visited"]),
+        "visited_surface": set(c.get("visited_surface", [])),
         "tutorial_done": c["tutorial_done"],
         "bases": bases,
         "rng_state": save.get("rng"),

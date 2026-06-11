@@ -165,6 +165,36 @@ class FleetVessel:
             break
         return notes
 
+    # -- surface operations (01 Δv map: landing/ascent paid in propellant) ---
+
+    def land_at(self, site_id: str, site: dict, t: float) -> bool:
+        """Descend to a surface site. Pays the site's REAL landing dv from
+        the tanks (aero sites pay only the propulsive terminal phase)."""
+        if self.landed_at is not None or self.frame_id != site["body"]:
+            return False
+        if not self._pay_dv(site["land_dv"]):
+            return False
+        self.landed_at = site_id
+        self._legs_t0 = -1.0
+        self.legs = []
+        return True
+
+    def relaunch(self, site: dict, t: float) -> bool:
+        """Ascend from the surface back to a 100 km circular parking orbit,
+        paying the site's real ascent dv."""
+        from aphelion.sim.orbits import transfers as tr
+        if self.landed_at is None:
+            return False
+        if not self._pay_dv(site["ascent_dv"]):
+            return False
+        body = self.tree.body(self.frame_id)
+        r_orb = body.radius + 100e3
+        self.elements = state_to_elements(
+            r_orb, 0.0, 0.0, tr.circular_speed(body.mu, r_orb), t, body.mu)
+        self.landed_at = None
+        self._legs_t0 = -1.0
+        return True
+
     # -- rendezvous / docking (06 §3: a docked assembly is ONE entity) -------
 
     RENDEZVOUS_ENVELOPE_M = 100e3       # below rails resolution: prox-ops

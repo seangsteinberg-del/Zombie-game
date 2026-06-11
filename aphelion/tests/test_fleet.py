@@ -161,6 +161,42 @@ def test_rendezvous_refused_across_frames(world):
     assert a.rendezvous_cost(b, 0.0) is None
 
 
+def test_land_and_relaunch_pay_real_propellant(world):
+    db, tree = world
+    from aphelion.game.sites import SITES
+    site = SITES["site:peary"]
+    fv = _in_leo(db, tree, [["core:engine_hl67", "core:tank_ml_m",
+                             "core:payload_2t"]])
+    fv.frame_id = "core:moon"
+    mu_m = tree.body("core:moon").mu
+    r = tree.body("core:moon").radius + 100e3
+    fv.elements = state_to_elements(r, 0.0, 0.0,
+                                    tr.circular_speed(mu_m, r), 0.0, mu_m)
+    dv0 = fv.dv_remaining
+    assert fv.land_at("site:peary", site, 0.0)
+    assert fv.landed_at == "site:peary"
+    assert fv.dv_remaining == pytest.approx(dv0 - 1_900.0, rel=5e-3)
+    assert fv.predict(0.0) == []                  # no trajectory when landed
+
+    assert fv.relaunch(site, 1_000.0)
+    assert fv.landed_at is None
+    assert fv.elements.periapsis == pytest.approx(r, rel=1e-6)
+    assert fv.dv_remaining == pytest.approx(dv0 - 3_800.0, rel=5e-3)
+
+
+def test_landing_refused_wrong_frame_or_dry(world):
+    db, tree = world
+    from aphelion.game.sites import SITES
+    site = SITES["site:peary"]
+    fv = _in_leo(db, tree, [["core:engine_mv815", "core:tank_ml_s",
+                             "core:payload_2t"]])
+    assert fv.land_at("site:peary", site, 0.0) is False   # in Earth frame
+    fv.frame_id = "core:moon"
+    if fv.dv_remaining < site["land_dv"]:
+        assert fv.land_at("site:peary", site, 0.0) is False
+        assert fv.landed_at is None
+
+
 def test_uncrewed_vessel_has_infinite_endurance(world):
     db, tree = world
     fv = _in_leo(db, tree, [["core:engine_mv815", "core:tank_ml_m",

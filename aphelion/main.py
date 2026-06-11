@@ -71,6 +71,24 @@ def _tech_order(db) -> list[str]:
 
 
 from aphelion.game.fleet import FleetVessel  # noqa: E402  (campaign vessel)
+from aphelion.game.sites import SITES, sites_for_body  # noqa: E402
+
+
+def _surface_options(av, bases) -> list[tuple[tuple, str]]:
+    """Context actions for the surface-ops panel (G)."""
+    opts: list[tuple[tuple, str]] = []
+    if av.landed_at is not None:
+        site = SITES[av.landed_at]
+        opts.append((("relaunch",),
+                     f"RELAUNCH to 100 km orbit   ({site['ascent_dv']:,.0f} m/s)"))
+        if not any(getattr(b, "site_id", None) == av.landed_at for b in bases):
+            opts.append((("found",),
+                         "FOUND A BASE here (vessel becomes base hardware)"))
+    else:
+        for sid, s in sites_for_body(av.frame_id):
+            opts.append((("land", sid),
+                         f"LAND: {s['name']}   ({s['land_dv']:,.0f} m/s)"))
+    return opts
 
 
 class BaseSite:
@@ -80,7 +98,12 @@ class BaseSite:
 
     REPAIR_TURNAROUND = 48.0 * 3_600.0
 
-    def __init__(self, name: str, t_founded: float, rng) -> None:
+    def __init__(self, name: str, t_founded: float, rng,
+                 site_id: str = "site:peary") -> None:
+        self.site_id = site_id
+        self._init_net(name, t_founded, rng)
+
+    def _init_net(self, name: str, t_founded: float, rng) -> None:
         from aphelion.sim.habitat.lsc import oga_electrolysis
         from aphelion.sim.ledger.network import LedgerNetwork, Module, Source
         self.name = name
@@ -102,8 +125,10 @@ class BaseSite:
 
     @classmethod
     def from_restore(cls, name: str, last_t: float,
-                     pending_repairs: list, net) -> "BaseSite":
+                     pending_repairs: list, net,
+                     site_id: str = "site:peary") -> "BaseSite":
         site = cls.__new__(cls)
+        site.site_id = site_id
         site.name = name
         site.last_t = last_t
         site.events = []
@@ -272,8 +297,12 @@ def run(argv: list[str] | None = None) -> int:
                                payout=150_000_000.0, deadline_s=2 * 365 * 86_400.0))
         program.offer(Contract("c_lox", "Bank 100 t of lunar LOX",
                                payout=200_000_000.0, deadline_s=4 * 365 * 86_400.0))
+        program.offer(Contract("c_land_moon", "Land on the Moon",
+                               payout=120_000_000.0, deadline_s=2 * 365 * 86_400.0))
         program.offer(Contract("c_mars", "Reach the Mars SOI",
                                payout=300_000_000.0, deadline_s=6 * 365 * 86_400.0))
+        program.offer(Contract("c_land_mars", "Land on Mars",
+                               payout=350_000_000.0, deadline_s=8 * 365 * 86_400.0))
         program.offer(Contract("c_venus", "Reach the Venus SOI",
                                payout=250_000_000.0, deadline_s=6 * 365 * 86_400.0))
         return dict(clock=SimClock(t0=0.0), vessels=[], active_idx=0,
@@ -281,7 +310,7 @@ def run(argv: list[str] | None = None) -> int:
                     rng=RngRegistry(20490101), bases=[],
                     crew={"V. Ainsworth": CrewDose(), "J. Okafor": CrewDose()},
                     research=ResearchState(), visited={"core:earth"},
-                    tutorial=first_flight_tutorial())
+                    visited_surface=set(), tutorial=first_flight_tutorial())
 
     def loaded_campaign() -> dict:
         got = read_campaign(qs_path, db, tree)
@@ -295,30 +324,32 @@ def run(argv: list[str] | None = None) -> int:
                     active_idx=got["active_idx"], next_vid=got["next_vid"],
                     program=got["program"], rng=rng,
                     bases=[BaseSite.from_restore(b["name"], b["last_t"],
-                                                 b["pending_repairs"], b["net"])
+                                                 b["pending_repairs"], b["net"],
+                                                 b.get("site_id", "site:peary"))
                            for b in got["bases"]],
                     crew=got["crew"], research=got["research"],
-                    visited=got["visited"], tutorial=tut)
+                    visited=got["visited"],
+                    visited_surface=got["visited_surface"], tutorial=tut)
 
     def campaign_tuple(st: dict):
         """One unpack shape for new game, quickload, and startup."""
         return (st["clock"], st["vessels"], st["active_idx"], st["next_vid"],
                 st["program"], st["rng"], st["bases"], st["crew"],
-                st["research"], st["visited"], st["tutorial"],
-                Builder(db, st["research"]),
+                st["research"], st["visited"], st["visited_surface"],
+                st["tutorial"], Builder(db, st["research"]),
                 None, 0, False, False, False, False, False, 0.0, "", 0.0)
 
     (clock, vessels, active_idx, next_vid, program, campaign_rng, bases,
-     crew, research, visited, tutorial, builder, node, warp_idx, paused,
-     base_screen, builder_open, research_open, crew_warned, last_dose_t,
-     toast, toast_until) = campaign_tuple(fresh_campaign())
+     crew, research, visited, visited_surface, tutorial, builder, node,
+     warp_idx, paused, base_screen, builder_open, research_open, crew_warned,
+     last_dose_t, toast, toast_until) = campaign_tuple(fresh_campaign())
 
     def do_quicksave() -> str:
         snap = snapshot_campaign(
             t=clock.t, vessels=vessels, active_idx=active_idx,
             next_vid=next_vid, program=program, research=research,
-            crew=crew, visited=visited, bases=bases,
-            tutorial_done=tutorial.completed, rng=campaign_rng)
+            crew=crew, visited=visited, visited_surface=visited_surface,
+            bases=bases, tutorial_done=tutorial.completed, rng=campaign_rng)
         write_campaign(qs_path, snap)
         return "QUICKSAVED"
 
@@ -340,6 +371,8 @@ def run(argv: list[str] | None = None) -> int:
     pause_open = False
     pause_cursor = 0
     research_cursor = 0
+    surface_open = False
+    surface_cursor = 0
     body_click_pts: list = []
     vessel_click_pts: list = []
     burn_glow = 0.0
@@ -494,6 +527,72 @@ def run(argv: list[str] | None = None) -> int:
                         menu_cursor = 0
                     else:
                         running = False
+            elif event.type == pygame.KEYDOWN and surface_open:
+                av0 = vessels[active_idx % len(vessels)] if vessels else None
+                opts = _surface_options(av0, bases) if av0 else []
+                if event.key in (pygame.K_ESCAPE, pygame.K_g) or not opts:
+                    surface_open = False
+                elif event.key == pygame.K_UP:
+                    surface_cursor = (surface_cursor - 1) % len(opts)
+                elif event.key == pygame.K_DOWN:
+                    surface_cursor = (surface_cursor + 1) % len(opts)
+                elif event.key == pygame.K_RETURN:
+                    action = opts[surface_cursor % len(opts)][0]
+                    if action[0] == "relaunch":
+                        site = SITES[av0.landed_at]
+                        if av0.relaunch(site, t):
+                            toast = (f"{av0.name} BACK IN ORBIT — "
+                                     f"{av0.dv_remaining:,.0f} m/s remains")
+                            toast_until = t + 8
+                            surface_open = False
+                            audio.play("burn")
+                        else:
+                            toast = (f"ascent needs {site['ascent_dv']:,.0f}"
+                                     f" m/s — not enough propellant")
+                            toast_until = t + 6
+                            audio.play("alarm")
+                    elif action[0] == "found":
+                        site_id = av0.landed_at
+                        site = SITES[site_id]
+                        bases.append(BaseSite(
+                            f"{site['name'].split(' (')[0]} Base", t,
+                            campaign_rng, site_id=site_id))
+                        vessels.remove(av0)
+                        active_idx = 0
+                        node = None
+                        surface_open = False
+                        paid = program.complete(t, "c_base")
+                        toast = (f"BASE FOUNDED at {site['name']}"
+                                 + ("  |  CONTRACT PAID +$150M" if paid
+                                    else ""))
+                        toast_until = t + 10
+                        audio.play("paid")
+                    elif action[0] == "land":
+                        sid = action[1]
+                        site = SITES[sid]
+                        if av0.land_at(sid, site, t):
+                            surface_open = False
+                            burn_glow = 0.8
+                            msg = f"TOUCHDOWN: {site['name']}"
+                            if sid not in visited_surface:
+                                visited_surface.add(sid)
+                                research.earn_science(site["science"])
+                                research.earn_eng_data(site["science"] * 0.3)
+                                msg += f"  +{site['science']:.0f} science"
+                            for cid, body_need, label in (
+                                    ("c_land_moon", "core:moon", "+$120M"),
+                                    ("c_land_mars", "core:mars", "+$350M")):
+                                if (site["body"] == body_need
+                                        and program.complete(t, cid)):
+                                    msg += f"  |  CONTRACT PAID {label}"
+                                    audio.play("paid")
+                            toast, toast_until = msg, t + 10
+                            audio.play("soi")
+                        else:
+                            toast = (f"landing needs {site['land_dv']:,.0f}"
+                                     f" m/s — not enough propellant")
+                            toast_until = t + 6
+                            audio.play("alarm")
             elif event.type == pygame.KEYDOWN and research_open:
                 tech_ids = _tech_order(db)
                 if event.key in (pygame.K_ESCAPE, pygame.K_r):
@@ -594,7 +693,8 @@ def run(argv: list[str] | None = None) -> int:
                     elif event.key == pygame.K_RETURN:
                         need = math.hypot(node["dvp"], node["dvr"])
                         av0 = vessels[active_idx % len(vessels)] if vessels else None
-                        if av0 is None or need > av0.dv_remaining:
+                        if (av0 is None or av0.landed_at is not None
+                                or need > av0.dv_remaining):
                             toast, toast_until = "node exceeds dv budget", t + 5
                             audio.play("alarm")
                         else:
@@ -659,29 +759,12 @@ def run(argv: list[str] | None = None) -> int:
                     else:
                         toast, toast_until = "no propellant to crossfeed", t + 4
                 elif event.key == pygame.K_g:
-                    av0 = vessels[active_idx % len(vessels)] if vessels else None
-                    if av0 is None or av0.frame_id != "core:moon":
-                        toast, toast_until = "Base founding needs a vessel in the Moon SOI", t + 5
-                        audio.play("alarm")
-                    elif bases:
-                        toast, toast_until = "Base already founded (F2 to view)", t + 5
-                    elif not av0.burn(t, -1_900.0, 0.0):
-                        toast, toast_until = ("Landing needs 1,900 m/s of "
-                                              "remaining dv"), t + 6
-                        audio.play("alarm")
+                    if vessels:
+                        surface_open = not surface_open
+                        surface_cursor = 0
                     else:
-                        bases.append(BaseSite("Peary Base", t, campaign_rng))
-                        # the lander IS the base seed — its hardware stays
-                        vessels.pop(active_idx % len(vessels))
-                        active_idx = 0
-                        node = None
-                        if program.complete(t, "c_base"):
-                            toast = ("PEARY BASE FOUNDED — vessel converted to "
-                                     "base hardware  |  CONTRACT PAID +$150M")
-                        else:
-                            toast = "PEARY BASE FOUNDED — vessel converted to base hardware"
-                        toast_until = t + 10
-                        audio.play("paid")
+                        toast, toast_until = "no vessel — build one (B)", t + 5
+                        audio.play("alarm")
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
                 elif event.key == pygame.K_PERIOD:
@@ -698,6 +781,11 @@ def run(argv: list[str] | None = None) -> int:
                     av0 = vessels[active_idx % len(vessels)] if vessels else None
                     if av0 is None:
                         toast, toast_until = "no vessel — build one (B)", t + 5
+                        audio.play("alarm")
+                        continue
+                    if av0.landed_at is not None:
+                        toast, toast_until = ("vessel is LANDED — G to "
+                                              "relaunch"), t + 5
                         audio.play("alarm")
                         continue
                     dvp = {pygame.K_x: (+step, 0.0), pygame.K_z: (-step, 0.0),
@@ -755,20 +843,23 @@ def run(argv: list[str] | None = None) -> int:
         # scene transitions decided during event handling
         if start_new:
             (clock, vessels, active_idx, next_vid, program, campaign_rng,
-             bases, crew, research, visited, tutorial, builder, node,
-             warp_idx, paused, base_screen, builder_open, research_open,
-             crew_warned, last_dose_t, toast, toast_until) = \
+             bases, crew, research, visited, visited_surface, tutorial,
+             builder, node, warp_idx, paused, base_screen, builder_open,
+             research_open, crew_warned, last_dose_t, toast, toast_until) = \
                 campaign_tuple(fresh_campaign())
             scene, pause_open, focus_idx = "flight", False, 0
+            surface_open = False
         if load_save:
             if qs_path.exists():
                 try:
                     (clock, vessels, active_idx, next_vid, program,
-                     campaign_rng, bases, crew, research, visited, tutorial,
-                     builder, node, warp_idx, paused, base_screen,
-                     builder_open, research_open, crew_warned, last_dose_t,
-                     toast, toast_until) = campaign_tuple(loaded_campaign())
+                     campaign_rng, bases, crew, research, visited,
+                     visited_surface, tutorial, builder, node, warp_idx,
+                     paused, base_screen, builder_open, research_open,
+                     crew_warned, last_dose_t, toast, toast_until) = \
+                        campaign_tuple(loaded_campaign())
                     scene, pause_open, focus_idx = "flight", False, 0
+                    surface_open = False
                     toast, toast_until = "QUICKSAVE LOADED", clock.t + 5.0
                 except Exception as exc:
                     toast, toast_until = f"load failed: {exc}", t + 8.0
@@ -1115,10 +1206,12 @@ def run(argv: list[str] | None = None) -> int:
 
         focus = focus_order[focus_idx]
         if focus == "craft":
-            if av is not None:
+            if av is not None and av.landed_at is None:
                 frx, fry = body_root(av.frame_id)
                 crx, cry, _, _ = av.state(t)
                 cam.follow(frx + crx, fry + cry)
+            elif av is not None:
+                cam.follow(*body_root(av.frame_id))
             else:
                 cam.follow(*body_root("core:earth"))
         elif focus == "core:sun":
@@ -1234,20 +1327,28 @@ def run(argv: list[str] | None = None) -> int:
                            r_max=r_max, origin=(frx, fry))
         for vi, fv in enumerate(vessels):
             vfx, vfy = body_root(fv.frame_id)
-            vrx, vry, vvx, vvy = fv.state(t)
-            vpx = cam.world_to_screen(vfx + vrx, vfy + vry)
+            if fv.landed_at is not None:
+                body_r = tree.body(fv.frame_id).radius
+                ang = 0.9 * list(SITES).index(fv.landed_at) + 0.6
+                vpx = cam.world_to_screen(vfx + body_r * math.cos(ang),
+                                          vfy + body_r * math.sin(ang))
+                heading, vvx, vvy = math.pi / 2.0, 0.0, 0.0
+            else:
+                vrx, vry, vvx, vvy = fv.state(t)
+                vpx = cam.world_to_screen(vfx + vrx, vfy + vry)
+                heading = math.atan2(-vvy, vvx)
             if not (math.isfinite(vpx[0]) and math.isfinite(vpx[1])
                     and -200 < vpx[0] < size[0] + 200
                     and -200 < vpx[1] < size[1] + 200):
                 continue
             is_active = fv is av
-            heading = math.atan2(-vvy, vvx)
             cspr = craft_icon(heading, size=14 if is_active else 9,
                               burning=is_active and burn_glow > 0.0)
             if not is_active:
                 cspr = cspr.copy()
                 cspr.set_alpha(140)
-                screen.blit(font.render(fv.name, True, (110, 122, 140)),
+                tag = fv.name + (" [LANDED]" if fv.landed_at else "")
+                screen.blit(font.render(tag, True, (110, 122, 140)),
                             (vpx[0] + 10, vpx[1] - 10))
             screen.blit(cspr, (vpx[0] - cspr.get_width() // 2,
                                vpx[1] - cspr.get_height() // 2))
@@ -1257,7 +1358,11 @@ def run(argv: list[str] | None = None) -> int:
         hud1 = (f"t {t / SECONDS_PER_DAY:9.3f} d   warp {_WARP_LADDER[warp_idx]:>9,.0f}x"
                 f"{'  [PAUSED]' if paused else ''}   focus: {focus.split(':')[-1]}"
                 f"   fleet: {len(vessels)}")
-        if av is not None:
+        if av is not None and av.landed_at is not None:
+            lss = f"   LSS {av.lss_margin_days:,.0f} d" if av.crew else ""
+            hud2 = (f"{av.name} — LANDED: {SITES[av.landed_at]['name']}   "
+                    f"dv {av.dv_remaining:,.0f} m/s   G surface ops{lss}")
+        elif av is not None:
             el = av.elements
             body = tree.body(av.frame_id)
             crx, cry, cvx, cvy = av.state(t)
@@ -1446,6 +1551,33 @@ def run(argv: list[str] | None = None) -> int:
                 "UP/DOWN browse   ENTER add   S new stage   BACKSPACE remove   "
                 "L launch   B/ESC close", color=theme.COLORS["text_dim"],
                 font="small", shadow=False)
+
+        if surface_open and av is not None:
+            opts = _surface_options(av, bases)
+            n_rows = max(len(opts), 1)
+            spanel = theme.panel(620, 96 + 30 * n_rows, "SURFACE OPERATIONS")
+            spx, spy = size[0] // 2 - 310, 140
+            screen.blit(spanel, (spx, spy))
+            if not opts:
+                theme.draw_text(screen, spx + 16, spy + 40,
+                                f"no surveyed sites at "
+                                f"{av.frame_id.split(':')[1]} — explore on",
+                                color=theme.COLORS["text_dim"])
+            for i, (action, label) in enumerate(opts):
+                sel = i == surface_cursor % len(opts)
+                color = theme.COLORS["gold"] if sel else theme.COLORS["text"]
+                theme.draw_text(screen, spx + 16, spy + 38 + i * 30,
+                                ("> " if sel else "  ") + label, color=color)
+            if opts:
+                action = opts[surface_cursor % len(opts)][0]
+                blurb = ""
+                if action[0] == "land":
+                    blurb = SITES[action[1]]["blurb"]
+                elif av.landed_at:
+                    blurb = SITES[av.landed_at]["blurb"]
+                theme.draw_text(screen, spx + 16,
+                                spy + 96 + 30 * (n_rows - 1), blurb,
+                                color=theme.COLORS["accent"], font="small")
 
         if research_open:
             tech_ids = _tech_order(db)
