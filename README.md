@@ -1,4 +1,4 @@
-# PROJECT "APHELION" — v2.0 · THE DEPTH UPDATE
+# PROJECT "APHELION" — v2.1 · THE LOOK UPDATE
 
 A single-player, 2D top-down, **hard-realism space program sim** for PC,
 built in Python 3.12 + pygame-ce. Every pixel procedural — no asset files.
@@ -6,6 +6,13 @@ built in Python 3.12 + pygame-ce. Every pixel procedural — no asset files.
 > KSP's orbital flight × Oxygen Not Included's habitat engineering × Factorio's
 > industry — one persistent engineer-founder campaign across a **real-scale
 > solar system**, 2049 onward. No combat. No aliens. The antagonist is physics.
+
+v2.1 rebuilt the visual layer: a modern UI grotesk over monospace data
+columns, keycap hint footers, glass-gradient panels, scattering skies with
+a sun and parallax ridgelines on every world you launch from or land on, a
+KSC-style pad complex, a tier-column research tree, chip-based status bars,
+a film-grain post pass, and a title screen with the Earth's lit limb
+breathing at the bottom of the frame.
 
 ## Install & run
 

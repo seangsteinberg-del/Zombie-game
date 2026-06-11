@@ -3717,26 +3717,38 @@ def run(argv: list[str] | None = None) -> int:
                 screen.blit(walker_sprite(wname, int(ui_t * 2.0) + wi),
                             (wx, wy))
 
-            # header strip
+            # header strip: identity line + status chips
             screen.blit(theme.panel(size[0], 54), (0, 0))
             emitted, capacity = thermal_balance_kw(site_b.net)
             alert_txt = site_b.alert(t)
-            head = (f"{site_b.name}   ·   {site_def['name']}   ·   "
-                    f"{'DAY' if daylight > 0.5 else 'NIGHT'}  sun x"
-                    f"{site_def['solar'] * daylight:.2f}   ·   power f="
-                    f"{f_power:.2f}   ·   heat {emitted:,.0f}/"
-                    f"{capacity:,.0f} kW   ·   crew {len(site_b.crew)}/"
-                    f"{site_b.beds()} beds")
-            theme.draw_text(screen, 14, 8, head,
-                            color=theme.COLORS["text"], font="small")
-            theme.draw_text(
-                screen, 14, 30,
-                f"${program.funds / 1e6:,.0f}M"
-                + (f"   ·   base {base_idx + 1}/{len(bases)} (N)"
-                   if len(bases) > 1 else "")
-                + (f"   ·   ⚠ {alert_txt}" if alert_txt else ""),
-                color=(theme.COLORS["danger"] if alert_txt
-                       else theme.COLORS["text_dim"]), font="small")
+            theme.draw_text(screen, 14, 6,
+                            f"{site_b.name}  —  {site_def['name']}",
+                            color=theme.COLORS["text"], font="ui")
+            chx_b = 14
+            base_chips = [
+                (f"{'DAY' if daylight > 0.5 else 'NIGHT'} · sun "
+                 f"x{site_def['solar'] * daylight:.2f}",
+                 theme.COLORS["gold"] if daylight > 0.5
+                 else theme.COLORS["accent"]),
+                (f"power f={f_power:.2f}",
+                 theme.COLORS["good"] if f_power >= 0.99
+                 else theme.COLORS["warn"]),
+                (f"heat {emitted:,.0f}/{capacity:,.0f} kW",
+                 theme.COLORS["danger"] if emitted > capacity
+                 else theme.COLORS["text_dim"]),
+                (f"crew {len(site_b.crew)}/{site_b.beds()}",
+                 theme.COLORS["text_dim"]),
+                (f"$ {program.funds / 1e6:,.0f}M", theme.COLORS["gold"]),
+            ]
+            if len(bases) > 1:
+                base_chips.append((f"base {base_idx + 1}/{len(bases)} (N)",
+                                   theme.COLORS["text_dim"]))
+            if alert_txt:
+                base_chips.append((f"⚠ {alert_txt}", theme.COLORS["danger"]))
+            for chip_txt, chip_col in base_chips:
+                cs = theme.chip(chip_txt, chip_col)
+                screen.blit(cs, (chx_b, 29))
+                chx_b += cs.get_width() + 8
 
             # resources panel
             rp = theme.panel(396, 250, "RESOURCES")
