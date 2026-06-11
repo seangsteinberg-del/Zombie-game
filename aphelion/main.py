@@ -610,6 +610,54 @@ def run(argv: list[str] | None = None) -> int:
                     av0 = vessels[active_idx]
                     toast, toast_until = f"ACTIVE: {av0.name}", t + 4
                     audio.play("blip")
+                elif event.key == pygame.K_e and vessels:
+                    # dock: chaser = active vessel, target = nearest in envelope
+                    av0 = vessels[active_idx % len(vessels)]
+                    best_tgt, best_cost = None, float("inf")
+                    for other in vessels:
+                        c = av0.rendezvous_cost(other, t)
+                        if c is not None and c < best_cost:
+                            best_tgt, best_cost = other, c
+                    if best_tgt is None:
+                        toast = ("no dock target within 100 km of "
+                                 f"{av0.name}")
+                        toast_until = t + 5
+                        audio.play("alarm")
+                    elif av0.dock_with(best_tgt, t):
+                        vessels.remove(av0)
+                        active_idx = vessels.index(best_tgt)
+                        node = None
+                        toast = (f"DOCKED: {av0.name} -> {best_tgt.name} "
+                                 f"({best_cost:,.0f} m/s rendezvous)")
+                        toast_until = t + 8
+                        audio.play("paid")
+                    else:
+                        toast = (f"dock refused: {best_cost:,.0f} m/s "
+                                 f"rendezvous exceeds propellant")
+                        toast_until = t + 6
+                        audio.play("alarm")
+                elif event.key == pygame.K_u and vessels:
+                    av0 = vessels[active_idx % len(vessels)]
+                    split = av0.undock_last(t, next_vid)
+                    if split is None:
+                        toast, toast_until = "nothing docked to release", t + 4
+                    else:
+                        next_vid += 1
+                        vessels.append(split)
+                        toast = f"UNDOCKED: {split.name} is free-flying"
+                        toast_until = t + 6
+                        audio.play("blip")
+                elif event.key == pygame.K_t and vessels:
+                    av0 = vessels[active_idx % len(vessels)]
+                    moved = av0.crossfeed()
+                    if moved > 0.0:
+                        toast = (f"CROSSFEED: {moved/1e3:,.2f} t into the "
+                                 f"active stage — dv now "
+                                 f"{av0.dv_remaining:,.0f} m/s")
+                        toast_until = t + 6
+                        audio.play("blip")
+                    else:
+                        toast, toast_until = "no propellant to crossfeed", t + 4
                 elif event.key == pygame.K_g:
                     av0 = vessels[active_idx % len(vessels)] if vessels else None
                     if av0 is None or av0.frame_id != "core:moon":
@@ -1271,8 +1319,9 @@ def run(argv: list[str] | None = None) -> int:
         screen.blit(theme.panel(size[0], 26), (0, size[1] - 26))
         theme.draw_text(
             screen, 10, size[1] - 21,
-            "X/Z A/D burn  B build  N node  R research  G base  F2 base view  "
-            "F5/F9 save/load  TAB/click focus  ./, warp  ESC menu",
+            "X/Z A/D burn  B build  N node  V ship  E dock  U undock  "
+            "T crossfeed  R research  G base  F2 base  F5/F9 save  "
+            "TAB/click focus  ./, warp  ESC menu",
             color=theme.COLORS["text_dim"], font="small", shadow=False)
 
         particles.update_draw(screen, real_dt)

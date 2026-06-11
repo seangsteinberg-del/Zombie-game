@@ -33,6 +33,7 @@ class FleetVessel:
         self.landed_at: str | None = None
         self.lss_used_days = 0.0
         self.lss_last_t = t_now
+        self.dock_joints: list[int] = []      # row offsets of docked stacks
         self.legs = []
         self._legs_t0 = -1.0
 
@@ -73,13 +74,13 @@ class FleetVessel:
     def state(self, t: float):
         return elements_to_state(self.elements, t)
 
-    def burn(self, t: float, dv_prograde: float, dv_radial: float) -> bool:
-        """Impulsive burn paid in REAL propellant. Stages mid-burn when the
-        active stage runs dry; refuses (no state change) if the whole stack
-        cannot cover the cost."""
-        cost = math.hypot(dv_prograde, dv_radial)
-        if cost <= 0.0 or cost > self.dv_remaining + 1e-9:
-            return cost <= 0.0
+    def _pay_dv(self, cost: float) -> bool:
+        """Drain the propellant a burn of `cost` m/s requires, staging
+        through the plan as stages run dry. No trajectory change."""
+        if cost <= 0.0:
+            return True
+        if cost > self.dv_remaining + 1e-9:
+            return False
         remaining = cost
         guard = 0
         while remaining > 1e-9 and guard < 12:
@@ -101,7 +102,16 @@ class FleetVessel:
             remaining -= dv_now
             if remaining > 1e-9 and len(self.vessel.stage_plan) > 1:
                 self.vessel.stage()
-        if remaining > 1e-6:
+        return remaining <= 1e-6
+
+    def burn(self, t: float, dv_prograde: float, dv_radial: float) -> bool:
+        """Impulsive burn paid in REAL propellant. Stages mid-burn when the
+        active stage runs dry; refuses (no state change) if the whole stack
+        cannot cover the cost."""
+        cost = math.hypot(dv_prograde, dv_radial)
+        if cost <= 0.0:
+            return cost == 0.0
+        if not self._pay_dv(cost):
             return False
         rx, ry, vx, vy = self.state(t)
         v = math.hypot(vx, vy)
@@ -154,6 +164,83 @@ class FleetVessel:
                     continue
             break
         return notes
+
+    # -- rendezvous / docking (06 §3: a docked assembly is ONE entity) -------
+
+    RENDEZVOUS_ENVELOPE_M = 100e3       # below rails resolution: prox-ops
+    PROX_OPS_DV = 20.0                  # terminal docking budget, m/s
+
+    def rendezvous_cost(self, other: "FleetVessel", t: float) -> float | None:
+        """The dv this vessel (chaser) pays to match `other` and dock, or
+        None when out of the rendezvous envelope (different frame, landed,
+        or farther than the prox-ops gameplay radius)."""
+        if (other is self or self.frame_id != other.frame_id
+                or self.landed_at is not None or other.landed_at is not None):
+            return None
+        rx, ry, vx, vy = self.state(t)
+        ox, oy, ovx, ovy = other.state(t)
+        if math.hypot(rx - ox, ry - oy) > self.RENDEZVOUS_ENVELOPE_M:
+            return None
+        return math.hypot(vx - ovx, vy - ovy) + self.PROX_OPS_DV
+
+    def dock_with(self, other: "FleetVessel", t: float) -> bool:
+        """Chaser docks to `other` (the primary keeps name and orbit).
+        Pays the rendezvous dv from THIS vessel's tanks, then merges rows;
+        the caller removes the chaser from the fleet."""
+        from aphelion.sim.vessels.docking import dock
+        cost = self.rendezvous_cost(other, t)
+        if cost is None or not self._pay_dv(cost):
+            return False
+        other.dock_joints.append(len(other.vessel.rows))
+        dock(other.vessel, self.vessel)
+        other.crew.extend(self.crew)
+        self.crew = []
+        other._legs_t0 = -1.0
+        return True
+
+    def undock_last(self, t: float, new_vid: int) -> "FleetVessel | None":
+        """Split the most recent docked stack back off; returns the new
+        vessel (same orbit, slight phase) or None if nothing is docked."""
+        from aphelion.sim.vessels.docking import undock
+        if not self.dock_joints:
+            return None
+        joint = self.dock_joints.pop()
+        going = list(range(joint, len(self.vessel.rows)))
+        if not going:
+            return None
+        split = undock(self.vessel, going)
+        self._legs_t0 = -1.0
+        return FleetVessel(self.tree, self.frame_id, self.elements, split,
+                           f"{self.name}-B", new_vid, t_now=t)
+
+    def crossfeed(self) -> float:
+        """Depot refuel: top the ACTIVE stage's tanks from any other rows
+        holding the same resources (a docked tanker's load becomes burnable).
+        Returns kg moved."""
+        active = set(self.vessel.active_stage())
+        moved = 0.0
+        for i, row in enumerate(self.vessel.rows):
+            if i not in active:
+                continue
+            tank = self.vessel.part(row).get("tank")
+            if not tank:
+                continue
+            cap_kg = tank["capacity_t"] * 1_000.0
+            for res, share in tank["mixture"].items():
+                room = cap_kg * share - row.fill.get(res, 0.0)
+                if room <= 0.0:
+                    continue
+                for j, src in enumerate(self.vessel.rows):
+                    if j in active or room <= 0.0:
+                        continue
+                    have = src.fill.get(res, 0.0)
+                    take = min(have, room)
+                    if take > 0.0:
+                        src.fill[res] = have - take
+                        row.fill[res] = row.fill.get(res, 0.0) + take
+                        room -= take
+                        moved += take
+        return moved
 
     # -- life support (08, vessel-side endurance model) ----------------------
 

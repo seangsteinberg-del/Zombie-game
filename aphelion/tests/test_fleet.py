@@ -125,6 +125,42 @@ def test_lss_countdown_and_loss(world):
     assert fv.crew == []
 
 
+def test_dock_undock_crossfeed_cycle(world):
+    """Tanker docks to a station, crossfeed refuels the station's active
+    stage, undock releases the (now lighter) tanker."""
+    db, tree = world
+    station = _in_leo(db, tree, [["core:engine_mv815", "core:tank_ml_m",
+                                  "core:capsule_vela"]], crew=["A"])
+    station.burn(0.0, 900.0, 0.0)               # spend most of the M tank
+    station.elements = _in_leo(db, tree, [["core:payload_2t"]]).elements
+    tanker = _in_leo(db, tree, [["core:engine_mv815", "core:tank_ml_m"]])
+    dv_before = station.dv_remaining
+
+    cost = tanker.rendezvous_cost(station, 0.0)
+    assert cost is not None and cost == pytest.approx(20.0, abs=1.0)
+    assert tanker.dock_with(station, 0.0)
+    assert station.dock_joints == [3]
+    assert len(station.vessel.rows) == 5
+
+    moved = station.crossfeed()
+    assert moved > 1_000.0                       # tonnes flowed forward
+    assert station.dv_remaining > dv_before
+
+    split = station.undock_last(0.0, new_vid=9)
+    assert split is not None
+    assert station.dock_joints == []
+    assert len(station.vessel.rows) == 3
+    assert split.vessel.total_mass_kg() < 30_000.0   # tanker left lighter
+
+
+def test_rendezvous_refused_across_frames(world):
+    db, tree = world
+    a = _in_leo(db, tree, [["core:payload_2t"]])
+    b = _in_leo(db, tree, [["core:payload_2t"]])
+    b.frame_id = "core:moon"
+    assert a.rendezvous_cost(b, 0.0) is None
+
+
 def test_uncrewed_vessel_has_infinite_endurance(world):
     db, tree = world
     fv = _in_leo(db, tree, [["core:engine_mv815", "core:tank_ml_m",
