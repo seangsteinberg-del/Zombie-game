@@ -580,6 +580,9 @@ def run(argv: list[str] | None = None) -> int:
     from aphelion.sim.power import thermal_balance_kw
     from aphelion.render.draw_conics import draw_conic
     from aphelion.render.postfx import Bloom, Nebula, soi_ring, vignette
+    from aphelion.render.surface_art import (
+        PAD_GROUND_Y, PAD_W, RIDGE_PAD, ground_palette, ground_strip,
+        pad_complex, ridge_layers, sky_surface)
     from aphelion.render.vessel_art import (
         app_icon, craft_icon, part_thumb, vessel_metrics, vessel_sprite)
     from aphelion.sim.environment.atmosphere import density as atmo_density
@@ -902,45 +905,7 @@ def run(argv: list[str] | None = None) -> int:
     ascent_warp = 1.0
     ascent_acc = 0.0
     rot_cache: dict = {}
-    # cached sky gradient, alpha-faded by local air density during ascent
-    sky_grad = pygame.Surface(size)
-    _g = np.linspace(0.0, 1.0, size[1])[:, None]
-    _sky = ((1.0 - _g) * np.array([88.0, 146.0, 212.0])
-            + _g * np.array([148.0, 192.0, 238.0]))
-    pygame.surfarray.blit_array(sky_grad,
-                                np.repeat(_sky[None, :, :], size[0],
-                                          axis=0).astype("uint8"))
-    # ---- ascent/descent scene dressing (cached, procedural) -------------
-    ground_tex_cache: dict[str, pygame.Surface] = {}
-
-    def ground_texture(bid: str) -> pygame.Surface:
-        tex = ground_tex_cache.get(bid)
-        if tex is None:
-            rngg = np.random.default_rng(sum(ord(c) for c in bid))
-            col = np.array(_GROUND_COLORS.get(bid, (60, 62, 68)), float)
-            tex = pygame.Surface((size[0], 110))
-            for x in range(size[0]):
-                v = 0.82 + 0.36 * float(rngg.random())
-                pygame.draw.line(tex, tuple(int(min(255.0, c * v))
-                                            for c in col), (x, 0), (x, 110))
-            ground_tex_cache[bid] = tex
-        return tex
-
-    pad_sprite = pygame.Surface((150, 150), pygame.SRCALPHA)
-    pygame.draw.rect(pad_sprite, (88, 90, 96), (8, 138, 134, 10),
-                     border_radius=3)
-    pygame.draw.ellipse(pad_sprite, (38, 38, 42), (45, 139, 60, 8))
-    for _ty in range(8, 132, 12):        # lattice service tower
-        pygame.draw.line(pad_sprite, (118, 78, 58), (118, _ty),
-                         (130, _ty + 12), 2)
-        pygame.draw.line(pad_sprite, (118, 78, 58), (130, _ty),
-                         (118, _ty + 12), 2)
-    pygame.draw.line(pad_sprite, (140, 95, 70), (118, 8), (118, 140), 3)
-    pygame.draw.line(pad_sprite, (140, 95, 70), (130, 8), (130, 140), 3)
-    pygame.draw.circle(pad_sprite, (150, 156, 168), (24, 130), 9)
-    pygame.draw.circle(pad_sprite, (148, 154, 166), (44, 132), 7)
-    pygame.draw.circle(pad_sprite, (190, 196, 208), (21, 127), 3)
-
+    # ---- ascent/descent scene dressing (cached in surface_art) -----------
     cloud_spr = pygame.Surface((150, 52), pygame.SRCALPHA)
     for _cx, _cy, _cr in ((40, 30, 22), (72, 24, 27), (104, 30, 20),
                           (60, 34, 24), (88, 34, 22)):
@@ -2346,8 +2311,9 @@ def run(argv: list[str] | None = None) -> int:
                          / rho0) if rho0 > 0.0 else 0.0)
             sky_a = int(255.0 * rho_n ** 0.35)
             if sky_a > 2:
-                sky_grad.set_alpha(sky_a)
-                screen.blit(sky_grad, (0, 0))
+                sky_now = sky_surface(size, live.body_id)
+                sky_now.set_alpha(sky_a)
+                screen.blit(sky_now, (0, 0))
             elif rho0 <= 0.0:
                 starfield.draw(screen, cam)
 
@@ -2397,12 +2363,16 @@ def run(argv: list[str] | None = None) -> int:
                         screen.blit(cloud_spr, (cx2, cy2))
 
             if ground_y < size[1] + 600:
-                gcol_a = _GROUND_COLORS.get(live.body_id, (60, 62, 68))
-                pygame.draw.rect(screen, gcol_a,
+                # parallax ridge silhouettes behind the pad horizon
+                for ridge_spr, rfac in ridge_layers(live.body_id, size[0]):
+                    rxo = -int((downrange * px_per_m * rfac) % RIDGE_PAD)
+                    screen.blit(ridge_spr,
+                                (rxo, ground_y - ridge_spr.get_height()))
+                pygame.draw.rect(screen, ground_palette(live.body_id).dark,
                                  (0, min(ground_y, size[1]), size[0],
                                   max(0, size[1] - ground_y) + 4))
                 if ground_y < size[1] + 8:
-                    tex = ground_texture(live.body_id)
+                    tex = ground_strip(live.body_id, size[0])
                     tex_x = int(-downrange * px_per_m) % size[0]
                     screen.blit(tex, (tex_x - size[0], ground_y))
                     screen.blit(tex, (tex_x, ground_y))
@@ -2410,7 +2380,9 @@ def run(argv: list[str] | None = None) -> int:
                     haze.set_alpha(int(140 * sky_a / 255))
                     screen.blit(haze, (0, ground_y - 70))
                 if ascent_av is None and -300 < pad_x < size[0] + 300:
-                    screen.blit(pad_sprite, (pad_x - 75, ground_y - 148))
+                    screen.blit(pad_complex(),
+                                (pad_x - PAD_W // 2,
+                                 ground_y - PAD_GROUND_Y - 12))
             if not (live.outcome == "lost" and ascent_boomed):
                 screen.blit(rspr, (rx, ry))
             if live.throttle_eff > 0.0 and live.outcome is None:
@@ -2547,15 +2519,15 @@ def run(argv: list[str] | None = None) -> int:
             screen.fill((6, 8, 14))
             nebula.draw(screen, None)
             site_d = SITES[descent.site_id]
-            gcol = _GROUND_COLORS.get(site_d["body"], (60, 62, 68))
             rho0 = atmo_density(site_d["body"], 0.0)
+            a_sky = 0
             if rho0 > 0.0:
-                hz = pygame.Surface((size[0], size[1]), pygame.SRCALPHA)
-                a_sky = int(120.0 * min(
+                a_sky = int(190.0 * min(
                     1.0, atmo_density(site_d["body"],
                                       max(descent.h, 0.0)) / rho0) ** 0.4)
-                hz.fill((gcol[0] + 60, gcol[1] + 50, gcol[2] + 40, a_sky))
-                screen.blit(hz, (0, 0))
+                dsky = sky_surface(size, site_d["body"])
+                dsky.set_alpha(a_sky)
+                screen.blit(dsky, (0, 0))
             else:
                 starfield.draw(screen, cam)
 
@@ -2579,26 +2551,31 @@ def run(argv: list[str] | None = None) -> int:
             ground_y = (dry + dspr.get_height()
                         + int(max(descent.h, 0.0) * ppm_d))
             if ground_y < size[1] + 800:
-                pygame.draw.rect(screen, gcol,
+                off = int(descent.downrange * ppm_d)
+                # parallax ridge silhouettes on the horizon
+                for ridge_spr, rfac in ridge_layers(site_d["body"], size[0]):
+                    rxo = -int((descent.downrange * ppm_d * rfac) % RIDGE_PAD)
+                    screen.blit(ridge_spr,
+                                (rxo, ground_y - ridge_spr.get_height()))
+                pygame.draw.rect(screen, ground_palette(site_d["body"]).dark,
                                  (0, min(ground_y, size[1]), size[0],
                                   max(0, size[1] - ground_y) + 4))
-                # seeded ridge line scrolls with downrange drift
-                seed_d = sum(ord(c) for c in descent.site_id)
-                off = int(descent.downrange * ppm_d)
-                if ground_y < size[1] + 40:
-                    pts = []
-                    for sx in range(0, size[0] + 16, 16):
-                        k = (sx + off) // 16
-                        hgt = ((seed_d * 73 + k * 137) % 23) - 11
-                        pts.append((sx, ground_y - 4 + hgt // 2))
-                    pygame.draw.lines(screen, tuple(
-                        min(255, c + 24) for c in gcol), False, pts, 2)
+                if ground_y < size[1] + 8:
+                    tex = ground_strip(site_d["body"], size[0])
+                    tex_x = (-off) % size[0]
+                    screen.blit(tex, (tex_x - size[0], ground_y))
+                    screen.blit(tex, (tex_x, ground_y))
+                if rho0 > 0.0 and a_sky > 8 and ground_y < size[1] + 70:
+                    haze.set_alpha(int(110 * a_sky / 190))
+                    screen.blit(haze, (0, ground_y - 70))
                 # LZ beacon where the descent began (downrange zero)
                 lz_x = size[0] // 2 - off
                 if -200 < lz_x < size[0] + 200 and ground_y < size[1] + 30:
                     pygame.draw.line(screen, theme.COLORS["gold"],
-                                     (lz_x, ground_y - 18),
+                                     (lz_x, ground_y - 22),
                                      (lz_x, ground_y - 2), 2)
+                    pygame.draw.circle(screen, (255, 230, 160),
+                                       (lz_x, ground_y - 24), 3)
             if not (descent.outcome == "crash" and ascent_boomed):
                 screen.blit(dspr, (drx, dry))
             if descent.throttle_eff > 0.0 and descent.outcome is None:
