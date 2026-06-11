@@ -9,11 +9,14 @@ frame exactly as the planner predicted (same math, by construction).
 Controls
   . / ,        warp up / down            space   pause
   TAB / S-TAB  focus next / prev body    C       focus your craft
-  X / Z        +10 / -10 m/s prograde    A / D   +10 / -10 m/s radial
-  (hold shift for 100 m/s steps)         wheel   zoom
-  ESC          quit
+  click body   focus it                  wheel   zoom
+  X / Z        +-10 m/s prograde         A / D   +-10 m/s radial
+  (hold shift for 100 m/s steps)
+  B  builder   N  maneuver node          R  research   G  found base
+  F1 tutorial  F2 base screen            F5 / F9  quicksave / load
+  F11 fullscreen   M mute                ESC  pause menu
 
-Dev flags: --frames N  --screenshot PATH  --headless
+Dev flags: --frames N  --screenshot PATH  --headless  --scene S
 """
 
 from __future__ import annotations
@@ -55,6 +58,13 @@ _LEG_COLORS = [(120, 255, 170), (255, 200, 60), (255, 120, 200),
                (140, 200, 255), (255, 160, 90), (200, 140, 255)]
 _WARP_LADDER = (1.0,) + RAILS_RATES
 _PREDICT_HORIZON = 60.0 * SECONDS_PER_DAY
+_PAUSE_ITEMS = ("RESUME", "QUICKSAVE", "LOAD QUICKSAVE",
+                "EXIT TO MAIN MENU", "QUIT TO DESKTOP")
+
+
+def _tech_order(db) -> list[str]:
+    return sorted(db.tech, key=lambda i: (db.tech[i].get("cost_sci", 0.0)
+                                          + db.tech[i].get("cost_ed", 0.0)))
 
 
 class Craft:
@@ -152,6 +162,17 @@ class BaseSite:
                               power_kw=-120.0))
         self.net = net
 
+    @classmethod
+    def from_restore(cls, name: str, last_t: float,
+                     pending_repairs: list, net) -> "BaseSite":
+        site = cls.__new__(cls)
+        site.name = name
+        site.last_t = last_t
+        site.events = []
+        site.pending_repairs = list(pending_repairs)
+        site.net = net
+        return site
+
     def advance(self, t: float) -> list:
         from aphelion.sim.ledger.network import LedgerEvent
         new_events = []
@@ -241,6 +262,9 @@ def run(argv: list[str] | None = None) -> int:
     parser.add_argument("--frames", type=int, default=0)
     parser.add_argument("--screenshot", type=str, default="")
     parser.add_argument("--headless", action="store_true")
+    parser.add_argument("--scene", type=str, default="auto",
+                        choices=["auto", "menu", "flight", "builder", "base",
+                                 "research"])
     args = parser.parse_args(argv)
     if args.headless:
         os.environ["SDL_VIDEODRIVER"] = "dummy"
@@ -252,79 +276,219 @@ def run(argv: list[str] | None = None) -> int:
     from aphelion.ui.effects import Particles, Starfield
     from aphelion.ui.tutorial import first_flight_tutorial
 
+    from aphelion.core.rng import RngRegistry
+    from aphelion.save.campaign import (
+        default_save_dir, read_campaign, snapshot_campaign, write_campaign)
+    from aphelion.sim.habitat.dose import AMBIENT_MSV_DAY, CrewDose
+
     db, tree = load_solar_system()
     planets = sorted((i for i, b in db.bodies.items() if b["parent"] == "core:sun"),
                      key=lambda i: db.bodies[i]["elements"]["a_m"])
     moons_of = {i: tree.children(i) for i in planets}
 
-    mu_e = tree.body("core:earth").mu
-    r_leo = 6.678e6
-    craft = Craft(tree, "core:earth",
-                  state_to_elements(r_leo, 0.0, 0.0,
-                                    tr.circular_speed(mu_e, r_leo), 0.0, mu_e))
-
     pygame.init()
     size = (1280, 720)
+    fullscreen = False
     screen = pygame.display.set_mode(size, pygame.SCALED | pygame.DOUBLEBUF,
                                      vsync=0 if args.headless else 1)
     pygame.display.set_caption("APHELION")
     pygame_clock = pygame.time.Clock()
     font = pygame.font.SysFont("consolas", 14)
+    font_med = pygame.font.SysFont("consolas", 18, bold=True)
+    font_big = pygame.font.SysFont("consolas", 44, bold=True)
 
-    clock = SimClock(t0=0.0)
-    warp_idx = 0
-    paused = False
     cam = Camera(*size, frame_id="core:earth", zoom=3.0e-5, layer=ZoomLayer.LOCAL)
-    focus_order = ["craft", "core:sun"] + planets
+    focus_order = (["craft", "core:sun"] + planets
+                   + [m for p in planets for m in moons_of[p]])
+    focus_of_body = {bid: i for i, bid in enumerate(focus_order)}
     focus_idx = 0
-    toast = ""
-    toast_until = 0.0
-
-    # -- campaign layer (12/11): funds, contracts, exploration science --
-    program = Program(funds=150_000_000.0)
-    program.offer(Contract("c_moon", "Reach the Moon's SOI",
-                           payout=80_000_000.0, deadline_s=120 * 86_400.0))
-    program.offer(Contract("c_helio", "Achieve heliocentric orbit",
-                           payout=120_000_000.0, deadline_s=365 * 86_400.0))
-    program.offer(Contract("c_base", "Found a lunar surface base (G in Moon SOI)",
-                           payout=150_000_000.0, deadline_s=2 * 365 * 86_400.0))
-    program.offer(Contract("c_lox", "Bank 100 t of lunar LOX",
-                           payout=200_000_000.0, deadline_s=4 * 365 * 86_400.0))
-    program.offer(Contract("c_mars", "Reach the Mars SOI",
-                           payout=300_000_000.0, deadline_s=6 * 365 * 86_400.0))
-    program.offer(Contract("c_venus", "Reach the Venus SOI",
-                           payout=250_000_000.0, deadline_s=6 * 365 * 86_400.0))
-    from aphelion.core.rng import RngRegistry
-    campaign_rng = RngRegistry(20490101)
-    bases: list[BaseSite] = []
-    base_screen = False
-
-    # crew (08): two named crew aboard; dose accrues from the REAL location
-    from aphelion.sim.habitat.dose import AMBIENT_MSV_DAY, CrewDose
-    crew = {"V. Ainsworth": CrewDose(), "J. Okafor": CrewDose()}
-    crew_warned = False
-    last_dose_t = 0.0
-    research = ResearchState()
-    visited = {"core:earth"}
 
     starfield = Starfield(size)
     particles = Particles()
     audio = AudioCues()
-    tutorial = first_flight_tutorial()
-    builder = Builder(db, research)
-    builder_open = False
+    qs_path = default_save_dir() / "quicksave.aph"
 
-    # maneuver node (01 §3.7): plan -> preview -> arm -> auto-execute
-    node = None           # dict(t_node, dvp, dvr, armed)
+    def fresh_campaign() -> dict:
+        """A brand-new 2049 campaign (12 §3: the Act 1 opening state)."""
+        mu_e = tree.body("core:earth").mu
+        r_leo = 6.678e6
+        craft = Craft(tree, "core:earth",
+                      state_to_elements(r_leo, 0.0, 0.0,
+                                        tr.circular_speed(mu_e, r_leo),
+                                        0.0, mu_e))
+        program = Program(funds=150_000_000.0)
+        program.offer(Contract("c_moon", "Reach the Moon's SOI",
+                               payout=80_000_000.0, deadline_s=120 * 86_400.0))
+        program.offer(Contract("c_helio", "Achieve heliocentric orbit",
+                               payout=120_000_000.0, deadline_s=365 * 86_400.0))
+        program.offer(Contract("c_base", "Found a lunar surface base (G in Moon SOI)",
+                               payout=150_000_000.0, deadline_s=2 * 365 * 86_400.0))
+        program.offer(Contract("c_lox", "Bank 100 t of lunar LOX",
+                               payout=200_000_000.0, deadline_s=4 * 365 * 86_400.0))
+        program.offer(Contract("c_mars", "Reach the Mars SOI",
+                               payout=300_000_000.0, deadline_s=6 * 365 * 86_400.0))
+        program.offer(Contract("c_venus", "Reach the Venus SOI",
+                               payout=250_000_000.0, deadline_s=6 * 365 * 86_400.0))
+        return dict(clock=SimClock(t0=0.0), craft=craft, program=program,
+                    rng=RngRegistry(20490101), bases=[],
+                    crew={"V. Ainsworth": CrewDose(), "J. Okafor": CrewDose()},
+                    research=ResearchState(), visited={"core:earth"},
+                    tutorial=first_flight_tutorial())
+
+    def loaded_campaign() -> dict:
+        got = read_campaign(qs_path)
+        craft = Craft(tree, got["craft_frame"], got["craft_elements"],
+                      dv_budget=got["craft_dv"], name=got["craft_name"])
+        tut = first_flight_tutorial()
+        tut.completed = got["tutorial_done"]
+        rng = (RngRegistry.from_state(got["rng_state"]) if got["rng_state"]
+               else RngRegistry(20490101))
+        for b in got["bases"]:
+            b["net"].rng = rng      # resume the SAME failure streams
+        return dict(clock=SimClock(t0=got["t"]), craft=craft,
+                    program=got["program"], rng=rng,
+                    bases=[BaseSite.from_restore(b["name"], b["last_t"],
+                                                 b["pending_repairs"], b["net"])
+                           for b in got["bases"]],
+                    crew=got["crew"], research=got["research"],
+                    visited=got["visited"], tutorial=tut)
+
+    def campaign_tuple(st: dict):
+        """One unpack shape for new game, quickload, and startup."""
+        return (st["clock"], st["craft"], st["program"], st["rng"],
+                st["bases"], st["crew"], st["research"], st["visited"],
+                st["tutorial"], Builder(db, st["research"]),
+                None, 0, False, False, False, False, False, 0.0, "", 0.0)
+
+    (clock, craft, program, campaign_rng, bases, crew, research, visited,
+     tutorial, builder, node, warp_idx, paused, base_screen, builder_open,
+     research_open, crew_warned, last_dose_t, toast, toast_until) = \
+        campaign_tuple(fresh_campaign())
+
+    def do_quicksave() -> str:
+        snap = snapshot_campaign(
+            t=clock.t, craft_frame=craft.frame_id,
+            craft_elements=craft.elements, craft_dv=craft.dv_remaining,
+            craft_name=craft.name, program=program, research=research,
+            crew=crew, visited=visited, bases=bases,
+            tutorial_done=tutorial.completed, rng=campaign_rng)
+        write_campaign(qs_path, snap)
+        return "QUICKSAVED"
+
+    want = args.scene
+    if want == "auto":
+        want = "flight" if (args.frames or args.headless) else "menu"
+    scene = "menu" if want == "menu" else "flight"
+    if want == "builder":
+        builder_open = True
+    elif want == "research":
+        research_open = True
+    elif want == "base":
+        bases.append(BaseSite("Peary Base", 0.0, campaign_rng))
+        base_screen = True
+
+    menu_cursor = 0
+    menu_rects: list = []
+    pause_open = False
+    pause_cursor = 0
+    research_cursor = 0
+    body_click_pts: list = []
 
     frame_count = 0
     running = True
     while running:
         real_dt = pygame_clock.tick(60) / 1000.0
         t = clock.t
+        start_new = False
+        load_save = False
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_F11:
+                fullscreen = not fullscreen
+                flags = pygame.SCALED | pygame.DOUBLEBUF | (
+                    pygame.FULLSCREEN if fullscreen else 0)
+                screen = pygame.display.set_mode(size, flags,
+                                                 vsync=0 if args.headless else 1)
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_m:
+                audio.muted = not audio.muted
+                toast = "audio muted" if audio.muted else "audio on"
+                toast_until = t + 3.0
+            elif scene == "menu":
+                items = (["NEW CAMPAIGN"]
+                         + (["CONTINUE"] if qs_path.exists() else [])
+                         + ["QUIT"])
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_UP:
+                        menu_cursor = (menu_cursor - 1) % len(items)
+                    elif event.key == pygame.K_DOWN:
+                        menu_cursor = (menu_cursor + 1) % len(items)
+                    elif event.key == pygame.K_RETURN:
+                        choice = items[menu_cursor % len(items)]
+                        audio.play("blip")
+                        if choice == "NEW CAMPAIGN":
+                            start_new = True
+                        elif choice == "CONTINUE":
+                            load_save = True
+                        else:
+                            running = False
+                    elif event.key == pygame.K_ESCAPE:
+                        running = False
+                elif event.type == pygame.MOUSEMOTION:
+                    for i, rect in enumerate(menu_rects):
+                        if rect.collidepoint(event.pos):
+                            menu_cursor = i
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    for i, rect in enumerate(menu_rects):
+                        if rect.collidepoint(event.pos) and i < len(items):
+                            choice = items[i]
+                            audio.play("blip")
+                            if choice == "NEW CAMPAIGN":
+                                start_new = True
+                            elif choice == "CONTINUE":
+                                load_save = True
+                            else:
+                                running = False
+            elif event.type == pygame.KEYDOWN and pause_open:
+                if event.key == pygame.K_ESCAPE:
+                    pause_open = False
+                elif event.key == pygame.K_UP:
+                    pause_cursor = (pause_cursor - 1) % len(_PAUSE_ITEMS)
+                elif event.key == pygame.K_DOWN:
+                    pause_cursor = (pause_cursor + 1) % len(_PAUSE_ITEMS)
+                elif event.key == pygame.K_RETURN:
+                    choice = _PAUSE_ITEMS[pause_cursor]
+                    if choice == "RESUME":
+                        pause_open = False
+                    elif choice == "QUICKSAVE":
+                        toast, toast_until = do_quicksave(), t + 5.0
+                        audio.play("blip")
+                    elif choice == "LOAD QUICKSAVE":
+                        load_save = True
+                    elif choice == "EXIT TO MAIN MENU":
+                        pause_open = False
+                        scene = "menu"
+                        menu_cursor = 0
+                    else:
+                        running = False
+            elif event.type == pygame.KEYDOWN and research_open:
+                tech_ids = _tech_order(db)
+                if event.key in (pygame.K_ESCAPE, pygame.K_r):
+                    research_open = False
+                elif event.key == pygame.K_UP:
+                    research_cursor = (research_cursor - 1) % len(tech_ids)
+                elif event.key == pygame.K_DOWN:
+                    research_cursor = (research_cursor + 1) % len(tech_ids)
+                elif event.key == pygame.K_RETURN:
+                    nid = tech_ids[research_cursor % len(tech_ids)]
+                    if research.unlock(db, nid, t):
+                        toast = f"RESEARCHED: {db.tech[nid]['name']}"
+                        toast_until = t + 8.0
+                        audio.play("paid")
+                    else:
+                        toast = "cannot unlock (prereqs or insufficient sci/ed)"
+                        toast_until = t + 5.0
+                        audio.play("alarm")
             elif event.type == pygame.KEYDOWN and builder_open:
                 if event.key in (pygame.K_b, pygame.K_ESCAPE):
                     builder_open = False
@@ -377,7 +541,15 @@ def run(argv: list[str] | None = None) -> int:
                 shift = event.mod & pygame.KMOD_SHIFT
                 step = 100.0 if shift else 10.0
                 if event.key == pygame.K_ESCAPE:
-                    running = False
+                    pause_open = True
+                    pause_cursor = 0
+                elif event.key == pygame.K_r:
+                    research_open = True
+                elif event.key == pygame.K_F5:
+                    toast, toast_until = do_quicksave(), t + 5.0
+                    audio.play("blip")
+                elif event.key == pygame.K_F9:
+                    load_save = True
                 elif event.key == pygame.K_b:
                     builder_open = True
                 elif event.key == pygame.K_n:
@@ -470,18 +642,81 @@ def run(argv: list[str] | None = None) -> int:
                     sgn = -1.0 if event.key == pygame.K_x else 1.0
                     particles.emit_burn(px0[0], px0[1],
                                         sgn * cvx0 / v0n, -sgn * cvy0 / v0n)
+            elif (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
+                  and not (pause_open or builder_open or research_open)):
+                mx, my = event.pos
+                best = None
+                best_d = 18.0 ** 2
+                for px, py, fi in body_click_pts:
+                    d = (px - mx) ** 2 + (py - my) ** 2
+                    if d < best_d:
+                        best, best_d = fi, d
+                if best is not None:
+                    focus_idx = best
+                    audio.play("blip")
             elif event.type == pygame.MOUSEWHEEL:
                 if event.y > 0:
                     cam.zoom_in(event.y)
                 elif event.y < 0:
                     cam.zoom_out(-event.y)
 
+        # scene transitions decided during event handling
+        if start_new:
+            (clock, craft, program, campaign_rng, bases, crew, research,
+             visited, tutorial, builder, node, warp_idx, paused, base_screen,
+             builder_open, research_open, crew_warned, last_dose_t, toast,
+             toast_until) = campaign_tuple(fresh_campaign())
+            scene, pause_open, focus_idx = "flight", False, 0
+        if load_save:
+            if qs_path.exists():
+                (clock, craft, program, campaign_rng, bases, crew, research,
+                 visited, tutorial, builder, node, warp_idx, paused,
+                 base_screen, builder_open, research_open, crew_warned,
+                 last_dose_t, toast, toast_until) = \
+                    campaign_tuple(loaded_campaign())
+                scene, pause_open, focus_idx = "flight", False, 0
+                toast, toast_until = "QUICKSAVE LOADED", clock.t + 5.0
+            else:
+                toast, toast_until = "no quicksave found", t + 4.0
+
+        if scene == "menu":
+            screen.fill((6, 8, 14))
+            starfield.draw(screen, cam)
+            title = font_big.render("A P H E L I O N", True, (140, 235, 255))
+            screen.blit(title, (size[0] // 2 - title.get_width() // 2, 150))
+            sub = font.render(
+                "a hard-realism solar-system program  ·  2049", True,
+                (110, 122, 140))
+            screen.blit(sub, (size[0] // 2 - sub.get_width() // 2, 205))
+            items = (["NEW CAMPAIGN"]
+                     + (["CONTINUE"] if qs_path.exists() else [])
+                     + ["QUIT"])
+            menu_rects = []
+            for i, label in enumerate(items):
+                sel = i == menu_cursor % len(items)
+                color = (255, 215, 130) if sel else (200, 210, 224)
+                txt = font_med.render(("> " if sel else "  ") + label, True,
+                                      color)
+                pos = (size[0] // 2 - 110, 300 + i * 36)
+                screen.blit(txt, pos)
+                menu_rects.append(pygame.Rect(pos[0], pos[1] - 4, 280, 30))
+            foot = font.render(
+                "arrows + ENTER or click  ·  F11 fullscreen  ·  M mute  ·  "
+                "ESC quit", True, (110, 122, 140))
+            screen.blit(foot, (size[0] // 2 - foot.get_width() // 2,
+                               size[1] - 60))
+            pygame.display.flip()
+            frame_count += 1
+            if args.frames and frame_count >= args.frames:
+                running = False
+            continue
+
         # armed-node warp guard (01 §3.6): step down so the burn lands on time
         if node is not None and node["armed"]:
             while (warp_idx > 0
                    and node["t_node"] - t < _WARP_LADDER[warp_idx] * 5.0):
                 warp_idx -= 1
-        if not paused:
+        if not paused and not pause_open:
             clock.advance_analytic(clock.t + _WARP_LADDER[warp_idx] * real_dt)
         t = clock.t
         # node execution at its instant (the plan IS the burn at rails fidelity)
@@ -502,6 +737,7 @@ def run(argv: list[str] | None = None) -> int:
             visited.add(craft.frame_id)
             sci = _FIRST_ENTRY_SCIENCE.get(craft.frame_id, 200.0)
             research.earn_science(sci)
+            research.earn_eng_data(sci * 0.25)
             toast = f"FIRST ENTRY: {craft.frame_id.split(':')[1]} +{sci:.0f} science"
             toast_until = t + 10
             audio.play("soi")
@@ -520,6 +756,9 @@ def run(argv: list[str] | None = None) -> int:
             loc = craft.frame_id if craft.frame_id in AMBIENT_MSV_DAY else "deep_space"
             for member in crew.values():
                 member.accrue(loc, days, areal_g_cm2=20.0, material="water")
+            # operating bases generate engineering data (11: ops currency)
+            if bases:
+                research.earn_eng_data(2.0 * days * len(bases))
             last_dose_t = t
             worst = max(crew.values(), key=lambda c: c.career_fraction)
             if worst.career_fraction > 0.8 and not crew_warned:
@@ -581,6 +820,7 @@ def run(argv: list[str] | None = None) -> int:
 
         screen.fill((6, 8, 14))
         starfield.draw(screen, cam)
+        body_click_pts = []
 
         for pid in planets:
             draw_conic(screen, tree.body(pid).elements, cam, _ORBIT_COLOR)
@@ -594,6 +834,7 @@ def run(argv: list[str] | None = None) -> int:
                 pygame.draw.circle(screen, _BODY_COLORS.get(pid, _DEFAULT_COLOR), ppx, 3)
                 screen.blit(font.render(pid.split(":")[1], True, (150, 160, 180)),
                             (ppx[0] + 6, ppx[1] - 6))
+                body_click_pts.append((ppx[0], ppx[1], focus_of_body[pid]))
             for mid in moons_of.get(pid, []):
                 mel = tree.body(mid).elements
                 draw_conic(screen, mel, cam, _MOON_ORBIT_COLOR, origin=(prx, pry))
@@ -604,6 +845,7 @@ def run(argv: list[str] | None = None) -> int:
                     pygame.draw.circle(screen, _BODY_COLORS.get(mid, _DEFAULT_COLOR), mpx, 2)
                     screen.blit(font.render(mid.split(":")[1], True, (120, 130, 150)),
                                 (mpx[0] + 5, mpx[1] - 5))
+                    body_click_pts.append((mpx[0], mpx[1], focus_of_body[mid]))
 
         # node preview: post-burn legs in magenta + node marker
         if node is not None:
@@ -645,6 +887,7 @@ def run(argv: list[str] | None = None) -> int:
         crx, cry, cvx, cvy = craft.state(t)
         cpx = cam.world_to_screen(frx + crx, fry + cry)
         pygame.draw.circle(screen, _CRAFT_COLOR, cpx, 3)
+        body_click_pts.append((cpx[0], cpx[1], 0))
 
         el = craft.elements
         body = tree.body(craft.frame_id)
@@ -663,7 +906,8 @@ def run(argv: list[str] | None = None) -> int:
         open_contracts = [c for c in program.contracts
                           if c.completed_t is None and not c.failed]
         worst_dose = max(crew.values(), key=lambda c: c.career_fraction)
-        hud3 = (f"PROGRAM  ${program.funds/1e6:,.0f}M   science {research.science:,.0f}"
+        hud3 = (f"PROGRAM  ${program.funds/1e6:,.0f}M   sci {research.science:,.0f}"
+                f"  ed {research.eng_data:,.0f}"
                 f"   crew dose {worst_dose.career_fraction:.0%}   contracts: "
                 + (" | ".join(c.description[:28] for c in open_contracts[:3])
                    or "none"))
@@ -671,7 +915,8 @@ def run(argv: list[str] | None = None) -> int:
         if t < toast_until and toast:
             screen.blit(font.render(toast, True, (255, 230, 140)), (10, 68))
         screen.blit(font.render(
-            "X/Z prograde±  A/D radial±  (shift=100)  B builder  C craft  TAB focus  ./, warp  F1 tutorial",
+            "X/Z A/D burn  B build  N node  R research  G base  F2 base view  "
+            "F5/F9 save/load  TAB/click focus  ./, warp  ESC menu",
             True, (110, 120, 135)), (10, size[1] - 24))
 
         particles.update_draw(screen, real_dt)
@@ -760,6 +1005,57 @@ def run(argv: list[str] | None = None) -> int:
                     True, (255, 230, 140)), (vx0, yy + 6))
             screen.blit(font.render(builder.message, True, (140, 235, 255)),
                         (20, size[1] - 48))
+
+        if research_open:
+            tech_ids = _tech_order(db)
+            panel = pygame.Surface((660, 90 + 24 * len(tech_ids)),
+                                   pygame.SRCALPHA)
+            panel.fill((8, 12, 22, 235))
+            px0, py0 = size[0] // 2 - 330, 110
+            screen.blit(panel, (px0, py0))
+            screen.blit(font_med.render(
+                "RESEARCH — ENTER unlock, R close", True, (255, 215, 130)),
+                (px0 + 16, py0 + 10))
+            screen.blit(font.render(
+                f"science {research.science:,.0f}   eng data "
+                f"{research.eng_data:,.0f}", True, (140, 235, 255)),
+                (px0 + 16, py0 + 34))
+            yy = py0 + 58
+            for i, nid in enumerate(tech_ids):
+                nd = db.tech[nid]
+                unlocked = nid in research.unlocked
+                can = research.can_unlock(db, nid)
+                sel = i == research_cursor % len(tech_ids)
+                color = ((120, 255, 170) if unlocked
+                         else (255, 215, 130) if can else (110, 122, 140))
+                state = ("UNLOCKED" if unlocked else
+                         f"{nd.get('cost_sci', 0):,.0f} sci / "
+                         f"{nd.get('cost_ed', 0):,.0f} ed")
+                screen.blit(font.render(
+                    f"{'>' if sel else ' '} {nd['tier']:3s} "
+                    f"{nd['name'][:36]:37s} {state}", True, color),
+                    (px0 + 16, yy))
+                yy += 24
+            sel_nid = tech_ids[research_cursor % len(tech_ids)]
+            unl = ", ".join(p.split(":")[1]
+                            for p in db.tech[sel_nid].get("unlocks", [])) or "—"
+            pre = ", ".join(p.split(":")[1]
+                            for p in db.tech[sel_nid]["prereqs"]) or "none"
+            screen.blit(font.render(f"unlocks: {unl}   prereqs: {pre}",
+                                    True, (200, 210, 224)), (px0 + 16, yy + 4))
+
+        if pause_open:
+            dim = pygame.Surface(size, pygame.SRCALPHA)
+            dim.fill((4, 6, 10, 170))
+            screen.blit(dim, (0, 0))
+            ttl = font_big.render("PAUSED", True, (140, 235, 255))
+            screen.blit(ttl, (size[0] // 2 - ttl.get_width() // 2, 180))
+            for i, label in enumerate(_PAUSE_ITEMS):
+                sel = i == pause_cursor
+                color = (255, 215, 130) if sel else (200, 210, 224)
+                txt = font_med.render(("> " if sel else "  ") + label, True,
+                                      color)
+                screen.blit(txt, (size[0] // 2 - 130, 280 + i * 34))
 
         pygame.display.flip()
         frame_count += 1

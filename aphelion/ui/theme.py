@@ -1,0 +1,487 @@
+"""UI theme (12 §5): the whole HUD/screen visual language — KSP map-view /
+Factorio panel chrome / ONI clarity. Panels, gauges, chips, icon glyphs,
+crew portraits and toasts are 100% procedural (pygame.draw + numpy),
+headless-safe (plain SRCALPHA surfaces, no display), deterministic
+(blake2b-seeded), and aggressively cached at module level.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import math
+
+import numpy as np
+import pygame
+
+# -- palette (90-14 art direction; binding constants) ------------------------
+SPACE_BG = (6, 8, 14)
+PANEL_FILL = (10, 16, 28, 220)
+PANEL_EDGE = (42, 58, 85)
+ACCENT = (140, 235, 255)
+GOOD = (120, 255, 170)
+WARN = (255, 200, 90)
+DANGER = (255, 110, 110)
+GOLD = (255, 215, 130)
+TEXT = (200, 210, 224)
+TEXT_DIM = (110, 122, 140)
+
+COLORS: dict[str, tuple] = {
+    "space_bg": SPACE_BG,
+    "panel_fill": PANEL_FILL,
+    "panel_edge": PANEL_EDGE,
+    "accent": ACCENT,
+    "good": GOOD,
+    "warn": WARN,
+    "danger": DANGER,
+    "gold": GOLD,
+    "text": TEXT,
+    "text_dim": TEXT_DIM,
+}
+
+_FONTS: dict[str, pygame.font.Font] = {}
+_PANEL_CACHE: dict[tuple, pygame.Surface] = {}
+_BAR_CACHE: dict[tuple, pygame.Surface] = {}
+_CHIP_CACHE: dict[tuple, pygame.Surface] = {}
+_ICON_CACHE: dict[tuple, pygame.Surface] = {}
+_PORTRAIT_CACHE: dict[tuple, pygame.Surface] = {}
+_TOAST_CACHE: dict[tuple, pygame.Surface] = {}
+_TEXT_CACHE: dict[tuple, tuple[pygame.Surface, pygame.Surface | None]] = {}
+
+
+def _mix(a: tuple, b: tuple, t: float) -> tuple[int, int, int]:
+    """Linear blend of two RGB(A) colors' RGB channels."""
+    return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
+
+
+def _seed(s: str) -> int:
+    """Stable 64-bit seed from an id string (13 §3: no wall-clock RNG)."""
+    return int.from_bytes(hashlib.blake2b(s.encode(), digest_size=8).digest(), "little")
+
+
+def init_fonts() -> dict[str, pygame.font.Font]:
+    """Lazy, cached monospace font set; safe to call every frame."""
+    if not _FONTS:
+        pygame.font.init()
+        _FONTS["small"] = pygame.font.SysFont("consolas", 13)
+        _FONTS["body"] = pygame.font.SysFont("consolas", 14)
+        _FONTS["title"] = pygame.font.SysFont("consolas", 17, bold=True)
+        _FONTS["big"] = pygame.font.SysFont("consolas", 22, bold=True)
+    return _FONTS
+
+
+# -- panel chrome -------------------------------------------------------------
+
+def panel(w: int, h: int, title: str | None = None) -> pygame.Surface:
+    """Sci-fi panel plate: translucent rounded body, bright top strip,
+    clipped corner notches, optional gold small-caps header band."""
+    key = (w, h, title)
+    cached = _PANEL_CACHE.get(key)
+    if cached is not None:
+        return cached
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    body = pygame.Rect(0, 0, w, h)
+    notch = max(6, min(12, w // 6, h // 6))
+    pygame.draw.rect(surf, PANEL_FILL, body, border_radius=6)
+    if title is not None:
+        band_h = 24
+        pygame.draw.rect(surf, (20, 30, 48, 235), pygame.Rect(1, 1, w - 2, band_h),
+                         border_top_left_radius=6, border_top_right_radius=6)
+        pygame.draw.line(surf, PANEL_EDGE, (1, band_h), (w - 2, band_h))
+        img = init_fonts()["small"].render(title.upper(), True, GOLD)
+        surf.blit(img, (notch + 4, 1 + (band_h - img.get_height()) // 2))
+    # brighter 2px top edge strip, inset past the notch and corner radius
+    pygame.draw.rect(surf, _mix(PANEL_EDGE, ACCENT, 0.35),
+                     pygame.Rect(notch + 1, 0, w - notch - 8, 2))
+    pygame.draw.rect(surf, PANEL_EDGE, body, width=1, border_radius=6)
+    # clipped corner notches (TL / BR); pygame.draw writes alpha directly
+    pygame.draw.polygon(surf, (0, 0, 0, 0), [(0, 0), (notch, 0), (0, notch)])
+    pygame.draw.polygon(surf, (0, 0, 0, 0),
+                        [(w, h), (w - notch - 1, h), (w, h - notch - 1)])
+    pygame.draw.line(surf, PANEL_EDGE, (notch, 0), (0, notch))
+    pygame.draw.line(surf, PANEL_EDGE, (w - 1 - notch, h - 1), (w - 1, h - 1 - notch))
+    _PANEL_CACHE[key] = surf
+    return surf
+
+
+def bar(w: int, h: int, frac: float, color: tuple,
+        back: tuple = (40, 50, 70)) -> pygame.Surface:
+    """Bevelled gauge: gradient fill with a bright cap line, hatched empty
+    part. ``frac`` is clamped to [0, 1] and quantized for the cache."""
+    f = min(1.0, max(0.0, float(frac)))
+    key = (w, h, round(f, 3), tuple(color[:3]), tuple(back[:3]))
+    cached = _BAR_CACHE.get(key)
+    if cached is not None:
+        return cached
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    pygame.draw.rect(surf, back[:3], pygame.Rect(1, 1, w - 2, h - 2))
+    # inset bevel: dark top, light bottom
+    pygame.draw.line(surf, _mix(back, (0, 0, 0), 0.35), (1, 1), (w - 2, 1))
+    pygame.draw.line(surf, _mix(back, (255, 255, 255), 0.18), (1, h - 2), (w - 2, h - 2))
+    fill_w = round((w - 2) * f)
+    if fill_w > 0:
+        for yy in range(1, h - 1):
+            t = (yy - 1) / max(1, h - 3)
+            shade = _mix(_mix(color, (255, 255, 255), 0.35 * (1.0 - t)),
+                         (0, 0, 0), 0.25 * t)
+            pygame.draw.line(surf, shade, (1, yy), (fill_w, yy))
+        pygame.draw.line(surf, _mix(color, (255, 255, 255), 0.75),
+                         (fill_w, 1), (fill_w, h - 2))
+    if fill_w < w - 2:                                  # diagonal hatch, empty part
+        surf.set_clip(pygame.Rect(1 + fill_w, 1, w - 2 - fill_w, h - 2))
+        hatch = _mix(back, (255, 255, 255), 0.12)
+        for x0 in range(1 + fill_w - h, w, 5):
+            pygame.draw.line(surf, hatch, (x0, h), (x0 + h, 0))
+        surf.set_clip(None)
+    pygame.draw.rect(surf, _mix(back, (0, 0, 0), 0.5), pygame.Rect(0, 0, w, h), width=1)
+    _BAR_CACHE[key] = surf
+    return surf
+
+
+def chip(text: str, color: tuple, font: pygame.font.Font | None = None) -> pygame.Surface:
+    """Pill-shaped tag: translucent tint, 1px colored border, colored text."""
+    key = (text, tuple(color[:3]), None if font is None else id(font))
+    cached = _CHIP_CACHE.get(key)
+    if cached is not None:
+        return cached
+    f = font if font is not None else init_fonts()["small"]
+    img = f.render(text, True, color[:3])
+    w, h = img.get_width() + 12, img.get_height() + 4
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    r = h // 2
+    pygame.draw.rect(surf, (*color[:3], 46), pygame.Rect(0, 0, w, h), border_radius=r)
+    pygame.draw.rect(surf, color[:3], pygame.Rect(0, 0, w, h), width=1, border_radius=r)
+    surf.blit(img, (6, 2))
+    _CHIP_CACHE[key] = surf
+    return surf
+
+
+# -- icon glyphs (drawn at 4x, smoothscaled down for crisp AA edges) ----------
+
+def _g_oxygen(s: pygame.Surface, n: int) -> None:
+    lw = max(2, n // 10)
+    pygame.draw.circle(s, ACCENT, (int(n * 0.42), int(n * 0.42)), int(n * 0.20), lw)
+    pygame.draw.circle(s, ACCENT, (int(n * 0.68), int(n * 0.66)), int(n * 0.12), max(2, lw - 2))
+
+
+def _g_water(s: pygame.Surface, n: int) -> None:
+    c = (110, 175, 255)
+    cx = n // 2
+    pygame.draw.circle(s, c, (cx, int(n * 0.62)), int(n * 0.28))
+    pygame.draw.polygon(s, c, [(cx, int(n * 0.08)),
+                               (cx - int(n * 0.26), int(n * 0.55)),
+                               (cx + int(n * 0.26), int(n * 0.55))])
+    pygame.draw.circle(s, _mix(c, (255, 255, 255), 0.6),
+                       (cx - int(n * 0.1), int(n * 0.58)), max(2, n // 16))
+
+
+def _g_hydrogen(s: pygame.Surface, n: int) -> None:
+    c = (215, 228, 255)
+    cy = n // 2
+    pygame.draw.circle(s, c, (int(n * 0.34), cy), int(n * 0.13))
+    pygame.draw.circle(s, c, (int(n * 0.66), cy), int(n * 0.13))
+
+
+def _g_power(s: pygame.Surface, n: int) -> None:
+    pygame.draw.polygon(s, WARN, [(int(n * 0.55), int(n * 0.06)),
+                                  (int(n * 0.22), int(n * 0.55)),
+                                  (int(n * 0.45), int(n * 0.55)),
+                                  (int(n * 0.38), int(n * 0.94)),
+                                  (int(n * 0.78), int(n * 0.40)),
+                                  (int(n * 0.52), int(n * 0.40))])
+
+
+def _g_funds(s: pygame.Surface, n: int) -> None:
+    lw = max(2, n // 10)
+    cx = cy = n // 2
+    pygame.draw.circle(s, GOLD, (cx, cy), int(n * 0.42), lw)
+    d = int(n * 0.15)
+    pygame.draw.arc(s, GOLD, pygame.Rect(cx - d, cy - 2 * d, 2 * d, 2 * d),
+                    math.pi * 0.2, math.pi * 1.2, lw)
+    pygame.draw.arc(s, GOLD, pygame.Rect(cx - d, cy, 2 * d, 2 * d),
+                    math.pi * 1.2, math.pi * 2.2, lw)
+    pygame.draw.line(s, GOLD, (cx, cy - int(2.4 * d)), (cx, cy + int(2.4 * d)), lw)
+
+
+def _g_science(s: pygame.Surface, n: int) -> None:
+    lw = max(2, n // 10)
+    cx = n // 2
+    nk = int(n * 0.07)
+    pygame.draw.polygon(s, (*ACCENT, 110), [(int(n * 0.30), int(n * 0.62)),
+                                            (int(n * 0.70), int(n * 0.62)),
+                                            (int(n * 0.78), int(n * 0.78)),
+                                            (int(n * 0.22), int(n * 0.78))])
+    pygame.draw.polygon(s, ACCENT, [(cx - nk, int(n * 0.10)), (cx - nk, int(n * 0.38)),
+                                    (int(n * 0.18), int(n * 0.82)),
+                                    (int(n * 0.82), int(n * 0.82)),
+                                    (cx + nk, int(n * 0.38)), (cx + nk, int(n * 0.10))], lw)
+
+
+def _g_radiation(s: pygame.Surface, n: int) -> None:
+    cx = cy = n // 2
+    r1, r2 = n * 0.13, n * 0.40
+    pygame.draw.circle(s, WARN, (cx, cy), int(n * 0.07))
+    for base in (90, 210, 330):
+        pts = []
+        for a in range(base - 30, base + 31, 6):
+            rad = math.radians(a)
+            pts.append((cx + r1 * math.cos(rad), cy - r1 * math.sin(rad)))
+        for a in range(base + 30, base - 31, -6):
+            rad = math.radians(a)
+            pts.append((cx + r2 * math.cos(rad), cy - r2 * math.sin(rad)))
+        pygame.draw.polygon(s, WARN, pts)
+
+
+def _g_crew(s: pygame.Surface, n: int) -> None:
+    c = (235, 238, 245)
+    cx = n // 2
+    pygame.draw.circle(s, c, (cx, int(n * 0.34)), int(n * 0.17))
+    pygame.draw.ellipse(s, c, pygame.Rect(cx - int(n * 0.30), int(n * 0.55),
+                                          int(n * 0.60), int(n * 0.55)))
+
+
+def _g_contract(s: pygame.Surface, n: int) -> None:
+    lw = max(2, n // 10)
+    cx = n // 2
+    cy = int(n * 0.38)
+    pygame.draw.polygon(s, GOLD, [(cx - int(n * 0.16), int(n * 0.55)),
+                                  (cx - int(n * 0.28), int(n * 0.92)),
+                                  (cx - int(n * 0.05), int(n * 0.78))])
+    pygame.draw.polygon(s, GOLD, [(cx + int(n * 0.16), int(n * 0.55)),
+                                  (cx + int(n * 0.28), int(n * 0.92)),
+                                  (cx + int(n * 0.05), int(n * 0.78))])
+    pygame.draw.circle(s, GOLD, (cx, cy), int(n * 0.26), lw)
+    pygame.draw.circle(s, GOLD, (cx, cy), int(n * 0.10))
+
+
+def _g_engine(s: pygame.Surface, n: int) -> None:
+    c = (190, 200, 215)
+    lw = max(2, n // 10)
+    cx = n // 2
+    pygame.draw.rect(s, c, pygame.Rect(cx - int(n * 0.14), int(n * 0.08),
+                                       int(n * 0.28), int(n * 0.12)))
+    pygame.draw.polygon(s, c, [(cx - int(n * 0.10), int(n * 0.20)),
+                               (cx + int(n * 0.10), int(n * 0.20)),
+                               (cx + int(n * 0.30), int(n * 0.85)),
+                               (cx - int(n * 0.30), int(n * 0.85))], lw)
+    pygame.draw.line(s, WARN, (cx - int(n * 0.20), int(n * 0.80)),
+                     (cx + int(n * 0.20), int(n * 0.80)), lw)
+
+
+def _g_tank(s: pygame.Surface, n: int) -> None:
+    c = (190, 200, 215)
+    lw = max(2, n // 10)
+    cx = n // 2
+    pygame.draw.rect(s, c, pygame.Rect(cx - int(n * 0.20), int(n * 0.08),
+                                       int(n * 0.40), int(n * 0.84)),
+                     lw, border_radius=int(n * 0.20))
+    pygame.draw.line(s, c, (cx - int(n * 0.18), n // 2), (cx + int(n * 0.18), n // 2), lw)
+
+
+def _g_warning(s: pygame.Surface, n: int) -> None:
+    lw = max(2, n // 10)
+    cx = n // 2
+    pygame.draw.polygon(s, WARN, [(cx, int(n * 0.08)),
+                                  (int(n * 0.92), int(n * 0.88)),
+                                  (int(n * 0.08), int(n * 0.88))], lw)
+    pygame.draw.line(s, WARN, (cx, int(n * 0.35)), (cx, int(n * 0.62)), lw)
+    pygame.draw.circle(s, WARN, (cx, int(n * 0.75)), max(2, int(lw * 0.8)))
+
+
+def _g_clock(s: pygame.Surface, n: int) -> None:
+    c = TEXT
+    lw = max(2, n // 10)
+    cx = cy = n // 2
+    pygame.draw.circle(s, c, (cx, cy), int(n * 0.40), lw)
+    pygame.draw.line(s, c, (cx, cy), (cx, int(n * 0.22)), lw)
+    pygame.draw.line(s, c, (cx, cy), (cx + int(n * 0.22), cy + int(n * 0.10)), lw)
+    pygame.draw.circle(s, c, (cx, cy), max(2, lw))
+
+
+def _g_warp(s: pygame.Surface, n: int) -> None:
+    cy = n // 2
+    for ox in (0, int(n * 0.32)):
+        pygame.draw.polygon(s, ACCENT, [(int(n * 0.12) + ox, int(n * 0.15)),
+                                        (int(n * 0.44) + ox, cy),
+                                        (int(n * 0.12) + ox, int(n * 0.85)),
+                                        (int(n * 0.26) + ox, int(n * 0.85)),
+                                        (int(n * 0.58) + ox, cy),
+                                        (int(n * 0.26) + ox, int(n * 0.15))])
+
+
+def _g_dv(s: pygame.Surface, n: int) -> None:
+    lw = max(2, n // 10)
+    pygame.draw.polygon(s, ACCENT, [(n // 2, int(n * 0.12)),
+                                    (int(n * 0.85), int(n * 0.85)),
+                                    (int(n * 0.15), int(n * 0.85))], lw)
+
+
+def _g_signal(s: pygame.Surface, n: int) -> None:
+    lw = max(2, n // 10)
+    x0, y0 = int(n * 0.18), int(n * 0.82)
+    pygame.draw.circle(s, ACCENT, (x0, y0), int(n * 0.07))
+    for rf in (0.30, 0.50, 0.70):
+        r = int(n * rf)
+        pygame.draw.arc(s, ACCENT, pygame.Rect(x0 - r, y0 - r, 2 * r, 2 * r),
+                        0.08, math.pi / 2 - 0.08, lw)
+
+
+def _g_lock(s: pygame.Surface, n: int) -> None:
+    c = (190, 200, 215)
+    lw = max(2, n // 10)
+    cx = n // 2
+    sh = int(n * 0.20)
+    pygame.draw.arc(s, c, pygame.Rect(cx - sh, int(n * 0.10), 2 * sh, 2 * sh),
+                    0.0, math.pi, lw)
+    pygame.draw.line(s, c, (cx - sh + lw // 2, int(n * 0.30)),
+                     (cx - sh + lw // 2, int(n * 0.46)), lw)
+    pygame.draw.line(s, c, (cx + sh - lw // 2, int(n * 0.30)),
+                     (cx + sh - lw // 2, int(n * 0.46)), lw)
+    pygame.draw.rect(s, c, pygame.Rect(cx - int(n * 0.28), int(n * 0.46),
+                                       int(n * 0.56), int(n * 0.42)),
+                     border_radius=max(2, n // 16))
+    pygame.draw.circle(s, (30, 38, 52), (cx, int(n * 0.62)), max(2, n // 12))
+
+
+def _g_check(s: pygame.Surface, n: int) -> None:
+    lw = max(3, n // 8)
+    pygame.draw.line(s, GOOD, (int(n * 0.14), int(n * 0.55)),
+                     (int(n * 0.40), int(n * 0.80)), lw)
+    pygame.draw.line(s, GOOD, (int(n * 0.40), int(n * 0.80)),
+                     (int(n * 0.86), int(n * 0.18)), lw)
+
+
+def _g_dot(s: pygame.Surface, n: int) -> None:
+    pygame.draw.circle(s, TEXT_DIM, (n // 2, n // 2), int(n * 0.18))
+
+
+_GLYPHS: dict[str, object] = {
+    "oxygen": _g_oxygen, "water": _g_water, "hydrogen": _g_hydrogen,
+    "power": _g_power, "funds": _g_funds, "science": _g_science,
+    "radiation": _g_radiation, "crew": _g_crew, "contract": _g_contract,
+    "engine": _g_engine, "tank": _g_tank, "warning": _g_warning,
+    "clock": _g_clock, "warp": _g_warp, "dv": _g_dv, "signal": _g_signal,
+    "lock": _g_lock, "check": _g_check,
+}
+
+
+def icon(name: str, size: int = 16) -> pygame.Surface:
+    """Procedural glyph; drawn at 4x and smoothscaled down. Unknown names
+    fall back to a grey dot."""
+    key = (name, size)
+    cached = _ICON_CACHE.get(key)
+    if cached is not None:
+        return cached
+    big = pygame.Surface((size * 4, size * 4), pygame.SRCALPHA)
+    _GLYPHS.get(name, _g_dot)(big, size * 4)            # type: ignore[operator]
+    surf = pygame.transform.smoothscale(big, (size, size))
+    _ICON_CACHE[key] = surf
+    return surf
+
+
+# -- crew portraits -----------------------------------------------------------
+
+_SKIN = ((244, 212, 184), (224, 184, 150), (198, 148, 110), (160, 110, 80), (118, 82, 60))
+_HAIR = ((40, 36, 34), (92, 62, 40), (176, 134, 72), (202, 194, 186), (150, 58, 40))
+_SUIT = ((205, 92, 60), (72, 108, 178), (108, 138, 92), (148, 118, 178), (186, 158, 72))
+_EYE = ((26, 36, 58), (40, 80, 122), (48, 92, 52))
+
+
+def portrait(name: str, size: int = 40) -> pygame.Surface:
+    """Seeded 8x8 pixel-art crew bust, nearest-neighbor upscaled, in a
+    rounded PANEL_EDGE frame. Deterministic per name."""
+    key = (name, size)
+    cached = _PORTRAIT_CACHE.get(key)
+    if cached is not None:
+        return cached
+    rng = np.random.default_rng(_seed(name))
+    skin = _SKIN[int(rng.integers(5))]
+    hair = _HAIR[int(rng.integers(5))]
+    style = int(rng.integers(5))
+    suit = _SUIT[int(rng.integers(5))]
+    eye = _EYE[int(rng.integers(3))]
+    px = pygame.Surface((8, 8), pygame.SRCALPHA)
+    px.fill((16, 22, 34, 255))
+    for yy in range(2, 6):                              # face block + ears
+        for xx in range(2, 6):
+            px.set_at((xx, yy), skin)
+    px.set_at((1, 3), skin)
+    px.set_at((6, 3), skin)
+    px.set_at((2, 3), eye)                              # eye row
+    px.set_at((5, 3), eye)
+    mouth = _mix(skin, (0, 0, 0), 0.35)
+    px.set_at((3, 5), mouth)
+    px.set_at((4, 5), mouth)
+    hair_cells: dict[int, tuple[tuple[int, int], ...]] = {
+        0: (),                                           # bald
+        1: ((2, 1), (3, 1), (4, 1), (5, 1)),             # short crop
+        2: ((2, 0), (3, 0), (4, 0), (5, 0),              # full
+            (1, 1), (2, 1), (3, 1), (4, 1), (5, 1), (6, 1), (1, 2), (6, 2)),
+        3: ((1, 1), (2, 1), (3, 1), (4, 1), (1, 2), (2, 2)),  # side sweep
+        4: ((2, 0), (4, 0), (5, 0), (2, 1), (3, 1), (4, 1), (5, 1)),  # spiky
+    }
+    for cell in hair_cells[style]:
+        px.set_at(cell, hair)
+    collar = _mix(suit, (255, 255, 255), 0.3)
+    for xx in range(8):                                  # suit shoulders
+        px.set_at((xx, 6), suit)
+        px.set_at((xx, 7), suit)
+    px.set_at((3, 6), collar)
+    px.set_at((4, 6), collar)
+    surf = pygame.transform.scale(px, (size, size))      # nearest-neighbor
+    radius = max(3, size // 8)
+    mask = pygame.Surface((size, size), pygame.SRCALPHA)
+    pygame.draw.rect(mask, (255, 255, 255, 255), pygame.Rect(0, 0, size, size),
+                     border_radius=radius)
+    surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+    pygame.draw.rect(surf, PANEL_EDGE, pygame.Rect(0, 0, size, size),
+                     width=1, border_radius=radius)
+    _PORTRAIT_CACHE[key] = surf
+    return surf
+
+
+# -- toasts & text ------------------------------------------------------------
+
+def toast_surface(text: str, kind: str = "info") -> pygame.Surface:
+    """Notification pill: kind-keyed icon + colored text on panel chrome."""
+    key = (text, kind)
+    cached = _TOAST_CACHE.get(key)
+    if cached is not None:
+        return cached
+    color = {"info": ACCENT, "paid": GOLD, "alarm": WARN, "science": ACCENT}.get(kind, ACCENT)
+    icon_name = {"paid": "funds", "alarm": "warning", "science": "science"}.get(kind)
+    if icon_name is not None:
+        ic = icon(icon_name, 16)
+    else:                                                # info: accent dot
+        ic = pygame.Surface((16, 16), pygame.SRCALPHA)
+        pygame.draw.circle(ic, ACCENT, (8, 8), 4)
+    img = init_fonts()["body"].render(text, True, color)
+    h = max(16, img.get_height()) + 12
+    w = 14 + 16 + 8 + img.get_width() + 14
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    pygame.draw.rect(surf, PANEL_FILL, pygame.Rect(0, 0, w, h), border_radius=h // 2)
+    pygame.draw.rect(surf, PANEL_EDGE, pygame.Rect(0, 0, w, h), width=1,
+                     border_radius=h // 2)
+    surf.blit(ic, (14, (h - 16) // 2))
+    surf.blit(img, (14 + 16 + 8, (h - img.get_height()) // 2))
+    _TOAST_CACHE[key] = surf
+    return surf
+
+
+def draw_text(surface: pygame.Surface, x: int, y: int, text: str,
+              color: tuple = TEXT, font: str | pygame.font.Font = "body",
+              shadow: bool = True) -> int:
+    """Blit text with a 1px drop shadow; returns the rendered width."""
+    f = init_fonts()[font] if isinstance(font, str) else font
+    key = (text, tuple(color[:3]), font if isinstance(font, str) else id(f), shadow)
+    cached = _TEXT_CACHE.get(key)
+    if cached is None:
+        img = f.render(text, True, color[:3])
+        sh = f.render(text, True, (0, 0, 0)) if shadow else None
+        if len(_TEXT_CACHE) > 4096:                      # bound the cache
+            _TEXT_CACHE.clear()
+        cached = _TEXT_CACHE[key] = (img, sh)
+    img, sh = cached
+    if sh is not None:
+        surface.blit(sh, (x + 1, y + 1))
+    surface.blit(img, (x, y))
+    return img.get_width()

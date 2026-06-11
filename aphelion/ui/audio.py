@@ -13,6 +13,7 @@ _RATE = 22_050
 class AudioCues:
     def __init__(self) -> None:
         self.ok = False
+        self.muted = False
         try:
             import pygame
             pygame.mixer.init(frequency=_RATE, size=-16, channels=1)
@@ -42,7 +43,7 @@ class AudioCues:
         return pygame.mixer.Sound(buffer=pcm.tobytes())
 
     def play(self, name: str) -> None:
-        if self.ok and name in self._snd:
+        if self.ok and not self.muted and name in self._snd:
             try:
                 self._snd[name].play()
             except Exception:
