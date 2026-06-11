@@ -125,6 +125,59 @@ class Craft:
         return notes
 
 
+class BaseSite:
+    """A founded surface base: a live ledger network advanced to sim time
+    every frame (warp-exact by construction), failures pre-rolled, repairs
+    on a 48 h maintenance turnaround (Phase 3 acceptance machinery)."""
+
+    REPAIR_TURNAROUND = 48.0 * 3_600.0
+
+    def __init__(self, name: str, t_founded: float, rng) -> None:
+        from aphelion.sim.habitat.lsc import oga_electrolysis
+        from aphelion.sim.ledger.network import LedgerNetwork, Module, Source
+        self.name = name
+        self.last_t = t_founded
+        self.events: list = []
+        self.pending_repairs: list[tuple[float, str]] = []
+        net = LedgerNetwork(rng=rng)
+        net.add_buffer("Water", 200.0, 50_000.0)
+        net.add_buffer("Oxygen", 0.0, 200_000.0)
+        net.add_buffer("Hydrogen", 0.0, 20_000.0)
+        net.add_source(Source("psr_ice", "Water", 0.03, remaining=1.0e6))
+        net.add_source(Source("h2_vent", "Hydrogen", -0.005))
+        oga = oga_electrolysis(rate_o2_kgps=0.02, power_kw=80.0)
+        oga.mtbf_s = 45.0 * 86_400.0
+        net.add_module(oga)
+        net.add_module(Module("reactor", inputs={}, outputs={}, rate_kgps=0.0,
+                              power_kw=-120.0))
+        self.net = net
+
+    def advance(self, t: float) -> list:
+        from aphelion.sim.ledger.network import LedgerEvent
+        new_events = []
+        guard = 0
+        while self.last_t < t - 1e-6 and guard < 200:
+            guard += 1
+            self.net.roll_failures(self.last_t)
+            t_rep = min((r[0] for r in self.pending_repairs), default=float("inf"))
+            t_stop = min(t, t_rep)
+            evs = self.net.advance(self.last_t, t_stop)
+            new_events.extend(evs)
+            for e in evs:
+                if e.kind == "module_failed":
+                    self.pending_repairs.append(
+                        (e.t + self.REPAIR_TURNAROUND, e.subject))
+            if t_rep <= t_stop + 1e-6:
+                due = min(self.pending_repairs)
+                self.pending_repairs.remove(due)
+                mod = [m for m in self.net.modules if m.module_id == due[1]][0]
+                self.net.repair(mod, due[0])
+                new_events.append(LedgerEvent(due[0], "repaired", due[1]))
+            self.last_t = t_stop
+        self.events.extend(new_events)
+        return new_events
+
+
 class Builder:
     """The Engineer screen (12 §5.4 / 06 §3): pick parts (research-gated),
     group into stages, watch live Tsiolkovsky/TWR, then fly the real
@@ -233,6 +286,14 @@ def run(argv: list[str] | None = None) -> int:
                            payout=80_000_000.0, deadline_s=120 * 86_400.0))
     program.offer(Contract("c_helio", "Achieve heliocentric orbit",
                            payout=120_000_000.0, deadline_s=365 * 86_400.0))
+    program.offer(Contract("c_base", "Found a lunar surface base (G in Moon SOI)",
+                           payout=150_000_000.0, deadline_s=2 * 365 * 86_400.0))
+    program.offer(Contract("c_lox", "Bank 100 t of lunar LOX",
+                           payout=200_000_000.0, deadline_s=4 * 365 * 86_400.0))
+    from aphelion.core.rng import RngRegistry
+    campaign_rng = RngRegistry(20490101)
+    bases: list[BaseSite] = []
+    base_screen = False
     research = ResearchState()
     visited = {"core:earth"}
 
@@ -306,6 +367,26 @@ def run(argv: list[str] | None = None) -> int:
                     running = False
                 elif event.key == pygame.K_b:
                     builder_open = True
+                elif event.key == pygame.K_F2:
+                    base_screen = not base_screen
+                elif event.key == pygame.K_g:
+                    if craft.frame_id != "core:moon":
+                        toast, toast_until = "Base founding needs the Moon SOI", t + 5
+                        audio.play("alarm")
+                    elif bases:
+                        toast, toast_until = "Base already founded (F2 to view)", t + 5
+                    elif not craft.burn(t, -1_900.0, 0.0):
+                        toast, toast_until = ("Landing needs 1,900 m/s of dv "
+                                              "budget"), t + 6
+                        audio.play("alarm")
+                    else:
+                        bases.append(BaseSite("Peary Base", t, campaign_rng))
+                        if program.complete(t, "c_base"):
+                            toast = "PEARY BASE FOUNDED — CONTRACT PAID +$150M (F2 to view)"
+                        else:
+                            toast = "PEARY BASE FOUNDED (F2 to view)"
+                        toast_until = t + 10
+                        audio.play("paid")
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
                 elif event.key == pygame.K_PERIOD:
@@ -365,6 +446,21 @@ def run(argv: list[str] | None = None) -> int:
                 toast += "  |  CONTRACT PAID +$120M"
                 audio.play("paid")
         program.expire_overdue(t)
+
+        # bases tick on the ledger (warp-exact); LOX contract watches stores
+        for site in bases:
+            for ev in site.advance(t):
+                if ev.kind == "module_failed":
+                    toast, toast_until = f"{site.name}: {ev.subject} FAILED — bot dispatched", t + 8
+                    audio.play("alarm")
+                elif ev.kind == "repaired":
+                    toast, toast_until = f"{site.name}: {ev.subject} repaired", t + 6
+                    audio.play("blip")
+            if (site.net.buffers["Oxygen"].level >= 100_000.0
+                    and program.complete(t, "c_lox")):
+                toast = "100 t LUNAR LOX BANKED — CONTRACT PAID +$200M"
+                toast_until = t + 10
+                audio.play("paid")
 
         # tutorial rail (12 §5.8): completes from real state
         legs_now = craft.predict(t)
@@ -462,6 +558,40 @@ def run(argv: list[str] | None = None) -> int:
         if tutorial.visible and tutorial.current_text:
             tut = font.render(tutorial.current_text, True, (140, 235, 255))
             screen.blit(tut, (size[0] // 2 - tut.get_width() // 2, 86))
+
+        if base_screen and bases:
+            site = bases[0]
+            panel = pygame.Surface((430, 230), pygame.SRCALPHA)
+            panel.fill((8, 14, 24, 225))
+            screen.blit(panel, (size[0] - 444, 90))
+            bx, by = size[0] - 430, 100
+            screen.blit(font.render(f"{site.name} — live ledger (F2 hide)",
+                                    True, (255, 215, 130)), (bx, by))
+            by += 22
+            _, rates, f_power = site.net.solve_rates()
+            for res in ("Water", "Oxygen", "Hydrogen"):
+                buf = site.net.buffers[res]
+                rate = rates.get(res, 0.0)
+                frac = min(1.0, buf.level / buf.capacity)
+                pygame.draw.rect(screen, (40, 50, 70), (bx, by + 4, 200, 10))
+                pygame.draw.rect(screen, (120, 255, 170),
+                                 (bx, by + 4, int(200 * frac), 10))
+                screen.blit(font.render(
+                    f"{res:9s} {buf.level/1e3:8.1f} t  "
+                    f"{rate * 86_400.0 / 1e3:+6.2f} t/d", True,
+                    (190, 200, 215)), (bx + 210, by))
+                by += 22
+            for m in site.net.modules:
+                color = {"RUNNING": (120, 255, 170), "FAILED": (255, 110, 110),
+                         "STARVED": (255, 200, 90), "BLOCKED": (255, 200, 90),
+                         "OFF": (120, 130, 150)}.get(m.state, (200, 200, 200))
+                screen.blit(font.render(f"{m.module_id:14s} {m.state}",
+                                        True, color), (bx, by))
+                by += 18
+            screen.blit(font.render(
+                f"power OK (f={f_power:.2f})   repairs pending: "
+                f"{len(site.pending_repairs)}", True, (140, 235, 255)),
+                (bx, by + 4))
 
         if builder_open:
             panel = pygame.Surface(size, pygame.SRCALPHA)
