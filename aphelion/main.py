@@ -3315,9 +3315,6 @@ def run(argv: list[str] | None = None) -> int:
                 screen.blit(font.render(after, True, (255, 170, 235)),
                             (10, size[1] - 68))
 
-        hud1 = (f"t {t / SECONDS_PER_DAY:9.3f} d   warp {_WARP_LADDER[warp_idx]:>9,.0f}x"
-                f"{'  [PAUSED]' if paused else ''}   focus: {focus.split(':')[-1]}"
-                f"   fleet: {len(vessels)}")
         if av is not None and av.landed_at is not None:
             lss = f"   LSS {av.lss_margin_days:,.0f} d" if av.crew else ""
             hud2 = (f"{av.name} — LANDED: {SITES[av.landed_at]['name']}   "
@@ -3342,18 +3339,37 @@ def run(argv: list[str] | None = None) -> int:
                           if c.completed_t is None and not c.failed]
         worst_frac = max((c.dose.career_fraction for c in crew.values()),
                          default=0.0)
-        hud3 = (f"${program.funds/1e6:,.0f}M   sci {research.science:,.0f}"
-                f"  ed {research.eng_data:,.0f}"
-                f"   dose {worst_frac:.0%}   {act_progress(program)}   "
-                + (" | ".join(c.description[:30] for c in open_contracts[:3])
-                   or "no open contracts"))
         screen.blit(theme.panel(size[0], 76), (0, 0))
-        for icon_name, line, yy, color in (
-                ("clock", hud1, 8, theme.COLORS["text"]),
-                ("dv", hud2, 28, _CRAFT_COLOR),
-                ("funds", hud3, 48, theme.COLORS["gold"])):
-            screen.blit(theme.icon(icon_name, 14), (10, yy + 1))
-            theme.draw_text(screen, 30, yy, line, color=color)
+        chx = 10                            # status row: chips, not a string
+        for chip_txt, chip_col in (
+                (f"T+ {t / SECONDS_PER_DAY:,.2f} d", theme.COLORS["text"]),
+                (f"warp {_WARP_LADDER[warp_idx]:,.0f}x"
+                 + ("  ·  PAUSED" if paused else ""),
+                 theme.COLORS["warn"] if paused else theme.COLORS["accent"]),
+                (f"focus  {focus.split(':')[-1]}", theme.COLORS["text_dim"]),
+                (f"fleet  {len(vessels)}", theme.COLORS["text_dim"])):
+            cs = theme.chip(chip_txt, chip_col)
+            screen.blit(cs, (chx, 5))
+            chx += cs.get_width() + 8
+        screen.blit(theme.icon("dv", 14), (12, 32))
+        theme.draw_text(screen, 32, 31, hud2, color=_CRAFT_COLOR)
+        chx = 10                            # program row
+        for chip_txt, chip_col in (
+                (f"$ {program.funds / 1e6:,.0f}M", theme.COLORS["gold"]),
+                (f"sci {research.science:,.0f}", theme.COLORS["accent"]),
+                (f"ed {research.eng_data:,.0f}", theme.COLORS["accent"]),
+                (f"dose {worst_frac:.0%}",
+                 theme.COLORS["danger"] if worst_frac > 0.8
+                 else theme.COLORS["text_dim"]),
+                (act_progress(program), theme.COLORS["text"])):
+            cs = theme.chip(chip_txt, chip_col)
+            screen.blit(cs, (chx, 51))
+            chx += cs.get_width() + 8
+        theme.draw_text(screen, chx + 8, 54,
+                        " | ".join(c.description[:30]
+                                   for c in open_contracts[:2])
+                        or "no open contracts",
+                        color=theme.COLORS["text_dim"], font="small")
         # toasts are latched on REAL time so they survive 1,000,000x warp,
         # slide in, and fade out instead of teleporting
         if toast and (toast, toast_until) != toast_key:
@@ -4164,44 +4180,105 @@ def run(argv: list[str] | None = None) -> int:
                 font="small")
 
         if research_open:
+            # the tech TREE: tier columns of state-colored node cards wired
+            # by prereq connector lines (keyboard cursor == card index)
             tech_ids = _tech_order(db)
-            px0, py0 = size[0] // 2 - 330, 110
-            screen.blit(theme.panel(660, 120 + 24 * len(tech_ids), "RESEARCH"),
-                        (px0, py0))
-            screen.blit(theme.icon("science", 16), (px0 + 16, py0 + 34))
-            theme.draw_text(
-                screen, px0 + 38, py0 + 34,
-                f"science {research.science:,.0f}   eng data "
-                f"{research.eng_data:,.0f}   —   ENTER unlock, R close",
-                color=theme.COLORS["accent"], font="small")
-            yy = py0 + 62
+            pw, ph = 1216, 576
+            px0, py0 = size[0] // 2 - pw // 2, 72
+            screen.blit(theme.panel(pw, ph, "RESEARCH"), (px0, py0))
+            screen.blit(theme.chip(f"science {research.science:,.0f}",
+                                   theme.COLORS["accent"]),
+                        (px0 + pw - 336, py0 + 3))
+            screen.blit(theme.chip(f"eng data {research.eng_data:,.0f}",
+                                   theme.COLORS["gold"]),
+                        (px0 + pw - 168, py0 + 3))
             overlay_rects["research"] = []
+            tier_of = {nid: int(db.tech[nid]["tier"][1]) for nid in tech_ids}
+            present = sorted(set(tier_of.values()))
+            col_w = (pw - 52) // max(1, len(present))
+            card_w, card_h = col_w - 18, 62
+            col_idx = {t: k for k, t in enumerate(present)}
+            stacked: dict[int, int] = {}
+            pos: dict[str, tuple[int, int]] = {}
+            for nid in tech_ids:
+                t = tier_of[nid]
+                j = stacked.get(t, 0)
+                stacked[t] = j + 1
+                pos[nid] = (px0 + 26 + col_idx[t] * col_w,
+                            py0 + 64 + j * (card_h + 14))
+            for t in present:
+                theme.draw_text(screen, px0 + 30 + col_idx[t] * col_w,
+                                py0 + 40, f"TIER {t}",
+                                color=theme.COLORS["text_dim"],
+                                font="ui_small")
+            for nid in tech_ids:        # connectors under the cards
+                x1, y1 = pos[nid]
+                for pre_id in db.tech[nid]["prereqs"]:
+                    if pre_id not in pos:
+                        continue
+                    x0c, y0c = pos[pre_id]
+                    a = (x0c + card_w, y0c + card_h // 2)
+                    b = (x1, y1 + card_h // 2)
+                    ccol = (theme.COLORS["good"]
+                            if pre_id in research.unlocked
+                            else theme.COLORS["panel_edge"])
+                    pygame.draw.lines(screen, ccol, False,
+                                      [a, (a[0] + 8, a[1]),
+                                       (a[0] + 8, b[1]), b], 2)
             for i, nid in enumerate(tech_ids):
                 nd = db.tech[nid]
+                x, y = pos[nid]
                 unlocked = nid in research.unlocked
                 can = research.can_unlock(db, nid)
                 sel = i == research_cursor % len(tech_ids)
-                color = ((120, 255, 170) if unlocked
-                         else (255, 215, 130) if can else (110, 122, 140))
-                state = ("UNLOCKED" if unlocked else
-                         f"{nd.get('cost_sci', 0):,.0f} sci / "
-                         f"{nd.get('cost_ed', 0):,.0f} ed")
+                if unlocked:
+                    fill, edge = (14, 40, 28), theme.COLORS["good"]
+                elif can:
+                    fill, edge = (44, 36, 16), theme.COLORS["gold"]
+                else:
+                    fill, edge = (12, 18, 30), theme.COLORS["panel_edge"]
+                card = pygame.Rect(x, y, card_w, card_h)
+                pygame.draw.rect(screen, fill, card, border_radius=6)
+                pygame.draw.rect(screen, edge, card, width=1, border_radius=6)
                 if sel:
-                    screen.blit(theme.row_glow(628, 22), (px0 + 12, yy - 3))
-                screen.blit(font.render(
-                    f"{'>' if sel else ' '} {nd['tier']:3s} "
-                    f"{nd['name'][:36]:37s} {state}", True, color),
-                    (px0 + 16, yy))
-                overlay_rects["research"].append(
-                    (pygame.Rect(px0 + 12, yy - 3, 628, 24), i))
-                yy += 24
+                    pygame.draw.rect(screen, theme.COLORS["accent"],
+                                     card.inflate(6, 6), width=2,
+                                     border_radius=8)
+                line1, line2 = "", ""
+                for wd in nd["name"].split():       # word-aware 2-line wrap
+                    if not line2 and len(line1) + len(wd) < 24:
+                        line1 = (line1 + " " + wd).strip()
+                    else:
+                        line2 = (line2 + " " + wd).strip()
+                ncol = (theme.COLORS["good"] if unlocked
+                        else theme.COLORS["text"])
+                theme.draw_text(screen, x + 10, y + 7, line1,
+                                color=ncol, font="ui_small")
+                if line2:
+                    theme.draw_text(screen, x + 10, y + 22, line2[:28],
+                                    color=ncol, font="ui_small")
+                if unlocked:
+                    screen.blit(theme.icon("check", 14),
+                                (x + card_w - 22, y + 7))
+                    state = "researched"
+                    scol = theme.COLORS["good"]
+                else:
+                    state = (f"{nd.get('cost_sci', 0):,.0f} sci · "
+                             f"{nd.get('cost_ed', 0):,.0f} ed")
+                    scol = (theme.COLORS["gold"] if can
+                            else theme.COLORS["text_dim"])
+                theme.draw_text(screen, x + 10, y + card_h - 21, state,
+                                color=scol, font="small")
+                overlay_rects["research"].append((card.copy(), i))
             sel_nid = tech_ids[research_cursor % len(tech_ids)]
             unl = ", ".join(p.split(":")[1]
                             for p in db.tech[sel_nid].get("unlocks", [])) or "—"
             pre = ", ".join(p.split(":")[1]
                             for p in db.tech[sel_nid]["prereqs"]) or "none"
-            screen.blit(font.render(f"unlocks: {unl}   prereqs: {pre}",
-                                    True, (200, 210, 224)), (px0 + 16, yy + 4))
+            theme.draw_text(screen, px0 + 24, py0 + ph - 32,
+                            f"unlocks: {unl}    ·    prereqs: {pre}    ·    "
+                            "ENTER unlock   R close",
+                            color=theme.COLORS["text"], font="ui_small")
 
         # tutorial rail draws ABOVE every content overlay so guidance is
         # never hidden by the very screen it is teaching
