@@ -58,31 +58,41 @@ _PREDICT_HORIZON = 60.0 * SECONDS_PER_DAY
 
 
 class Craft:
-    """A rails craft: elements in a frame, re-expressed at SOI crossings."""
+    """A rails craft: elements in a frame, re-expressed at SOI crossings.
+    Burns spend a finite dv budget — the budget your launched design earned
+    (06: the builder's Tsiolkovsky readout is the law)."""
 
-    def __init__(self, tree, frame_id: str, elements) -> None:
+    def __init__(self, tree, frame_id: str, elements,
+                 dv_budget: float = 5_000.0, name: str = "Pathfinder-0") -> None:
         self.tree = tree
         self.frame_id = frame_id
         self.elements = elements
+        self.dv_remaining = dv_budget
+        self.name = name
         self.legs = []
         self._legs_t0 = -1.0
 
     def state(self, t: float):
         return elements_to_state(self.elements, t)
 
-    def burn(self, t: float, dv_prograde: float, dv_radial: float) -> None:
+    def burn(self, t: float, dv_prograde: float, dv_radial: float) -> bool:
+        cost = math.hypot(dv_prograde, dv_radial)
+        if cost > self.dv_remaining:
+            return False
         rx, ry, vx, vy = self.state(t)
         v = math.hypot(vx, vy)
         r = math.hypot(rx, ry)
         if v == 0.0 or r == 0.0:
-            return
+            return False
         px, py = vx / v, vy / v
         ux, uy = rx / r, ry / r
         nvx = vx + dv_prograde * px + dv_radial * ux
         nvy = vy + dv_prograde * py + dv_radial * uy
         mu = self.tree.body(self.frame_id).mu
         self.elements = state_to_elements(rx, ry, nvx, nvy, t, mu)
+        self.dv_remaining -= cost
         self._legs_t0 = -1.0          # invalidate prediction
+        return True
 
     def predict(self, t: float):
         if self._legs_t0 < 0.0 or abs(t - self._legs_t0) > 600.0:
@@ -113,6 +123,64 @@ class Craft:
                     continue
             break
         return notes
+
+
+class Builder:
+    """The Engineer screen (12 §5.4 / 06 §3): pick parts (research-gated),
+    group into stages, watch live Tsiolkovsky/TWR, then fly the real
+    ascent sim. Pricing is the 12-owned placeholder $2M/t dry + $0.5M/t
+    propellant until the economy pass lands final tags."""
+
+    def __init__(self, db, research) -> None:
+        self.db = db
+        self.research = research
+        self.catalog = sorted(
+            [pid for pid, p in db.parts.items()
+             if p["type"] in ("engine", "tank", "structure")])
+        self.cursor = 0
+        self.stack: list[list[str]] = [[]]    # stages, bottom first
+        self.message = "ENTER add part | S new stage | BACKSPACE remove | L launch | B close"
+
+    def locked(self, part_id: str) -> bool:
+        return not self.research.part_available(self.db, part_id)
+
+    def add(self) -> None:
+        pid = self.catalog[self.cursor]
+        if self.locked(pid):
+            self.message = f"{pid.split(':')[1]} is research-locked"
+            return
+        self.stack[-1].append(pid)
+        self.message = f"added {pid.split(':')[1]}"
+
+    def remove(self) -> None:
+        if self.stack[-1]:
+            self.stack[-1].pop()
+        elif len(self.stack) > 1:
+            self.stack.pop()
+
+    def new_stage(self) -> None:
+        if self.stack[-1]:
+            self.stack.append([])
+
+    def build_vessel(self):
+        from aphelion.sim.vessels.vessel import Vessel
+        rows = []
+        plan = []
+        for stage in self.stack:
+            idxs = []
+            for pid in stage:
+                idxs.append(len(rows))
+                rows.append(Vessel.fueled_row(self.db, pid))
+            if idxs:
+                plan.append(idxs)
+        if not plan:
+            return None
+        return Vessel(self.db, rows, stage_plan=plan, cd_a_m2=3.2)
+
+    def price(self, vessel) -> float:
+        dry = vessel.dry_mass_kg() / 1_000.0
+        prop = (vessel.total_mass_kg() - vessel.dry_mass_kg()) / 1_000.0
+        return (2.0 * dry + 0.5 * prop) * 1e6
 
 
 def run(argv: list[str] | None = None) -> int:
@@ -172,6 +240,8 @@ def run(argv: list[str] | None = None) -> int:
     particles = Particles()
     audio = AudioCues()
     tutorial = first_flight_tutorial()
+    builder = Builder(db, research)
+    builder_open = False
 
     frame_count = 0
     running = True
@@ -181,11 +251,61 @@ def run(argv: list[str] | None = None) -> int:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.KEYDOWN and builder_open:
+                if event.key in (pygame.K_b, pygame.K_ESCAPE):
+                    builder_open = False
+                elif event.key == pygame.K_UP:
+                    builder.cursor = (builder.cursor - 1) % len(builder.catalog)
+                elif event.key == pygame.K_DOWN:
+                    builder.cursor = (builder.cursor + 1) % len(builder.catalog)
+                elif event.key == pygame.K_RETURN:
+                    builder.add()
+                    audio.play("blip")
+                elif event.key == pygame.K_BACKSPACE:
+                    builder.remove()
+                elif event.key == pygame.K_s:
+                    builder.new_stage()
+                elif event.key == pygame.K_l:
+                    vessel = builder.build_vessel()
+                    if vessel is None:
+                        builder.message = "nothing to launch"
+                    else:
+                        cost = builder.price(vessel)
+                        if not program.spend(t, cost, f"launch {len(vessel.rows)} parts"):
+                            builder.message = f"insufficient funds (${cost/1e6:,.0f}M)"
+                            audio.play("alarm")
+                        else:
+                            from aphelion.sim.flight.ascent import AscentParams, fly_ascent
+                            res = fly_ascent(vessel, "core:earth",
+                                             tree.body("core:earth").mu,
+                                             tree.body("core:earth").radius,
+                                             86_164.1, AscentParams())
+                            if res.reached_orbit:
+                                budget = sum(s["dv_vac"] for s in vessel.stage_stats())
+                                mu_e2 = tree.body("core:earth").mu
+                                r_orb = tree.body("core:earth").radius + res.periapsis_m
+                                craft = Craft(tree, "core:earth",
+                                              state_to_elements(
+                                                  r_orb, 0.0, 0.0,
+                                                  tr.circular_speed(mu_e2, r_orb),
+                                                  t, mu_e2),
+                                              dv_budget=budget,
+                                              name=f"Vessel-{len(program.history)}")
+                                builder.message = (f"ORBIT! {res.dv_integrated:,.0f} m/s spent; "
+                                                   f"{budget:,.0f} m/s on-orbit budget")
+                                toast, toast_until = builder.message, t + 10
+                                audio.play("paid")
+                                builder_open = False
+                            else:
+                                builder.message = "LOSS OF VEHICLE on ascent (see design TWR)"
+                                audio.play("alarm")
             elif event.type == pygame.KEYDOWN:
                 shift = event.mod & pygame.KMOD_SHIFT
                 step = 100.0 if shift else 10.0
                 if event.key == pygame.K_ESCAPE:
                     running = False
+                elif event.key == pygame.K_b:
+                    builder_open = True
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
                 elif event.key == pygame.K_PERIOD:
@@ -202,7 +322,11 @@ def run(argv: list[str] | None = None) -> int:
                     dvp = {pygame.K_x: (+step, 0.0), pygame.K_z: (-step, 0.0),
                            pygame.K_a: (0.0, +step), pygame.K_d: (0.0, -step)}[event.key]
                     crx0, cry0, cvx0, cvy0 = craft.state(t)
-                    craft.burn(t, *dvp)
+                    if not craft.burn(t, *dvp):
+                        toast = "INSUFFICIENT dv — build a new vessel (B)"
+                        toast_until = t + 6
+                        audio.play("alarm")
+                        continue
                     names = {pygame.K_x: "prograde +", pygame.K_z: "retrograde -",
                              pygame.K_a: "radial-out +", pygame.K_d: "radial-in -"}
                     toast = f"{names[event.key]}{step:.0f} m/s"
@@ -316,9 +440,10 @@ def run(argv: list[str] | None = None) -> int:
                 f"zoom {cam.zoom:.2e}")
         peri = el.periapsis - body.radius
         apo = (el.apoapsis - body.radius) if el.alpha > 0 else float("inf")
-        hud2 = (f"CRAFT @ {craft.frame_id.split(':')[1]}   alt {alt/1e3:,.0f} km   "
-                f"v {math.hypot(cvx, cvy):,.0f} m/s   "
-                f"peri {peri/1e3:,.0f} km   apo {apo/1e3:,.0f} km   e {el.e:.4f}")
+        hud2 = (f"{craft.name} @ {craft.frame_id.split(':')[1]}   "
+                f"alt {alt/1e3:,.0f} km   v {math.hypot(cvx, cvy):,.0f} m/s   "
+                f"peri {peri/1e3:,.0f} km   apo {apo/1e3:,.0f} km   "
+                f"dv {craft.dv_remaining:,.0f} m/s")
         screen.blit(font.render(hud1, True, (190, 200, 215)), (10, 8))
         screen.blit(font.render(hud2, True, _CRAFT_COLOR), (10, 28))
         open_contracts = [c for c in program.contracts
@@ -330,13 +455,61 @@ def run(argv: list[str] | None = None) -> int:
         if t < toast_until and toast:
             screen.blit(font.render(toast, True, (255, 230, 140)), (10, 68))
         screen.blit(font.render(
-            "X/Z prograde±  A/D radial±  (shift=100)  C craft  TAB focus  ./, warp  F1 tutorial",
+            "X/Z prograde±  A/D radial±  (shift=100)  B builder  C craft  TAB focus  ./, warp  F1 tutorial",
             True, (110, 120, 135)), (10, size[1] - 24))
 
         particles.update_draw(screen, real_dt)
         if tutorial.visible and tutorial.current_text:
             tut = font.render(tutorial.current_text, True, (140, 235, 255))
             screen.blit(tut, (size[0] // 2 - tut.get_width() // 2, 86))
+
+        if builder_open:
+            panel = pygame.Surface(size, pygame.SRCALPHA)
+            panel.fill((8, 12, 20, 235))
+            screen.blit(panel, (0, 0))
+            screen.blit(font.render(
+                "ENGINEER — VESSEL ASSEMBLY (12 §5.4)", True, (240, 240, 250)),
+                (20, 16))
+            top = builder.cursor - 10
+            for i, pid in enumerate(builder.catalog):
+                if i < top or i > top + 24:
+                    continue
+                p = db.parts[pid]
+                locked = builder.locked(pid)
+                color = (90, 95, 105) if locked else (200, 210, 220)
+                marker = ">" if i == builder.cursor else " "
+                lock = " [LOCKED]" if locked else ""
+                screen.blit(font.render(
+                    f"{marker} {p['tier']}  {p['name'][:42]}{lock}",
+                    True, color), (20, 48 + (i - max(top, 0)) * 18))
+            vx0 = 660
+            screen.blit(font.render("STACK (bottom stage first):", True,
+                                    (255, 215, 130)), (vx0, 48))
+            yy = 70
+            vessel = builder.build_vessel()
+            stats = vessel.stage_stats() if vessel else []
+            for si, stage in enumerate(builder.stack):
+                stat = stats[si] if si < len(stats) else None
+                line = f"STAGE {si + 1}: " + (
+                    f"dv {stat['dv_vac']:,.0f} m/s  TWR {stat['twr']:.2f}"
+                    if stat else "(empty)")
+                screen.blit(font.render(line, True, (140, 235, 255)), (vx0, yy))
+                yy += 18
+                for pid in stage:
+                    screen.blit(font.render("   " + pid.split(":")[1], True,
+                                            (190, 200, 215)), (vx0, yy))
+                    yy += 16
+                yy += 6
+            if vessel:
+                total_dv = sum(s["dv_vac"] for s in stats)
+                cost = builder.price(vessel)
+                screen.blit(font.render(
+                    f"TOTAL dv {total_dv:,.0f} m/s   mass "
+                    f"{vessel.total_mass_kg()/1e3:,.1f} t   price ${cost/1e6:,.0f}M"
+                    f"   funds ${program.funds/1e6:,.0f}M",
+                    True, (255, 230, 140)), (vx0, yy + 6))
+            screen.blit(font.render(builder.message, True, (140, 235, 255)),
+                        (20, size[1] - 48))
 
         pygame.display.flip()
         frame_count += 1
