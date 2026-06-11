@@ -1,0 +1,5 @@
+id     = "core:payload_2t"
+type   = "structure"
+tier   = "T0"
+name   = "Payload mass simulator (2 t)"
+mass_t = 2.0

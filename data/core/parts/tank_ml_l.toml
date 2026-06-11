@@ -1,0 +1,8 @@
+id     = "core:tank_ml_l"
+type   = "tank"
+tier   = "T0"
+name   = "Methalox tank L"
+mass_t = 2.1
+[tank]
+capacity_t = 35.0
+mixture    = { Oxygen = 0.783, Methane = 0.217 }

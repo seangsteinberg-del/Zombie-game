@@ -1,0 +1,12 @@
+id        = "core:engine_mv815"
+type      = "engine"
+tier      = "T1"
+name      = "MV-815 Bantam-V vacuum methalox engine"
+mass_t    = 0.90
+[engine]
+thrust_kN  = 815.0
+isp_s      = 367.0
+isp_sl_s   = 95.0
+throttle   = [0.50, 1.0]
+gimbal_deg = 3.0
+propellant = { Oxygen = 0.783, Methane = 0.217 }

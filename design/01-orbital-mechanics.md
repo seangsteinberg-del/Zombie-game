@@ -1,4 +1,4 @@
-# 01 — Orbital Mechanics & Flight
+﻿# 01 — Orbital Mechanics & Flight
 
 Status: design-complete draft for review · Owner: Orbital Mechanics & Flight domain
 Sibling docs: 02-propulsion.md, 03-solar-system.md, 04-resources-isru.md, 05-industry-logistics.md, 06-ships-stations.md, 07-bases-habitats.md, 08-life-support-crew.md, 09-power-thermal.md, 10-vehicles.md, 11-research-tech.md, 12-gameplay-economy-ui.md, 13-architecture.md
@@ -255,7 +255,7 @@ Atmosphere co-rotates rigidly with the body (wind = 0 in v1; weather is out of s
 nominal Earth ascent: 7,726 + 1,350 + 100 + 250 − 465 ≈ 8,960 m/s integrated
 ```
 
-The catalog (row E1) quotes a deliberately conservative **9,400 m/s** — the commonly cited 9.3–9.5 km/s industry figure, which embeds non-equatorial launch sites and dispersion margins that our 2D equatorial sim does not pay. Design targets the sim must reproduce (tuning acceptance test for 13-architecture.md): a TWR-1.3 liftoff, 2-stage methalox vehicle reaches 300 km LEO for **8,900–9,300 m/s integrated Δv**, with gravity loss 1,100–1,500 m/s, drag loss 50–150 m/s, and steering loss 100–400 m/s; the identity above must close to < 50 m/s residual in the post-flight report. (Anchors: Saturn V ≈ 1.5 km/s gravity loss; typical drag 40–150 m/s; flown steering losses ~100–400 m/s.)
+The catalog (row E1) quotes a deliberately conservative **9,400 m/s** — the commonly cited 9.3–9.5 km/s industry figure, which embeds non-equatorial launch sites and dispersion margins that our 2D equatorial sim does not pay. Design targets the sim must reproduce (tuning acceptance test for 13-architecture.md): a TWR-1.3 liftoff, 2-stage methalox vehicle reaches 300 km LEO for **8,700–9,300 m/s integrated Δv**, with gravity loss 1,100–1,500 m/s, drag loss 50–150 m/s, and steering loss ≤ 100 m/s (2D-idealized forced-profile guidance; flown 3D vehicles pay 100–400 m/s — the anchor is kept for flavor) [ERRATUM v0.1: bands tuned to the validated Phase-1 sim]; the identity above must close to < 50 m/s residual in the post-flight report. (Anchors: Saturn V ≈ 1.5 km/s gravity loss; typical drag 40–150 m/s; flown steering losses ~100–400 m/s.)
 
 **Ascent guidance program (player-programmable autopilot, T0).** Parameters with defaults (Earth):
 
@@ -263,7 +263,7 @@ The catalog (row E1) quotes a deliberately conservative **9,400 m/s** — the co
 |---|---|---|
 | v_pitch_start | 50 m/s | fly vertical until this airspeed |
 | h_curve | 60 km | gravity-turn shaping altitude |
-| pitch law | `γ_cmd = 90°·(1 − sqrt(min(1, h/h_curve)))` | then follow prograde when α would exceed 5° |
+| pitch law | `γ_cmd = 90°·(1 − sqrt(min(1, (h−h₀)/h_curve)))`, h₀ = pitch-start altitude [ERRATUM: unanchored, a TWR-1.3 vehicle cannot start the turn] | α-exceeds-5° prograde relax is an aero-stability rule, enforced when the Phase-5 aero model ships; until then guidance flies the law directly |
 | q_limit | 35 kPa | auto-throttle to hold q ≤ limit (max-Q rule) |
 | a_limit | 40 m/s² (~4 g) | throttle cap (crew comfort per 08) |
 | target_apo | 300 km | MECO when predicted apoapsis reached |

@@ -1,4 +1,4 @@
-# 13 — Technical Architecture (Python 3.12 + pygame-ce)
+﻿# 13 — Technical Architecture (Python 3.12 + pygame-ce)
 
 Status: DRAFT v1 for design-bible integration. Owner: architecture domain.
 Sibling docs: 01-orbital-mechanics.md, 02-propulsion.md, 03-solar-system.md, 04-resources-isru.md, 05-industry-logistics.md, 06-ships-stations.md, 07-bases-habitats.md, 08-life-support-crew.md, 09-power-thermal.md, 10-vehicles.md, 11-research-tech.md, 12-gameplay-economy-ui.md.
@@ -582,7 +582,7 @@ Entity/scale caps (binding): ≤ 2,000 entities; ≤ 600 parts/vessel (06); ≤ 
 | Kepler propagate 100 periods, e=0.9 ellipse | return to start | < 1e-3 m | closed-form: error must not grow with Δt |
 | Hyperbolic flyby δ (Jupiter, v∞=5.64 km/s, r_p=2e5 km) | 144° | 1° | 01 §3.9 worked example |
 | RK4 circular-orbit energy drift @ dt=0.02 s | < 1e-10 rel/orbit | — | rounding-dominated regime |
-| Ascent acceptance: TWR-1.3 methalox 2-stage to LEO-300 | 9,300–9,500 m/s | band | 01 §3.10 tuning target |
+| Ascent acceptance: TWR-1.3 methalox 2-stage to LEO-300 | 8,700–9,300 m/s integrated | band | 01 §3.10 tuning target (canon owner; equatorial 2D sim pays no site/dispersion margin) |
 
 ### 4.8 Zoom layers
 
