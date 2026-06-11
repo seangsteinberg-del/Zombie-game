@@ -123,9 +123,13 @@ def run(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.headless:
         os.environ["SDL_VIDEODRIVER"] = "dummy"
+        os.environ["SDL_AUDIODRIVER"] = "dummy"
 
     import pygame
     from aphelion.render.draw_conics import draw_conic
+    from aphelion.ui.audio import AudioCues
+    from aphelion.ui.effects import Particles, Starfield
+    from aphelion.ui.tutorial import first_flight_tutorial
 
     db, tree = load_solar_system()
     planets = sorted((i for i, b in db.bodies.items() if b["parent"] == "core:sun"),
@@ -164,6 +168,11 @@ def run(argv: list[str] | None = None) -> int:
     research = ResearchState()
     visited = {"core:earth"}
 
+    starfield = Starfield(size)
+    particles = Particles()
+    audio = AudioCues()
+    tutorial = first_flight_tutorial()
+
     frame_count = 0
     running = True
     while running:
@@ -187,18 +196,25 @@ def run(argv: list[str] | None = None) -> int:
                     focus_idx = (focus_idx + (-1 if shift else 1)) % len(focus_order)
                 elif event.key == pygame.K_c:
                     focus_idx = 0
-                elif event.key == pygame.K_x:
-                    craft.burn(t, +step, 0.0)
-                    toast, toast_until = f"prograde +{step:.0f} m/s", t + 5
-                elif event.key == pygame.K_z:
-                    craft.burn(t, -step, 0.0)
-                    toast, toast_until = f"retrograde {step:.0f} m/s", t + 5
-                elif event.key == pygame.K_a:
-                    craft.burn(t, 0.0, +step)
-                    toast, toast_until = f"radial-out +{step:.0f} m/s", t + 5
-                elif event.key == pygame.K_d:
-                    craft.burn(t, 0.0, -step)
-                    toast, toast_until = f"radial-in {step:.0f} m/s", t + 5
+                elif event.key == pygame.K_F1:
+                    tutorial.visible = not tutorial.visible
+                elif event.key in (pygame.K_x, pygame.K_z, pygame.K_a, pygame.K_d):
+                    dvp = {pygame.K_x: (+step, 0.0), pygame.K_z: (-step, 0.0),
+                           pygame.K_a: (0.0, +step), pygame.K_d: (0.0, -step)}[event.key]
+                    crx0, cry0, cvx0, cvy0 = craft.state(t)
+                    craft.burn(t, *dvp)
+                    names = {pygame.K_x: "prograde +", pygame.K_z: "retrograde -",
+                             pygame.K_a: "radial-out +", pygame.K_d: "radial-in -"}
+                    toast = f"{names[event.key]}{step:.0f} m/s"
+                    toast_until = t + 5
+                    audio.play("burn")
+                    frx0, fry0, _, _ = tree.state_in_root(craft.frame_id, t)
+                    px0 = cam.world_to_screen(frx0 + crx0, fry0 + cry0)
+                    v0n = math.hypot(cvx0, cvy0) or 1.0
+                    # exhaust plume opposes the dv direction (screen y flips)
+                    sgn = -1.0 if event.key == pygame.K_x else 1.0
+                    particles.emit_burn(px0[0], px0[1],
+                                        sgn * cvx0 / v0n, -sgn * cvy0 / v0n)
             elif event.type == pygame.MOUSEWHEEL:
                 if event.y > 0:
                     cam.zoom_in(event.y)
@@ -217,11 +233,26 @@ def run(argv: list[str] | None = None) -> int:
             research.earn_science(sci)
             toast = f"FIRST ENTRY: {craft.frame_id.split(':')[1]} +{sci:.0f} science"
             toast_until = t + 10
+            audio.play("soi")
             if craft.frame_id == "core:moon" and program.complete(t, "c_moon"):
                 toast += "  |  CONTRACT PAID +$80M"
+                audio.play("paid")
             if craft.frame_id == "core:sun" and program.complete(t, "c_helio"):
                 toast += "  |  CONTRACT PAID +$120M"
+                audio.play("paid")
         program.expire_overdue(t)
+
+        # tutorial rail (12 §5.8): completes from real state
+        legs_now = craft.predict(t)
+        if tutorial.update({
+            "warp_idx": warp_idx,
+            "apo_m": (craft.elements.apoapsis
+                      - tree.body(craft.frame_id).radius
+                      if craft.elements.alpha > 0 else 0.0),
+            "moon_leg": any(leg.frame_id == "core:moon" for leg in legs_now),
+            "frame": craft.frame_id,
+        }):
+            audio.play("blip")
 
         # camera follow (positions in ROOT frame; camera frame is the root)
         def body_root(bid: str) -> tuple[float, float]:
@@ -239,6 +270,7 @@ def run(argv: list[str] | None = None) -> int:
             cam.follow(*body_root(focus))
 
         screen.fill((6, 8, 14))
+        starfield.draw(screen, cam)
 
         for pid in planets:
             draw_conic(screen, tree.body(pid).elements, cam, _ORBIT_COLOR)
@@ -298,8 +330,13 @@ def run(argv: list[str] | None = None) -> int:
         if t < toast_until and toast:
             screen.blit(font.render(toast, True, (255, 230, 140)), (10, 68))
         screen.blit(font.render(
-            "X/Z prograde±  A/D radial±  (shift=100)  C craft  TAB focus  ./, warp",
+            "X/Z prograde±  A/D radial±  (shift=100)  C craft  TAB focus  ./, warp  F1 tutorial",
             True, (110, 120, 135)), (10, size[1] - 24))
+
+        particles.update_draw(screen, real_dt)
+        if tutorial.visible and tutorial.current_text:
+            tut = font.render(tutorial.current_text, True, (140, 235, 255))
+            screen.blit(tut, (size[0] // 2 - tut.get_width() // 2, 86))
 
         pygame.display.flip()
         frame_count += 1
