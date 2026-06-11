@@ -1,0 +1,13 @@
+id     = "core:hb_grn"
+type   = "structure"
+tier   = "T3"
+name   = "Greenhouse (full diet)"
+mass_t = 16.0
+catalog_id = "HB-GRN"
+class = "HAB"
+size = [4, 9]
+cost_musd = 90.0
+[hab]
+v_press_m3 = 280.0
+sleeps = 0
+grow_m2 = 200.0

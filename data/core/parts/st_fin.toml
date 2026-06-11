@@ -1,0 +1,10 @@
+id     = "core:st_fin"
+type   = "structure"
+tier   = "T0"
+name   = "Grid fin / strake"
+mass_t = 0.15
+catalog_id = "ST-FIN"
+class = "STRUCT"
+size = [1, 2]
+cost_musd = 0.4
+qalpha_bonus_kpadeg = 40

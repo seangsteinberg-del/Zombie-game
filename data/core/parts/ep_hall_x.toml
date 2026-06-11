@@ -1,0 +1,18 @@
+id     = "core:ep_hall_x"
+type   = "engine"
+tier   = "T3"
+name   = "HALL-100 nested string (X3)"
+mass_t = 0.46
+catalog_id = "EN-HALL-X"
+class = "ENGINE"
+size = [2, 2]
+cost_musd = 12.0
+[engine]
+thrust_kN  = 0.0054
+isp_s      = 2000.0
+isp_sl_s   = 0.0
+throttle   = [0.0, 1.0]
+gimbal_deg = 10.0
+propellant = { Xenon = 1.0 }
+ep_power_kwe = 100.0
+ep_eta = 0.52

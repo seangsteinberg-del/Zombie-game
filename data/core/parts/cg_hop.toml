@@ -1,0 +1,11 @@
+id     = "core:cg_hop"
+type   = "structure"
+tier   = "T1"
+name   = "Ore hopper"
+mass_t = 1.5
+catalog_id = "CG-HOP"
+class = "STRUCT"
+size = [3, 3]
+cost_musd = 1.0
+cargo_t = 12.0
+bulk = true

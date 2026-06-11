@@ -1,0 +1,12 @@
+id     = "core:st_rd"
+type   = "structure"
+tier   = "T0"
+name   = "Radial decoupler"
+mass_t = 0.03
+catalog_id = "ST-RD"
+class = "STRUCT"
+size = [1, 1]
+cost_musd = 0.15
+decoupler = true
+radial = true
+sep_ms = 1.0

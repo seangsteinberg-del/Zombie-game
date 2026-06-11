@@ -3,6 +3,10 @@ type      = "engine"
 tier      = "T1"
 name      = "MV-815 Bantam-V vacuum methalox engine"
 mass_t    = 0.9
+catalog_id = "EN-M0V"
+class = "ENGINE"
+size = [2, 3]
+cost_musd = 2.2
 [engine]
 thrust_kN  = 815.0
 isp_s      = 367.0

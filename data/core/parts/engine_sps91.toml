@@ -3,6 +3,10 @@ type      = "engine"
 tier      = "T0"
 name      = "SPS-91 Pelican storable service engine (Apollo)"
 mass_t    = 0.293
+catalog_id = "EN-HYP-L"
+class = "ENGINE"
+size = [1, 2]
+cost_musd = 4.0
 [engine]
 thrust_kN  = 91.0
 isp_s      = 314.0

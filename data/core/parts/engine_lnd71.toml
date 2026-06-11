@@ -3,6 +3,10 @@ type      = "engine"
 tier      = "T1"
 name      = "LND-71 Ibex storable lander (SuperDraco)"
 mass_t    = 0.12
+catalog_id = "EN-LND"
+class = "ENGINE"
+size = [1, 1]
+cost_musd = 2.0
 [engine]
 thrust_kN  = 73.0
 isp_s      = 243.0

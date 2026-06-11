@@ -1,0 +1,13 @@
+id     = "core:hb_inf_s"
+type   = "structure"
+tier   = "T0"
+name   = "Inflatable module S (BEAM)"
+mass_t = 1.4
+catalog_id = "HB-INF-S"
+class = "HAB"
+size = [2, 2]
+cost_musd = 8.0
+deployed_size = [3, 4]
+[hab]
+v_press_m3 = 16.0
+sleeps = 0

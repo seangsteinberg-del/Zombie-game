@@ -3,6 +3,10 @@ type   = "tank"
 tier   = "T0"
 name   = "Water tank"
 mass_t = 0.1
+catalog_id = "TK-H2O"
+class = "TANK"
+size = [1, 2]
+cost_musd = 0.2
 [tank]
 capacity_t = 2.0
 mixture    = { Water = 1.0 }

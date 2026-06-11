@@ -3,6 +3,10 @@ type      = "engine"
 tier      = "T0"
 name      = "OMS-27 Vireo storable OMS (Shuttle OMS)"
 mass_t    = 0.118
+catalog_id = "EN-HYP"
+class = "ENGINE"
+size = [1, 1]
+cost_musd = 2.5
 [engine]
 thrust_kN  = 26.7
 isp_s      = 316.0

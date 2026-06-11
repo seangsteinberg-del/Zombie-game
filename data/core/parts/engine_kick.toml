@@ -1,0 +1,18 @@
+id     = "core:engine_kick"
+type   = "engine"
+tier   = "T0"
+name   = "SRM-2 kick stage (Star 48B)"
+mass_t = 0.126
+catalog_id = "EN-KICK"
+class = "ENGINE"
+size = [1, 2]
+cost_musd = 1.5
+[engine]
+thrust_kN  = 66.0
+isp_s      = 286.0
+isp_sl_s   = 250.0
+throttle   = [1.0, 1.0]
+gimbal_deg = 0.0
+solid      = true
+solid_prop_t = 2.011
+burn_s     = 87.0

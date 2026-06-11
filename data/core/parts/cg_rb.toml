@@ -1,0 +1,10 @@
+id     = "core:cg_rb"
+type   = "structure"
+tier   = "T2"
+name   = "Regolith ballast box"
+mass_t = 0.4
+catalog_id = "CG-RB"
+class = "STRUCT"
+size = [2, 2]
+cost_musd = 0.2
+ballast_fill_t = 10.0

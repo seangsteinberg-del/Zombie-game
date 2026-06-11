@@ -1,0 +1,17 @@
+id     = "core:hb_inf_l"
+type   = "crew"
+tier   = "T1"
+name   = "Inflatable hab L (B330)"
+mass_t = 20.0
+catalog_id = "HB-INF-L"
+class = "HAB"
+size = [4, 6]
+cost_musd = 150.0
+deployed_size = [8, 11]
+[crew]
+capacity = 6
+endurance_days = 1800
+[hab]
+v_press_m3 = 330.0
+sleeps = 6
+surge = 6

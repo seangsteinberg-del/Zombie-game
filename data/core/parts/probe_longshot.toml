@@ -3,3 +3,9 @@ type   = "structure"
 tier   = "T4"
 name   = "LONGSHOT interstellar precursor probe"
 mass_t = 1.8
+
+catalog_id = "UT-PROBE"
+class = "ELEC"
+size = [1, 1]
+cost_musd = 8.0
+command_source = true

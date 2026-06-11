@@ -3,6 +3,10 @@ type      = "engine"
 tier      = "T2"
 name      = "K-2 Kingfisher nuclear-thermal engine (NERVA-D)"
 mass_t    = 2.3
+catalog_id = "EN-NTR-S"
+class = "ENGINE"
+size = [2, 5]
+cost_musd = 60.0
 [engine]
 thrust_kN  = 245.0
 isp_s      = 900.0

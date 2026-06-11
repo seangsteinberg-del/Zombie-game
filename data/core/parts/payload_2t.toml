@@ -3,3 +3,8 @@ type   = "structure"
 tier   = "T0"
 name   = "Payload mass simulator (2 t)"
 mass_t = 2.0
+
+catalog_id = "CG-PAY"
+class = "STRUCT"
+size = [2, 2]
+cost_musd = 0.5

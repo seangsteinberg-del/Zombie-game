@@ -3,6 +3,10 @@ type   = "tank"
 tier   = "T1"
 name   = "Xenon COPV L"
 mass_t = 0.24
+catalog_id = "TK-XE-L"
+class = "TANK"
+size = [2, 2]
+cost_musd = 2.0
 [tank]
 capacity_t = 4.0
 mixture    = { Xenon = 1.0 }

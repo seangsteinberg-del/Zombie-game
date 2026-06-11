@@ -1,0 +1,12 @@
+id     = "core:ut_avs"
+type   = "structure"
+tier   = "T0"
+name   = "Probe core S"
+mass_t = 0.04
+catalog_id = "UT-AVS"
+class = "ELEC"
+size = [1, 1]
+cost_musd = 2.0
+command_source = true
+[power]
+draw_kwe = 0.1

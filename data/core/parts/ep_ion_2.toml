@@ -1,0 +1,18 @@
+id     = "core:ep_ion_2"
+type   = "engine"
+tier   = "T0"
+name   = "ION-2 string (NSTAR)"
+mass_t = 0.03
+catalog_id = "EN-ION-2"
+class = "ENGINE"
+size = [1, 1]
+cost_musd = 2.0
+[engine]
+thrust_kN  = 0.000092
+isp_s      = 3120.0
+isp_sl_s   = 0.0
+throttle   = [0.0, 1.0]
+gimbal_deg = 10.0
+propellant = { Xenon = 1.0 }
+ep_power_kwe = 2.3
+ep_eta = 0.61

@@ -1,0 +1,12 @@
+id     = "core:pw_kp10"
+type   = "structure"
+tier   = "T2"
+name   = "Fission unit 10 kWe"
+mass_t = 1.5
+catalog_id = "PW-KP10"
+class = "ELEC"
+size = [2, 3]
+cost_musd = 60.0
+[power]
+output_kwe = 10.0
+reactor = true

@@ -1,0 +1,13 @@
+id     = "core:pw_nep"
+type   = "structure"
+tier   = "T3"
+name   = "NEP reactor 2 MWe"
+mass_t = 35.0
+catalog_id = "PW-NEP"
+class = "ELEC"
+size = [5, 8]
+cost_musd = 600.0
+deployed_area_m2 = 144.0
+[power]
+output_kwe = 2000.0
+reactor = true

@@ -3,6 +3,10 @@ type      = "engine"
 tier      = "T0"
 name      = "KV-981 Mule-V kerolox vacuum (Merlin Vacuum)"
 mass_t    = 0.63
+catalog_id = "EN-K1V"
+class = "ENGINE"
+size = [1, 3]
+cost_musd = 2.0
 [engine]
 thrust_kN  = 981.0
 isp_s      = 348.0

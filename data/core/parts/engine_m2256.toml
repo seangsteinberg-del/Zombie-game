@@ -3,6 +3,10 @@ type      = "engine"
 tier      = "T1"
 name      = "M-2256 Drayhorse methalox (Raptor 2)"
 mass_t    = 1.63
+catalog_id = "EN-M2"
+class = "ENGINE"
+size = [2, 3]
+cost_musd = 2.5
 [engine]
 thrust_kN  = 2394.0
 isp_s      = 347.0

@@ -23,8 +23,15 @@ def db():
 
 def test_catalog_lists_full_parts_pack(db):
     b = Builder(db, ResearchState())
-    # engines (incl. NTR + torch) + tanks + payload + crew + gondola + probe
-    assert len(b.catalog) == 37
+    # the full 06 catalog (D1): 37 legacy rows + the buildspec additions
+    # (structure, solids, NTRs, EP/RCS, power, habs, spin/dock, cargo/
+    # utility/entry/landing, Whipple)
+    assert len(b.catalog) == 118
+    # every part now carries the 2D-builder fields
+    for pid in b.catalog:
+        p = db.by_type("parts")[pid]
+        assert "size" in p and "class" in p and "catalog_id" in p, pid
+        assert ("cost_musd" in p) or p.get("printable"), pid
 
 
 def test_research_gating_in_builder(db):

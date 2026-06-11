@@ -1,0 +1,11 @@
+id     = "core:st_keel"
+type   = "structure"
+tier   = "T1"
+name   = "Station keel truss"
+mass_t = 9.0
+catalog_id = "ST-KEEL"
+class = "STRUCT"
+size = [2, 10]
+cost_musd = 6.0
+axial_kn = 4000
+utility_runs = true

@@ -1,0 +1,13 @@
+id     = "core:hb_grn_s"
+type   = "structure"
+tier   = "T2"
+name   = "Greenhouse S"
+mass_t = 6.0
+catalog_id = "HB-GRN-S"
+class = "HAB"
+size = [3, 5]
+cost_musd = 40.0
+[hab]
+v_press_m3 = 80.0
+sleeps = 0
+grow_m2 = 50.0

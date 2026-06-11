@@ -1,0 +1,13 @@
+id     = "core:pw_sa_ro"
+type   = "structure"
+tier   = "T0"
+name   = "Roll-out array (ROSA)"
+mass_t = 0.25
+catalog_id = "PW-SA-RO"
+class = "ELEC"
+size = [1, 3]
+cost_musd = 2.0
+deployed_area_m2 = 46.0
+[power]
+output_kwe = 20.0
+solar = true

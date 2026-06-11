@@ -1,0 +1,14 @@
+id     = "core:ut_hs5"
+type   = "structure"
+tier   = "T1"
+name   = "Heat shield 5 m (PICA)"
+mass_t = 0.9
+catalog_id = "UT-HS5"
+class = "SHIELD"
+size = [4, 1]
+cost_musd = 4.0
+nodes = "no_bottom"
+[shield]
+tps_qdot_max = 12.0
+ablator_t = 0.31
+column_w = 4

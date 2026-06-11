@@ -1,0 +1,11 @@
+id     = "core:ut_dish_m"
+type   = "structure"
+tier   = "T0"
+name   = "High-gain dish 3 m"
+mass_t = 0.09
+catalog_id = "UT-DISH-M"
+class = "ELEC"
+size = [1, 2]
+cost_musd = 3.0
+dish_m = 3.0
+deployed_area_m2 = 7.0

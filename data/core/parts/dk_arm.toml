@@ -1,0 +1,12 @@
+id     = "core:dk_arm"
+type   = "structure"
+tier   = "T1"
+name   = "Robot arm (17 m)"
+mass_t = 1.8
+catalog_id = "DK-ARM"
+class = "MECH"
+size = [1, 2]
+cost_musd = 40.0
+robot_arm = true
+reach_m = 17
+moves_t = 116

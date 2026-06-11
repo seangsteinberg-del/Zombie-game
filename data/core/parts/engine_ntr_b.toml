@@ -1,0 +1,19 @@
+id     = "core:engine_ntr_b"
+type   = "engine"
+tier   = "T3"
+name   = "NTR-111B bimodal (Borowski)"
+mass_t = 4.6
+catalog_id = "EN-NTR-B"
+class = "ENGINE"
+size = [2, 5]
+cost_musd = 120.0
+[engine]
+thrust_kN  = 111.0
+isp_s      = 900.0
+isp_sl_s   = 900.0
+throttle   = [0.3, 1.0]
+gimbal_deg = 2.0
+propellant = { Hydrogen = 1.0 }
+ntr = true
+restart_lockout_s = 2700
+idle_export_kwe = 25.0

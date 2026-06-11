@@ -1,0 +1,13 @@
+id     = "core:hb_cup"
+type   = "structure"
+tier   = "T0"
+name   = "Cupola"
+mass_t = 1.9
+catalog_id = "HB-CUP"
+class = "HAB"
+size = [2, 1]
+cost_musd = 15.0
+[hab]
+v_press_m3 = 3.0
+sleeps = 0
+morale = 6

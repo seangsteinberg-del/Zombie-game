@@ -1,0 +1,13 @@
+id     = "core:pw_sa_r"
+type   = "structure"
+tier   = "T0"
+name   = "Rigid solar wing"
+mass_t = 0.16
+catalog_id = "PW-SA-R"
+class = "ELEC"
+size = [1, 4]
+cost_musd = 0.8
+deployed_area_m2 = 12.5
+[power]
+output_kwe = 5.0
+solar = true

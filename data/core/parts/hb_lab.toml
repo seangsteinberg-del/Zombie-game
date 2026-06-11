@@ -1,0 +1,13 @@
+id     = "core:hb_lab"
+type   = "structure"
+tier   = "T1"
+name   = "Science lab (Destiny-class)"
+mass_t = 12.0
+catalog_id = "HB-LAB"
+class = "HAB"
+size = [4, 9]
+cost_musd = 100.0
+[hab]
+v_press_m3 = 100.0
+sleeps = 0
+lab = true

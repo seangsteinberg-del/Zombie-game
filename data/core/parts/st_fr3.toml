@@ -1,0 +1,11 @@
+id     = "core:st_fr3"
+type   = "structure"
+tier   = "T0"
+name   = "Fairing 3.7 m"
+mass_t = 0.9
+catalog_id = "ST-FR3"
+class = "STRUCT"
+size = [3, 9]
+cost_musd = 1.2
+fairing_interior = [3, 8]
+nodes = "interior"

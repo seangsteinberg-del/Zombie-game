@@ -3,6 +3,10 @@ type   = "tank"
 tier   = "T0"
 name   = "Storable-prop tank S"
 mass_t = 0.1
+catalog_id = "TK-HYP-S"
+class = "TANK"
+size = [1, 2]
+cost_musd = 0.4
 [tank]
 capacity_t = 1.6
 mixture    = { NTO = 0.623, MMH = 0.377 }

@@ -1,0 +1,15 @@
+id     = "core:hb_rig_s"
+type   = "crew"
+tier   = "T0"
+name   = "Rigid module S"
+mass_t = 9.0
+catalog_id = "HB-RIG-S"
+class = "HAB"
+size = [3, 5]
+cost_musd = 70.0
+[crew]
+capacity = 2
+endurance_days = 900
+[hab]
+v_press_m3 = 60.0
+sleeps = 2

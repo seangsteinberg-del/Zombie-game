@@ -1,0 +1,13 @@
+id     = "core:dk_l"
+type   = "structure"
+tier   = "T1"
+name   = "Structural berth L"
+mass_t = 1.2
+catalog_id = "DK-L"
+class = "MECH"
+size = [3, 1]
+cost_musd = 5.0
+[port]
+size = "L"
+rating_kn = 800
+fluid = true

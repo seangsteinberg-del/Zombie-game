@@ -1,0 +1,19 @@
+id     = "core:hb_cap4"
+type   = "crew"
+tier   = "T0"
+name   = "4-crew capsule"
+mass_t = 9.5
+catalog_id = "HB-CAP4"
+class = "HAB"
+size = [3, 4]
+cost_musd = 60.0
+command_source = true
+[crew]
+capacity = 4
+endurance_days = 30
+[hab]
+v_press_m3 = 20.0
+sleeps = 4
+[shield]
+tps_qdot_max = 12.0
+ablator_t = 0.11

@@ -3,6 +3,10 @@ type      = "engine"
 tier      = "T1"
 name      = "HL-67 Heron hydrolox lander (CECE)"
 mass_t    = 0.23
+catalog_id = "EN-HL"
+class = "ENGINE"
+size = [1, 2]
+cost_musd = 2.0
 [engine]
 thrust_kN  = 67.0
 isp_s      = 445.0

@@ -1,0 +1,12 @@
+id     = "core:fd_1"
+type   = "structure"
+tier   = "T1"
+name   = "Crossfeed fuel duct"
+mass_t = 0.08
+catalog_id = "FD-1"
+class = "STRUCT"
+size = [1, 2]
+cost_musd = 0.3
+crossfeed = true
+flow_cryo_tpm = 1.0
+flow_storable_tpm = 5.0

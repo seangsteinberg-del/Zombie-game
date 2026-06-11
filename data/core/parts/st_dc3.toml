@@ -1,0 +1,11 @@
+id     = "core:st_dc3"
+type   = "structure"
+tier   = "T0"
+name   = "Stack decoupler 3.7 m"
+mass_t = 0.12
+catalog_id = "ST-DC3"
+class = "STRUCT"
+size = [3, 1]
+cost_musd = 0.3
+decoupler = true
+sep_ms = 0.3

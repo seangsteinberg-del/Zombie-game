@@ -1,0 +1,11 @@
+id     = "core:st_ll"
+type   = "structure"
+tier   = "T0"
+name   = "Landing leg"
+mass_t = 0.15
+catalog_id = "ST-LL"
+class = "MECH"
+size = [1, 2]
+cost_musd = 0.4
+leg_rating_t = 8.0
+leg_td_ms = 3.0

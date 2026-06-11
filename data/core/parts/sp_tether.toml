@@ -1,0 +1,11 @@
+id     = "core:sp_tether"
+type   = "structure"
+tier   = "T2"
+name   = "Bolo tether 200 m"
+mass_t = 0.8
+catalog_id = "SP-TETHER"
+class = "MECH"
+size = [1, 2]
+cost_musd = 3.0
+tether_kn = 300
+tether_m = 200

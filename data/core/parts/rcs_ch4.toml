@@ -1,0 +1,17 @@
+id     = "core:rcs_ch4"
+type   = "engine"
+tier   = "T1"
+name   = "RCS-M2K hot-gas quad"
+mass_t = 0.06
+catalog_id = "RCS-CH4"
+class = "ENGINE"
+size = [1, 1]
+cost_musd = 0.6
+[engine]
+thrust_kN  = 8.0
+isp_s      = 270.0
+isp_sl_s   = 250.0
+throttle   = [0.0, 1.0]
+gimbal_deg = 0.0
+propellant = { Oxygen = 0.783, Methane = 0.217 }
+rcs = true

@@ -4,6 +4,11 @@ tier   = "T0"
 name   = "VL-2 Vela crew capsule (Dragon-class)"
 mass_t = 4.2
 
+catalog_id = "HB-CAP2"
+class = "HAB"
+size = [2, 3]
+cost_musd = 25.0
+command_source = true
 [crew]
 capacity       = 2
 endurance_days = 40.0

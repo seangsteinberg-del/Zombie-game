@@ -1,0 +1,12 @@
+id     = "core:ws_s"
+type   = "structure"
+tier   = "T1"
+name   = "Stuffed Whipple 10 m2"
+mass_t = 0.22
+catalog_id = "WS-S"
+class = "SHIELD"
+size = [1, 2]
+cost_musd = 0.8
+[shield]
+whipple_eta = 0.98
+covers_m2 = 10.0

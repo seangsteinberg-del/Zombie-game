@@ -3,6 +3,10 @@ type      = "engine"
 tier      = "T2"
 name      = "ML-24 Gopher methalox lander (Morpheus HD)"
 mass_t    = 0.08
+catalog_id = "EN-ML"
+class = "ENGINE"
+size = [1, 1]
+cost_musd = 1.5
 [engine]
 thrust_kN  = 24.0
 isp_s      = 320.0

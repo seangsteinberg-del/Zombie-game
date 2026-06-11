@@ -1,0 +1,17 @@
+id     = "core:hb_inf_m"
+type   = "crew"
+tier   = "T1"
+name   = "Inflatable hab M (TransHab)"
+mass_t = 13.2
+catalog_id = "HB-INF-M"
+class = "HAB"
+size = [3, 5]
+cost_musd = 80.0
+deployed_size = [8, 11]
+[crew]
+capacity = 6
+endurance_days = 900
+[hab]
+v_press_m3 = 340.0
+sleeps = 6
+surge = 6

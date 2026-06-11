@@ -1,0 +1,18 @@
+id     = "core:rcs_hyp"
+type   = "engine"
+tier   = "T0"
+name   = "RCS-D400 quad (Draco)"
+mass_t = 0.022
+catalog_id = "RCS-HYP"
+class = "ENGINE"
+size = [1, 1]
+cost_musd = 0.4
+[engine]
+thrust_kN  = 1.6
+isp_s      = 300.0
+isp_sl_s   = 280.0
+throttle   = [0.0, 1.0]
+gimbal_deg = 0.0
+propellant = { NTO = 0.623, MMH = 0.377 }
+rcs = true
+ullage = true

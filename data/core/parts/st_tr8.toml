@@ -1,0 +1,11 @@
+id     = "core:st_tr8"
+type   = "structure"
+tier   = "T0"
+name   = "Ship spine truss"
+mass_t = 1.4
+catalog_id = "ST-TR8"
+class = "STRUCT"
+size = [2, 8]
+cost_musd = 0.8
+axial_kn = 2500
+nodes = "interior"

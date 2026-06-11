@@ -1,0 +1,18 @@
+id     = "core:ep_ion_n"
+type   = "engine"
+tier   = "T1"
+name   = "ION-7 string (NEXT-C)"
+mass_t = 0.058
+catalog_id = "EN-ION-N"
+class = "ENGINE"
+size = [1, 1]
+cost_musd = 5.0
+[engine]
+thrust_kN  = 0.000236
+isp_s      = 4190.0
+isp_sl_s   = 0.0
+throttle   = [0.0, 1.0]
+gimbal_deg = 10.0
+propellant = { Xenon = 1.0 }
+ep_power_kwe = 6.9
+ep_eta = 0.70

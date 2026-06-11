@@ -1,0 +1,9 @@
+id     = "core:st_is3"
+type   = "structure"
+tier   = "T0"
+name   = "Interstage 3 m"
+mass_t = 0.4
+catalog_id = "ST-IS3"
+class = "STRUCT"
+size = [3, 2]
+cost_musd = 0.3

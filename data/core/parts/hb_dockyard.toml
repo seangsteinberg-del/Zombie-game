@@ -1,0 +1,16 @@
+id     = "core:hb_dockyard"
+type   = "structure"
+tier   = "T2"
+name   = "Dry Dock module"
+mass_t = 24.0
+catalog_id = "HB-DOCKYARD"
+class = "STRUCT"
+size = [6, 12]
+cost_musd = 200.0
+dockyard = true
+[hab]
+v_press_m3 = 20.0
+sleeps = 0
+[port]
+size = "B"
+rating_kn = 150

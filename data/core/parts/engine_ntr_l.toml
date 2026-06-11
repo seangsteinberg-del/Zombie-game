@@ -1,0 +1,18 @@
+id     = "core:engine_ntr_l"
+type   = "engine"
+tier   = "T2"
+name   = "NTR-246 heavy tug core (NERVA XE')"
+mass_t = 12.5
+catalog_id = "EN-NTR-L"
+class = "ENGINE"
+size = [3, 6]
+cost_musd = 90.0
+[engine]
+thrust_kN  = 247.0
+isp_s      = 850.0
+isp_sl_s   = 850.0
+throttle   = [0.3, 1.0]
+gimbal_deg = 2.0
+propellant = { Hydrogen = 1.0 }
+ntr = true
+restart_lockout_s = 2700

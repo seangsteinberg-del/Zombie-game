@@ -1,0 +1,18 @@
+id     = "core:ep_hall_1"
+type   = "engine"
+tier   = "T0"
+name   = "HALL-1 string (SPT-100)"
+mass_t = 0.012
+catalog_id = "EN-HALL-1"
+class = "ENGINE"
+size = [1, 1]
+cost_musd = 1.0
+[engine]
+thrust_kN  = 0.000083
+isp_s      = 1600.0
+isp_sl_s   = 0.0
+throttle   = [0.0, 1.0]
+gimbal_deg = 10.0
+propellant = { Xenon = 1.0 }
+ep_power_kwe = 1.35
+ep_eta = 0.48

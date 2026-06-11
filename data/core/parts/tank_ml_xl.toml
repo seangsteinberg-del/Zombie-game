@@ -3,6 +3,10 @@ type   = "tank"
 tier   = "T1"
 name   = "Methalox tank XL"
 mass_t = 4.8
+catalog_id = "TK-ML-XL"
+class = "TANK"
+size = [4, 8]
+cost_musd = 4.5
 [tank]
 capacity_t = 80.0
 mixture    = { Oxygen = 0.783, Methane = 0.217 }

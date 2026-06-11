@@ -1,0 +1,12 @@
+id     = "core:dk_s"
+type   = "structure"
+tier   = "T0"
+name   = "Docking port S (IDSS)"
+mass_t = 0.34
+catalog_id = "DK-S"
+class = "MECH"
+size = [1, 1]
+cost_musd = 2.0
+[port]
+size = "S"
+rating_kn = 60

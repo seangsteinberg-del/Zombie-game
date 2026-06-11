@@ -1,0 +1,10 @@
+id     = "core:cg_con"
+type   = "structure"
+tier   = "T1"
+name   = "Container berth"
+mass_t = 0.15
+catalog_id = "CG-CON"
+class = "STRUCT"
+size = [2, 1]
+cost_musd = 0.3
+container_berth = true

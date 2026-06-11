@@ -1,0 +1,15 @@
+id     = "core:ar_shell"
+type   = "structure"
+tier   = "T3"
+name   = "Entry aeroshell 5 m"
+mass_t = 2.5
+catalog_id = "AR-SHELL"
+class = "SHIELD"
+size = [4, 2]
+cost_musd = 8.0
+nodes = "no_bottom"
+[shield]
+tps_qdot_max = 12.0
+ablator_t = 0.63
+column_w = 4
+venus_rated = true

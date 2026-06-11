@@ -3,6 +3,10 @@ type      = "engine"
 tier      = "T2"
 name      = "ML-111 Badger pump-fed methalox lander engine"
 mass_t    = 0.24
+catalog_id = "EN-ML1"
+class = "ENGINE"
+size = [1, 2]
+cost_musd = 1.8
 [engine]
 thrust_kN  = 111.0
 isp_s      = 355.0

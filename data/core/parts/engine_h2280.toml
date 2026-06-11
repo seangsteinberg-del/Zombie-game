@@ -3,6 +3,10 @@ type      = "engine"
 tier      = "T1"
 name      = "H-2280 Shire hydrolox sustainer (RS-25)"
 mass_t    = 3.177
+catalog_id = "EN-H2"
+class = "ENGINE"
+size = [2, 4]
+cost_musd = 40.0
 [engine]
 thrust_kN  = 2279.0
 isp_s      = 452.0

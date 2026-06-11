@@ -1,0 +1,16 @@
+id     = "core:sp_hab"
+type   = "crew"
+tier   = "T2"
+name   = "Ring hab pod"
+mass_t = 8.0
+catalog_id = "SP-HAB"
+class = "HAB"
+size = [3, 4]
+cost_musd = 60.0
+spin_r_min_m = 20.0
+[crew]
+capacity = 2
+endurance_days = 1800
+[hab]
+v_press_m3 = 60.0
+sleeps = 2

@@ -1,0 +1,12 @@
+id     = "core:ws_bf"
+type   = "structure"
+tier   = "T2"
+name   = "BasaltFiber stuffed panel"
+mass_t = 0.22
+catalog_id = "WS-BF"
+class = "SHIELD"
+size = [1, 2]
+printable = true
+[shield]
+whipple_eta = 0.97
+covers_m2 = 10.0

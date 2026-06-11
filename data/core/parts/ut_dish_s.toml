@@ -1,0 +1,10 @@
+id     = "core:ut_dish_s"
+type   = "structure"
+tier   = "T0"
+name   = "High-gain dish 0.5 m"
+mass_t = 0.02
+catalog_id = "UT-DISH-S"
+class = "ELEC"
+size = [1, 1]
+cost_musd = 1.0
+dish_m = 0.5

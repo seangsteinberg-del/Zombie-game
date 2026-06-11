@@ -4,6 +4,10 @@ tier   = "T2"
 name   = "PX-6 Pollux deep-space habitat"
 mass_t = 17.0
 
+catalog_id = "HB-RIG-L"
+class = "HAB"
+size = [4, 9]
+cost_musd = 120.0
 [crew]
 capacity       = 6
 endurance_days = 950.0

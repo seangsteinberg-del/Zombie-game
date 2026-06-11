@@ -1,0 +1,12 @@
+id     = "core:pw_fsp"
+type   = "structure"
+tier   = "T2"
+name   = "Surface fission 100 kWe"
+mass_t = 9.0
+catalog_id = "PW-FSP"
+class = "ELEC"
+size = [3, 4]
+cost_musd = 150.0
+[power]
+output_kwe = 100.0
+reactor = true

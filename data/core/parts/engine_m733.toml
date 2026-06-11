@@ -3,6 +3,10 @@ type      = "engine"
 tier      = "T1"
 name      = "M-733 Bantam methalox booster engine"
 mass_t    = 0.75
+catalog_id = "EN-M0"
+class = "ENGINE"
+size = [2, 3]
+cost_musd = 2.0
 [engine]
 thrust_kN  = 765.0
 isp_s      = 329.0

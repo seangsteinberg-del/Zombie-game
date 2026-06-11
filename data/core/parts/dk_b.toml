@@ -1,0 +1,13 @@
+id     = "core:dk_b"
+type   = "structure"
+tier   = "T0"
+name   = "Berthing port B (CBM)"
+mass_t = 0.25
+catalog_id = "DK-B"
+class = "MECH"
+size = [2, 1]
+cost_musd = 2.0
+[port]
+size = "B"
+rating_kn = 150
+needs_arm = true

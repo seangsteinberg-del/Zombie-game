@@ -1,0 +1,11 @@
+id     = "core:ut_dish_l"
+type   = "structure"
+tier   = "T2"
+name   = "Deployable dish 10 m"
+mass_t = 0.4
+catalog_id = "UT-DISH-L"
+class = "ELEC"
+size = [2, 2]
+cost_musd = 10.0
+dish_m = 10.0
+deployed_area_m2 = 80.0

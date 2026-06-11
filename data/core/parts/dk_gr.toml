@@ -1,0 +1,10 @@
+id     = "core:dk_gr"
+type   = "structure"
+tier   = "T0"
+name   = "Grapple fixture"
+mass_t = 0.05
+catalog_id = "DK-GR"
+class = "MECH"
+size = [1, 1]
+cost_musd = 0.3
+grapple = true

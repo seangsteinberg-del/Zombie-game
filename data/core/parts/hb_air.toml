@@ -1,0 +1,13 @@
+id     = "core:hb_air"
+type   = "structure"
+tier   = "T0"
+name   = "Airlock"
+mass_t = 6.1
+catalog_id = "HB-AIR"
+class = "HAB"
+size = [2, 3]
+cost_musd = 30.0
+[hab]
+v_press_m3 = 34.0
+sleeps = 0
+airlock = true

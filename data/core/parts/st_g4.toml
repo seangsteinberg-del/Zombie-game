@@ -1,0 +1,9 @@
+id     = "core:st_g4"
+type   = "structure"
+tier   = "T0"
+name   = "Girder beam"
+mass_t = 0.3
+catalog_id = "ST-G4"
+class = "STRUCT"
+size = [1, 4]
+cost_musd = 0.15

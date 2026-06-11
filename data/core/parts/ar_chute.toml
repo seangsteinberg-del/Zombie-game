@@ -1,0 +1,12 @@
+id     = "core:ar_chute"
+type   = "structure"
+tier   = "T3"
+name   = "Supersonic extraction chute"
+mass_t = 0.6
+catalog_id = "AR-CHUTE"
+class = "MECH"
+size = [1, 1]
+cost_musd = 1.5
+chute_recover_t = 10.0
+chute_q_max_kpa = 4.0
+chute_mach_max = 2.2

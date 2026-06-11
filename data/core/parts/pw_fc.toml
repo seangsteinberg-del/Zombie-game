@@ -1,0 +1,12 @@
+id     = "core:pw_fc"
+type   = "structure"
+tier   = "T0"
+name   = "Fuel cell"
+mass_t = 0.12
+catalog_id = "PW-FC"
+class = "ELEC"
+size = [1, 1]
+cost_musd = 1.0
+[power]
+output_kwe = 7.0
+fuel_cell = true

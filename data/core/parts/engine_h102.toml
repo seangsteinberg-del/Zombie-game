@@ -3,6 +3,10 @@ type      = "engine"
 tier      = "T0"
 name      = "H-102 Crane hydrolox upper (RL10C-1)"
 mass_t    = 0.19
+catalog_id = "EN-H1"
+class = "ENGINE"
+size = [2, 4]
+cost_musd = 12.0
 [engine]
 thrust_kN  = 101.8
 isp_s      = 449.7

@@ -1,0 +1,18 @@
+id     = "core:engine_srb"
+type   = "engine"
+tier   = "T0"
+name   = "SRM-49 solid booster (GEM 63)"
+mass_t = 5.2
+catalog_id = "EN-SRB"
+class = "ENGINE"
+size = [2, 12]
+cost_musd = 6.0
+[engine]
+thrust_kN  = 1265.0
+isp_s      = 275.0
+isp_sl_s   = 245.0
+throttle   = [1.0, 1.0]
+gimbal_deg = 0.0
+solid      = true
+solid_prop_t = 44.1
+burn_s     = 94.0

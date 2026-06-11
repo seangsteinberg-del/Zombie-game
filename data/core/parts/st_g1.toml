@@ -1,0 +1,9 @@
+id     = "core:st_g1"
+type   = "structure"
+tier   = "T0"
+name   = "Girder segment"
+mass_t = 0.08
+catalog_id = "ST-G1"
+class = "STRUCT"
+size = [1, 1]
+cost_musd = 0.05

@@ -3,6 +3,10 @@ type      = "engine"
 tier      = "T4"
 name      = "D-1 Daystar fusion torch [SPECULATIVE]"
 mass_t    = 6.0
+catalog_id = "EN-FT"
+class = "ENGINE"
+size = [3, 8]
+cost_musd = 2000.0
 [engine]
 thrust_kN  = 120.0
 isp_s      = 8000.0

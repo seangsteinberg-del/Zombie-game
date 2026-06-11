@@ -1,0 +1,11 @@
+id     = "core:ut_cmg"
+type   = "structure"
+tier   = "T0"
+name   = "Control moment gyro"
+mass_t = 0.3
+catalog_id = "UT-CMG"
+class = "MECH"
+size = [1, 1]
+cost_musd = 8.0
+cmg_nms = 4760
+cmg_torque_knm = 0.26

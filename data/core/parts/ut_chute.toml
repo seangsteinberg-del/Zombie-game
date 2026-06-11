@@ -1,0 +1,12 @@
+id     = "core:ut_chute"
+type   = "structure"
+tier   = "T0"
+name   = "Parachute cluster"
+mass_t = 0.24
+catalog_id = "UT-CHUTE"
+class = "MECH"
+size = [1, 1]
+cost_musd = 0.5
+chute_recover_t = 6.0
+chute_q_max_kpa = 20.0
+chute_a_max_g = 7.0

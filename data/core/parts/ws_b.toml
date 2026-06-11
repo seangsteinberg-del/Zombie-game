@@ -1,0 +1,12 @@
+id     = "core:ws_b"
+type   = "structure"
+tier   = "T0"
+name   = "Whipple panel 10 m2"
+mass_t = 0.1
+catalog_id = "WS-B"
+class = "SHIELD"
+size = [1, 2]
+cost_musd = 0.3
+[shield]
+whipple_eta = 0.90
+covers_m2 = 10.0
