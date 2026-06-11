@@ -190,6 +190,8 @@ from aphelion.game.fleet import FleetVessel  # noqa: E402  (campaign vessel)
 from aphelion.game.sites import SITES, sites_for_body  # noqa: E402
 from aphelion.game.sectors import (  # noqa: E402
     BODY_OPS, landable, sector_site)
+from aphelion.game import eva as eva_sim  # noqa: E402
+from aphelion.render import eva_art  # noqa: E402
 from aphelion.sim.environment.mars_climate import (  # noqa: E402
     MarsWeather, f_dust as mars_f_dust)
 from aphelion.sim.environment.space_env import (  # noqa: E402
@@ -204,6 +206,9 @@ def _surface_options(av, bases, db=None,
         site = SITES[av.landed_at]
         opts.append((("relaunch",),
                      f"RELAUNCH — fly the ascent   (~{site['ascent_dv']:,.0f} m/s)"))
+        if av.crew:
+            opts.append((("eva",),
+                         f"EVA — WALK THE SURFACE   ({av.crew[0]} suits up)"))
         if db is not None:
             anomalies = db.by_type("anomalies")
             for aid in site.get("anomalies", []):
@@ -666,7 +671,7 @@ def run(argv: list[str] | None = None) -> int:
     parser.add_argument("--scene", type=str, default="auto",
                         choices=["auto", "menu", "flight", "builder", "base",
                                  "research", "research_ed", "research_codex",
-                                 "ascent", "descent", "help",
+                                 "ascent", "descent", "eva", "help",
                                  "contracts", "crew", "pause", "planner"])
     args = parser.parse_args(argv)
     if args.headless:
@@ -911,6 +916,9 @@ def run(argv: list[str] | None = None) -> int:
     pause_cursor = 0
     research_cursor = 0
     research_view = "tree"            # tree | ed (data dashboard) | codex
+    eva_state = None                  # EvaState while walking the surface
+    eva_av = None                     # the landed vessel the walker left
+    EVA_TIME_FACTOR = 30.0            # EVA ops run at 30x sim time
     surface_open = False
     surface_cursor = 0
     base_cursor = 0
@@ -949,6 +957,26 @@ def run(argv: list[str] | None = None) -> int:
         research_open, research_view = True, "ed"
     elif want == "research_codex":
         research_open, research_view = True, "codex"
+    elif want == "eva":                 # QA: a walker on the lunar pole
+        from aphelion.sim.vessels.vessel import Vessel as _V
+        _rows = [_V.fueled_row(db, "core:engine_ml111"),
+                 _V.fueled_row(db, "core:tank_ml_s"),
+                 _V.fueled_row(db, "core:capsule_vela")]
+        _bq = tree.body("core:moon")
+        _rq = _bq.radius + 100e3
+        _el = state_to_elements(_rq, 0.0, 0.0,
+                                tr.circular_speed(_bq.mu, _rq), 0.0, _bq.mu)
+        _fvq = FleetVessel(tree, "core:moon", _el,
+                           _V(db, _rows, stage_plan=[[0, 1, 2]]),
+                           "EVA-QA", next_vid, crew=["V. Ainsworth"])
+        next_vid += 1
+        _fvq.land_at("site:peary", SITES["site:peary"], 0.0)
+        vessels.append(_fvq)
+        eva_av = _fvq
+        eva_state = eva_sim.EvaState(
+            SITES["site:peary"].get("sector_id", "site:peary"), 8.0,
+            _bq.mu / _bq.radius ** 2, "V. Ainsworth")
+        scene = "eva"
     autosave_acc = 0.0
     gold_flash = 0.0
     ascent_event_count = 0
@@ -1347,6 +1375,102 @@ def run(argv: list[str] | None = None) -> int:
                     elif event.key == pygame.K_ESCAPE:
                         prox.outcome = "aborted"
                         prox_done = True
+            elif scene == "eva":
+                if event.type == pygame.KEYDOWN and eva_state is not None:
+                    if event.key == pygame.K_SPACE:
+                        if not eva_state.airborne:
+                            eva_state.step(0.0, 0, False, True)
+                            audio.play("tick")
+                    elif event.key == pygame.K_e:
+                        # nearest interactable in range wins
+                        if eva_state.near(0.0):           # the lander
+                            scene = "flight"
+                            toast = (f"{eva_state.member} ABOARD — EVA "
+                                     f"complete: {eva_state.dist_walked:,.0f}"
+                                     f" m walked")
+                            toast_until = t + 8
+                            eva_state = None
+                            audio.play("clunk")
+                        else:
+                            home_b = next(
+                                (b for b in bases
+                                 if b.site_id == eva_av.landed_at), None)
+                            handled = False
+                            if home_b is not None:
+                                pos = eva_sim.module_positions(home_b.built)
+                                for bi, bx in pos.items():
+                                    if eva_state.near(bx):
+                                        home_b.advance(t)
+                                        mid = None
+                                        for m in home_b.net.modules:
+                                            if m.module_id.startswith(
+                                                    home_b.built[bi]):
+                                                mid = m
+                                                break
+                                        if mid is not None:
+                                            toast = (f"CONSOLE "
+                                                     f"{mid.module_id}: "
+                                                     f"{mid.state}  ·  "
+                                                     f"{abs(mid.power_kw):,.0f}"
+                                                     f" kW  ·  F2 manages "
+                                                     f"the colony")
+                                            toast_until = t + 8
+                                        handled = True
+                                        audio.play("blip")
+                                        break
+                            if not handled and eva_state.near(
+                                    eva_sim.ANOMALY_X_M, 6.0):
+                                site_e = SITES[eva_av.landed_at]
+                                pend = [a for a in site_e.get("anomalies", [])
+                                        if a not in explore["investigated"]]
+                                if pend:
+                                    an = db.by_type("anomalies")[pend[0]]
+                                    explore["investigated"].add(pend[0])
+                                    gb = float(an["gb"])
+                                    research.earn_science(2.0 * gb)
+                                    explore["surveydata_gb"] += gb
+                                    toast = (f"{an['class']} INVESTIGATED "
+                                             f"ON FOOT: {an['name']} — "
+                                             f"+{gb:.0f} GB, "
+                                             f"+{2 * gb:.0f} sci")
+                                    toast_until = t + 12
+                                    audio.play("paid")
+                    elif event.key == pygame.K_f:
+                        flags = explore.setdefault("flags", [])
+                        sid_e = eva_av.landed_at
+                        if abs(eva_state.x) >= eva_sim.FLAG_X_MIN_M \
+                                and sid_e not in flags:
+                            flags.append(sid_e)
+                            research.earn_science(5.0)
+                            toast = (f"FLAG PLANTED at "
+                                     f"{SITES[sid_e]['name']} (+5 sci, "
+                                     f"and a photograph for the ages)")
+                            toast_until = t + 10
+                            audio.play("paid")
+                        elif sid_e in flags:
+                            toast = "the flag already stands here"
+                            toast_until = t + 4
+                    elif event.key == pygame.K_r:
+                        if eva_state.scoops_left > 0:
+                            eva_state.scoops_left -= 1
+                            site_e = SITES[eva_av.landed_at]
+                            got = research.analyze_sample(
+                                "regolith_scoop",
+                                site_e.get("region_code", "LOCAL"),
+                                site_e.get("x", 3.0), "insitu")
+                            toast = (f"SAMPLE SCOOPED + analyzed in-situ: "
+                                     f"+{got:,.0f} sci  "
+                                     f"({eva_state.scoops_left} bags left)")
+                            toast_until = t + 8
+                            audio.play("blip")
+                        else:
+                            toast = "sample bags spent — return to the lander"
+                            toast_until = t + 5
+                    elif event.key == pygame.K_ESCAPE:
+                        toast = "board at the lander (walk to it, then E)"
+                        toast_until = t + 5
+                    elif event.key == pygame.K_F2 and base_screen:
+                        base_screen = False
             elif scene == "victory":
                 if event.type == pygame.KEYDOWN and event.key in (
                         pygame.K_RETURN, pygame.K_ESCAPE):
@@ -1436,7 +1560,23 @@ def run(argv: list[str] | None = None) -> int:
                     audio.play("tick")
                 elif event.key == pygame.K_RETURN:
                     action = opts[surface_cursor % len(opts)][0]
-                    if action[0] == "investigate":
+                    if action[0] == "eva":
+                        body_w = tree.body(av0.frame_id)
+                        g_loc = body_w.mu / (body_w.radius ** 2)
+                        sec_id = SITES[av0.landed_at].get(
+                            "sector_id", av0.landed_at)
+                        slope = db.by_type("sectors").get(
+                            sec_id, {}).get("slope_sigma", 4.0)
+                        eva_state = eva_sim.EvaState(
+                            sec_id, slope, g_loc, av0.crew[0])
+                        eva_av = av0
+                        surface_open = False
+                        scene = "eva"
+                        toast = (f"{av0.crew[0]} ON EVA — E interact, "
+                                 f"F flag, R sample, board at the lander")
+                        toast_until = t + 8
+                        audio.play("clunk")
+                    elif action[0] == "investigate":
                         aid = action[1]
                         an = db.by_type("anomalies")[aid]
                         explore["investigated"].add(aid)
@@ -3151,6 +3291,169 @@ def run(argv: list[str] | None = None) -> int:
             screen.blit(fpill, (fx0 - 18, size[1] - 59))
             screen.blit(foot, (fx0, size[1] - 53))
             bloom.apply(screen)
+            screen.blit(vig, (0, 0))
+            apply_fade()
+            pygame.display.flip()
+            frame_count += 1
+            if args.frames and frame_count >= args.frames:
+                running = False
+            continue
+
+        if scene == "eva" and eva_state is not None and eva_av is not None:
+            # ---- THE WALK: side-view surface EVA at body-true gravity ----
+            clock.advance_analytic(clock.t + EVA_TIME_FACTOR * real_dt)
+            t = clock.t
+            keys = pygame.key.get_pressed()
+            move = 0
+            if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+                move -= 1
+            if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+                move += 1
+            run = bool(keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT])
+            eva_state.step(real_dt, move, run, False)
+            # the suit clock runs at sim rate (step burned 1x already)
+            eva_state.o2_s = max(0.0, eva_state.o2_s
+                                 - (EVA_TIME_FACTOR - 1.0) * real_dt)
+            if eva_state.o2_s <= 0.0:
+                lost_w = eva_state.member
+                crew.pop(lost_w, None)
+                if lost_w in eva_av.crew:
+                    eva_av.crew.remove(lost_w)
+                toast = f"{lost_w} DIED ON EVA — suit oxygen exhausted"
+                toast_until = t + 14
+                audio.play("alarm")
+                eva_state, scene = None, "flight"
+                continue
+
+            site_e = SITES[eva_av.landed_at]
+            body_e = site_e["body"]
+            ppm = 16.0
+            h_ground = 470
+            camx = eva_state.x
+
+            screen.fill((4, 6, 12))
+            if site_e.get("aero") or body_e in _ATMO_BODIES:
+                esky = sky_surface(size, body_e)
+                esky.set_alpha(255)
+                screen.blit(esky, (0, 0))
+            else:
+                starfield.draw(screen, cam)
+                esky = sky_surface(size, body_e)
+                esky.set_alpha(70)
+                screen.blit(esky, (0, 0))
+            for ridge_s, fac in ridge_layers(body_e, size[0]):
+                rx = -((camx * ppm * fac * 0.25) % RIDGE_PAD)
+                screen.blit(ridge_s,
+                            (rx, h_ground - ridge_s.get_height() - 36))
+
+            gp = ground_palette(body_e)
+
+            def _sy(wx: float) -> float:
+                return h_ground - eva_state.ground_at(wx) * ppm
+
+            def _sx(wx: float) -> float:
+                return size[0] / 2.0 + (wx - camx) * ppm
+
+            pts = []
+            for px_col in range(-8, size[0] + 9, 8):
+                wx = camx + (px_col - size[0] / 2.0) / ppm
+                pts.append((px_col, _sy(wx)))
+            pygame.draw.polygon(
+                screen, gp.base,
+                pts + [(size[0] + 8, size[1] + 4), (-8, size[1] + 4)])
+            pygame.draw.lines(screen, gp.speck, False, pts, 2)
+            for rwx, rr in eva_state.rocks:
+                rsx = _sx(rwx)
+                if -20 < rsx < size[0] + 20:
+                    pygame.draw.ellipse(
+                        screen, gp.dark,
+                        (rsx - rr * ppm / 2, _sy(rwx) - rr * ppm * 0.35,
+                         rr * ppm, rr * ppm * 0.55))
+
+            # the lander you walked out of (x = 0)
+            stack_e = [[eva_av.vessel.rows[i].part_id for i in st]
+                       for st in eva_av.vessel.stage_plan]
+            lspr = pygame.transform.rotozoom(vessel_sprite(db, stack_e),
+                                             0.0, 0.6)
+            screen.blit(lspr, (_sx(0.0) - lspr.get_width() / 2,
+                               _sy(0.0) - lspr.get_height()))
+            # the colony, walkable end to end
+            home_b = next((b for b in bases
+                           if b.site_id == eva_av.landed_at), None)
+            if home_b is not None:
+                from aphelion.render.base_art import module_sprite
+                for bi, bx in eva_sim.module_positions(home_b.built).items():
+                    spr = module_sprite(home_b.built[bi])
+                    screen.blit(spr, (_sx(bx) - spr.get_width() / 2,
+                                      _sy(bx) - spr.get_height()))
+            pend_e = [a for a in site_e.get("anomalies", [])
+                      if a not in explore["investigated"]]
+            if pend_e:
+                mk = eva_art.anomaly_marker(ui_t)
+                screen.blit(mk, (_sx(eva_sim.ANOMALY_X_M) - 13,
+                                 _sy(eva_sim.ANOMALY_X_M) - 52))
+                theme.draw_text(screen, _sx(eva_sim.ANOMALY_X_M) - 30,
+                                _sy(eva_sim.ANOMALY_X_M) - 70, "ANOMALY",
+                                color=theme.COLORS["gold"], font="small")
+            if eva_av.landed_at in explore.get("flags", []):
+                fspr = eva_art.flag()
+                screen.blit(fspr, (_sx(14.0),
+                                   _sy(14.0) - fspr.get_height()))
+
+            aspr = eva_art.astronaut(int(eva_state.frame),
+                                     eva_state.facing, eva_state.airborne)
+            screen.blit(aspr, (size[0] / 2 - aspr.get_width() / 2,
+                               h_ground - eva_state.y * ppm
+                               - aspr.get_height()))
+
+            # interaction prompt above the helmet
+            prompt = ""
+            if eva_state.near(0.0):
+                prompt = "E — BOARD THE LANDER"
+            elif pend_e and eva_state.near(eva_sim.ANOMALY_X_M, 6.0):
+                prompt = "E — INVESTIGATE"
+            elif home_b is not None and any(
+                    eva_state.near(bx) for bx in
+                    eva_sim.module_positions(home_b.built).values()):
+                prompt = "E — MODULE CONSOLE"
+            if prompt:
+                theme.draw_text(screen, size[0] / 2 - 60,
+                                h_ground - eva_state.y * ppm
+                                - aspr.get_height() - 24,
+                                prompt, color=theme.COLORS["gold"],
+                                font="ui_small")
+
+            # HUD: who, where, the suit clock, what this gravity allows
+            chx_e = 10
+            o2c = (theme.COLORS["danger"] if eva_state.o2_frac < 0.25
+                   else theme.COLORS["accent"])
+            for chip_txt, chip_col in (
+                    (f"EVA  {eva_state.member}", theme.COLORS["text"]),
+                    (site_e["name"], theme.COLORS["text_dim"]),
+                    (f"g {eva_state.g:.2f} m/s²", theme.COLORS["accent"]),
+                    (f"jump {eva_state.jump_apex_m():.1f} m",
+                     theme.COLORS["text_dim"]),
+                    (f"bags {eva_state.scoops_left}",
+                     theme.COLORS["text_dim"]),
+                    (f"walked {eva_state.dist_walked:,.0f} m",
+                     theme.COLORS["text_dim"])):
+                cs = theme.chip(chip_txt, chip_col)
+                screen.blit(cs, (chx_e, 8))
+                chx_e += cs.get_width() + 8
+            theme.draw_text(screen, 10, 40, "SUIT O2",
+                            color=o2c, font="small")
+            screen.blit(theme.bar(220, 12, eva_state.o2_frac, o2c),
+                        (70, 39))
+            if eva_state.o2_frac < 0.25:
+                theme.draw_text(screen, 300, 39,
+                                "RETURN TO THE LANDER",
+                                color=theme.COLORS["danger"],
+                                font="ui_small")
+            screen.blit(theme.footer(
+                size[0],
+                "A/D walk   SHIFT run   SPACE jump   E interact   "
+                "F plant flag   R scoop sample"),
+                (0, size[1] - theme.FOOTER_H))
             screen.blit(vig, (0, 0))
             apply_fade()
             pygame.display.flip()
