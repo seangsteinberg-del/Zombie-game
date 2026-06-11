@@ -61,8 +61,8 @@ _LEG_COLORS = [(120, 255, 170), (255, 200, 60), (255, 120, 200),
                (140, 200, 255), (255, 160, 90), (200, 140, 255)]
 _WARP_LADDER = (1.0,) + RAILS_RATES
 _PREDICT_HORIZON = 60.0 * SECONDS_PER_DAY
-_PAUSE_ITEMS = ("RESUME", "QUICKSAVE", "LOAD QUICKSAVE",
-                "EXIT TO MAIN MENU", "QUIT TO DESKTOP")
+_PAUSE_ITEMS = ("RESUME", "QUICKSAVE", "LOAD QUICKSAVE", "VOLUME -",
+                "VOLUME +", "EXIT TO MAIN MENU", "QUIT TO DESKTOP")
 
 
 def _tech_order(db) -> list[str]:
@@ -294,7 +294,16 @@ def run(argv: list[str] | None = None) -> int:
     starfield = Starfield(size)
     particles = Particles()
     audio = AudioCues()
-    qs_path = default_save_dir() / "quicksave.aph"
+    if not args.headless:
+        audio.start_music()
+    save_dir = default_save_dir()
+    qs_path = save_dir / "quicksave.aph"
+    as_path = save_dir / "autosave.aph"
+
+    def latest_save():
+        saves = sorted(save_dir.glob("*.aph"),
+                       key=lambda p: p.stat().st_mtime, reverse=True)
+        return saves[0] if saves else None
 
     def fresh_campaign() -> dict:
         """A brand-new 2049 campaign (12 §3: Act 1 opens with money, two
@@ -311,8 +320,8 @@ def run(argv: list[str] | None = None) -> int:
                     visited_surface=set(), milestones=set(),
                     tutorial=first_flight_tutorial())
 
-    def loaded_campaign() -> dict:
-        got = read_campaign(qs_path, db, tree)
+    def loaded_campaign(path=None) -> dict:
+        got = read_campaign(path or latest_save() or qs_path, db, tree)
         tut = first_flight_tutorial()
         tut.completed = got["tutorial_done"]
         rng = (RngRegistry.from_state(got["rng_state"]) if got["rng_state"]
@@ -348,15 +357,15 @@ def run(argv: list[str] | None = None) -> int:
      crew_warned, last_dose_t, toast, toast_until) = \
         campaign_tuple(fresh_campaign())
 
-    def do_quicksave() -> str:
+    def do_quicksave(path=None, label="QUICKSAVED") -> str:
         snap = snapshot_campaign(
             t=clock.t, vessels=vessels, active_idx=active_idx,
             next_vid=next_vid, program=program, research=research,
             crew=crew, visited=visited, visited_surface=visited_surface,
             milestones=milestones, bases=bases,
             tutorial_done=tutorial.completed, rng=campaign_rng)
-        write_campaign(qs_path, snap)
-        return "QUICKSAVED"
+        write_campaign(path or qs_path, snap)
+        return label
 
     want = args.scene
     if want == "auto":
@@ -382,6 +391,9 @@ def run(argv: list[str] | None = None) -> int:
     base_idx = 0
     crew_open = False
     crew_cursor = 0
+    autosave_acc = 0.0
+    gold_flash = 0.0
+    ascent_event_count = 0
     body_click_pts: list = []
     vessel_click_pts: list = []
     burn_glow = 0.0
@@ -443,12 +455,12 @@ def run(argv: list[str] | None = None) -> int:
                 screen = pygame.display.set_mode(size, flags,
                                                  vsync=0 if args.headless else 1)
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_m:
-                audio.muted = not audio.muted
-                toast = "audio muted" if audio.muted else "audio on"
+                toast = ("audio muted" if audio.toggle_mute()
+                         else "audio on")
                 toast_until = t + 3.0
             elif scene == "menu":
                 items = (["NEW CAMPAIGN"]
-                         + (["CONTINUE"] if qs_path.exists() else [])
+                         + (["CONTINUE"] if latest_save() else [])
                          + ["QUIT"])
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_UP:
@@ -537,6 +549,14 @@ def run(argv: list[str] | None = None) -> int:
                         audio.play("blip")
                     elif choice == "LOAD QUICKSAVE":
                         load_save = True
+                    elif choice == "VOLUME -":
+                        v = audio.set_master(audio.master - 0.1)
+                        toast, toast_until = f"volume {v:.0%}", t + 3
+                        audio.play("blip")
+                    elif choice == "VOLUME +":
+                        v = audio.set_master(audio.master + 0.1)
+                        toast, toast_until = f"volume {v:.0%}", t + 3
+                        audio.play("blip")
                     elif choice == "EXIT TO MAIN MENU":
                         pause_open = False
                         scene = "menu"
@@ -696,6 +716,7 @@ def run(argv: list[str] | None = None) -> int:
                             live_stack = [list(s) for s in builder.stack if s]
                             launch_cost = cost
                             ascent_warp, ascent_acc = 1.0, 0.0
+                            ascent_event_count = 0
                             node = None
                             builder_open = False
                             scene = "ascent"
@@ -906,7 +927,7 @@ def run(argv: list[str] | None = None) -> int:
             scene, pause_open, focus_idx = "flight", False, 0
             surface_open = False
         if load_save:
-            if qs_path.exists():
+            if latest_save() is not None:
                 try:
                     (clock, vessels, active_idx, next_vid, program,
                      campaign_rng, bases, crew, research, visited,
@@ -1044,6 +1065,17 @@ def run(argv: list[str] | None = None) -> int:
                 hh = rspr.get_height() / 2.0 - 4.0
                 particles.emit_burn(ccx + ex * hh, ccy + ey * hh, ex, ey,
                                     n=3)
+            if len(live.events) > ascent_event_count:
+                for ev_line in live.events[ascent_event_count:]:
+                    if "STAGE" in ev_line:       # separation debris puff
+                        particles.emit_burn(size[0] // 2,
+                                            ry + rspr.get_height(),
+                                            0.0, 1.0, n=22,
+                                            color=(220, 224, 232))
+                        audio.play("blip")
+                    elif "MECO" in ev_line or "CIRC" in ev_line:
+                        audio.play("soi")
+                ascent_event_count = len(live.events)
             particles.update_draw(screen, real_dt)
 
             # ---- HUD ----
@@ -1157,7 +1189,7 @@ def run(argv: list[str] | None = None) -> int:
                 (110, 122, 140))
             screen.blit(sub, (size[0] // 2 - sub.get_width() // 2, 205))
             items = (["NEW CAMPAIGN"]
-                     + (["CONTINUE"] if qs_path.exists() else [])
+                     + (["CONTINUE"] if latest_save() else [])
                      + ["QUIT"])
             menu_rects = []
             for i, label in enumerate(items):
@@ -1188,6 +1220,14 @@ def run(argv: list[str] | None = None) -> int:
                 warp_idx -= 1
         if not paused and not pause_open:
             clock.advance_analytic(clock.t + _WARP_LADDER[warp_idx] * real_dt)
+            autosave_acc += real_dt
+            if autosave_acc >= 300.0:        # five real minutes
+                autosave_acc = 0.0
+                try:
+                    do_quicksave(as_path, "AUTOSAVED")
+                    toast, toast_until = "autosaved", clock.t + 3.0
+                except Exception:
+                    pass
         t = clock.t
         av = vessels[active_idx % len(vessels)] if vessels else None
         # node execution at its instant (the plan IS the burn at rails fidelity)
@@ -1226,7 +1266,11 @@ def run(argv: list[str] | None = None) -> int:
         sweep_toasts, won_now = campaign_sweep(program, sweep_state, t)
         for line in sweep_toasts:
             toast, toast_until = line, t + 10
-            audio.play("paid" if "PAID" in line else "blip")
+            if "PAID" in line:
+                audio.play("paid")
+                gold_flash = 0.6
+            else:
+                audio.play("blip")
         if won_now and "won" not in milestones:
             milestones.add("won")
             scene = "victory"
@@ -1815,6 +1859,11 @@ def run(argv: list[str] | None = None) -> int:
 
         bloom.apply(screen)
         screen.blit(vig, (0, 0))
+        if gold_flash > 0.0:
+            fl = pygame.Surface(size, pygame.SRCALPHA)
+            fl.fill((255, 215, 130, int(56 * gold_flash)))
+            screen.blit(fl, (0, 0))
+            gold_flash = max(0.0, gold_flash - 1.6 * real_dt)
         pygame.display.flip()
         frame_count += 1
         if args.frames and frame_count >= args.frames:

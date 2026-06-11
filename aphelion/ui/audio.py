@@ -14,6 +14,8 @@ class AudioCues:
     def __init__(self) -> None:
         self.ok = False
         self.muted = False
+        self.master = 0.8
+        self._music_chan = None
         try:
             import pygame
             pygame.mixer.init(frequency=_RATE, size=-16, channels=1)
@@ -31,6 +33,48 @@ class AudioCues:
         except Exception:
             self._snd = {}
 
+    def start_music(self) -> None:
+        """Generative deep-space pad (91-15: synthesized, no assets): a
+        slow Dm9 drone with detune shimmer and breathing LFOs, looped with
+        matched endpoints so the seam is inaudible."""
+        if not self.ok or self._music_chan is not None:
+            return
+        try:
+            import pygame
+            dur = 28.0
+            t = np.linspace(0.0, dur, int(_RATE * dur), endpoint=False)
+            wave = np.zeros_like(t)
+            voices = ((73.42, 0.9, 0.013), (110.0, 0.7, 0.021),
+                      (174.61, 0.55, 0.017), (261.63, 0.35, 0.011),
+                      (329.63, 0.22, 0.007))
+            for f, amp, lfo in voices:
+                env = 0.55 + 0.45 * np.sin(2.0 * np.pi * lfo * t + f)
+                wave += amp * env * (np.sin(2.0 * np.pi * f * t)
+                                     + 0.35 * np.sin(2.0 * np.pi * f * 1.005 * t))
+            wave /= np.max(np.abs(wave))
+            wave *= 0.6 + 0.4 * np.sin(np.pi * t / dur)   # seamless seam
+            pcm = (wave * 0.45 * 32_767.0).astype(np.int16)
+            snd = pygame.mixer.Sound(buffer=pcm.tobytes())
+            self._music_chan = snd.play(loops=-1)
+            self._apply_music_volume()
+        except Exception:
+            self._music_chan = None
+
+    def _apply_music_volume(self) -> None:
+        if self._music_chan is not None:
+            self._music_chan.set_volume(
+                0.0 if self.muted else 0.45 * self.master)
+
+    def set_master(self, v: float) -> float:
+        self.master = max(0.0, min(1.0, v))
+        self._apply_music_volume()
+        return self.master
+
+    def toggle_mute(self) -> bool:
+        self.muted = not self.muted
+        self._apply_music_volume()
+        return self.muted
+
     @staticmethod
     def _tone(partials, seconds: float, decay: float, vol: float):
         import pygame
@@ -45,6 +89,8 @@ class AudioCues:
     def play(self, name: str) -> None:
         if self.ok and not self.muted and name in self._snd:
             try:
-                self._snd[name].play()
+                snd = self._snd[name]
+                snd.set_volume(self.master)
+                snd.play()
             except Exception:
                 pass
