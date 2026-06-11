@@ -26,10 +26,19 @@ import sys
 from aphelion.core.clock import RAILS_RATES, SimClock
 from aphelion.core.units import SECONDS_PER_DAY
 from aphelion.render.camera import Camera, ZoomLayer
+from aphelion.sim.economy import Contract, Program
 from aphelion.sim.orbits.ephemeris import load_solar_system
 from aphelion.sim.orbits.kepler import elements_to_state, state_to_elements
 from aphelion.sim.orbits import transfers as tr
 from aphelion.sim.orbits.trajectory import predict_trajectory
+from aphelion.sim.research import ResearchState
+
+# exploration science per first SOI entry (11: location-gated Science)
+_FIRST_ENTRY_SCIENCE = {
+    "core:moon": 400.0, "core:sun": 250.0, "core:mars": 900.0,
+    "core:venus": 900.0, "core:mercury": 1_200.0, "core:jupiter": 1_500.0,
+    "core:europa": 2_500.0, "core:titan": 2_500.0, "core:saturn": 1_500.0,
+}
 
 _BODY_COLORS = {
     "core:sun": (255, 220, 120), "core:mercury": (140, 130, 120),
@@ -146,6 +155,15 @@ def run(argv: list[str] | None = None) -> int:
     toast = ""
     toast_until = 0.0
 
+    # -- campaign layer (12/11): funds, contracts, exploration science --
+    program = Program(funds=150_000_000.0)
+    program.offer(Contract("c_moon", "Reach the Moon's SOI",
+                           payout=80_000_000.0, deadline_s=120 * 86_400.0))
+    program.offer(Contract("c_helio", "Achieve heliocentric orbit",
+                           payout=120_000_000.0, deadline_s=365 * 86_400.0))
+    research = ResearchState()
+    visited = {"core:earth"}
+
     frame_count = 0
     running = True
     while running:
@@ -192,6 +210,18 @@ def run(argv: list[str] | None = None) -> int:
         t = clock.t
         for note in craft.advance_to(t):
             toast, toast_until = f"SOI {note}", t + 8
+        # campaign hooks: first-entry science + contract completion
+        if craft.frame_id not in visited:
+            visited.add(craft.frame_id)
+            sci = _FIRST_ENTRY_SCIENCE.get(craft.frame_id, 200.0)
+            research.earn_science(sci)
+            toast = f"FIRST ENTRY: {craft.frame_id.split(':')[1]} +{sci:.0f} science"
+            toast_until = t + 10
+            if craft.frame_id == "core:moon" and program.complete(t, "c_moon"):
+                toast += "  |  CONTRACT PAID +$80M"
+            if craft.frame_id == "core:sun" and program.complete(t, "c_helio"):
+                toast += "  |  CONTRACT PAID +$120M"
+        program.expire_overdue(t)
 
         # camera follow (positions in ROOT frame; camera frame is the root)
         def body_root(bid: str) -> tuple[float, float]:
@@ -259,8 +289,14 @@ def run(argv: list[str] | None = None) -> int:
                 f"peri {peri/1e3:,.0f} km   apo {apo/1e3:,.0f} km   e {el.e:.4f}")
         screen.blit(font.render(hud1, True, (190, 200, 215)), (10, 8))
         screen.blit(font.render(hud2, True, _CRAFT_COLOR), (10, 28))
+        open_contracts = [c for c in program.contracts
+                          if c.completed_t is None and not c.failed]
+        hud3 = (f"PROGRAM  ${program.funds/1e6:,.0f}M   science {research.science:,.0f}"
+                f"   contracts open: "
+                + (" | ".join(c.description for c in open_contracts) or "none"))
+        screen.blit(font.render(hud3, True, (255, 215, 130)), (10, 48))
         if t < toast_until and toast:
-            screen.blit(font.render(toast, True, (255, 230, 140)), (10, 48))
+            screen.blit(font.render(toast, True, (255, 230, 140)), (10, 68))
         screen.blit(font.render(
             "X/Z prograde±  A/D radial±  (shift=100)  C craft  TAB focus  ./, warp",
             True, (110, 120, 135)), (10, size[1] - 24))
