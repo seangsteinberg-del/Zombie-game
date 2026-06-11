@@ -116,8 +116,8 @@ def test_thermal_balance_accounting():
     net.add_module(Module("reactor", inputs={}, outputs={}, rate_kgps=0.0,
                           power_kw=-10.0))
     net.modules[-1].heat_kw = 30.0            # reactor thermal waste
-    net.add_module(radiator_module("rad_1", area_m2=12.0, t_radiator_k=400.0))
+    net.add_module(radiator_module("rad_1", area_m2=14.0, t_radiator_k=400.0))
     emitted, capacity = thermal_balance_kw(net)
     assert emitted == pytest.approx(4.0 + 30.0)
-    assert capacity == pytest.approx(radiator_rejection_kw(12.0, 400.0))
-    assert capacity > emitted                  # this base is thermally sound
+    assert capacity == pytest.approx(radiator_rejection_kw(14.0, 400.0))
+    assert capacity > emitted                  # 36.6 kW capacity vs 34 emitted
