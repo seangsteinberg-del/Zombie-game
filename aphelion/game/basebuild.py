@@ -392,6 +392,16 @@ CATALOG: dict[str, dict] = {
         "mtbf_d": 80.0, "kinds": "*", "tech": "core:tech_ls08_crew_health",
         "build_days": 4.0,
     },
+    "pharma_lab": {
+        "prio": 3,           # 08 §3.8: pharmaceuticals + ECLSS filters +
+        "name": "Pharma & filter lab",  # agri micronutrients, pooled
+        "price_m": 18.0, "power_kw": 6.0,
+        "primary": ("MedSupplies", 2.0 / DAY),
+        "inputs": {"Polymers": 0.6, "Ammonia": 0.2, "Water": 0.2},
+        "outputs": {"MedSupplies": 1.0},
+        "mtbf_d": 85.0, "kinds": "*", "tech": "core:tech_ls08_crew_health",
+        "build_days": 4.0,
+    },
     # ---- food & fabrication (08 agriculture / 05 fab starters) -------------
     "salad_rack": {
         "prio": 2,           # LS-02 Veggie-class: morale + trace food
@@ -542,6 +552,7 @@ _DEFAULT_CAP = {
     "Polymers": 25_000.0, "BasaltFiber": 25_000.0, "Glass": 25_000.0,
     "RareEarths": 2_000.0, "Ammonia": 10_000.0, "Nitrogen": 20_000.0,
     "Argon": 5_000.0, "MMH": 5_000.0, "NTO": 10_000.0, "He3": 50.0,
+    "MedSupplies": 2_000.0,
 }
 
 
@@ -559,6 +570,8 @@ def starter_network(site: dict, rng=None) -> LedgerNetwork:
                      ("CO2", 30_000.0)):
         net.buffers[res] = Buffer(level=0.0, capacity=cap)
     net.buffers["Water"].level = 2_000.0          # founding reserve
+    # founding medical kit (08 §3.8): treatments + ECLSS filters draw it
+    net.buffers["MedSupplies"] = Buffer(level=200.0, capacity=2_000.0)
     # founding battery: 50 kWh rides down with the lander (09 §3.2)
     net.buffers["Battery"] = Buffer(level=50.0, capacity=50.0)
     # relief vent BELOW one electrolyzer's H2 co-product (28 kg/day at

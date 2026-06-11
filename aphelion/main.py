@@ -670,6 +670,8 @@ def run(argv: list[str] | None = None) -> int:
     parser.add_argument("--frames", type=int, default=0)
     parser.add_argument("--screenshot", type=str, default="")
     parser.add_argument("--headless", action="store_true")
+    parser.add_argument("--warp", type=int, default=0,
+                        help="QA: boot at this warp-ladder index")
     parser.add_argument("--scene", type=str, default="auto",
                         choices=["auto", "menu", "flight", "builder", "base",
                                  "research", "research_ed", "research_codex",
@@ -708,7 +710,8 @@ def run(argv: list[str] | None = None) -> int:
     from aphelion.core.rng import RngRegistry
     from aphelion.game.crew import (
         CrewMember, apply_crew_bonuses, best_skill, candidates,
-        reap_over_limit, science_multiplier)
+        morale_target, reap_over_limit, science_multiplier)
+    from aphelion.sim.habitat.food import BODY_RESERVE_KCAL
     from aphelion.save.campaign import (
         default_save_dir, read_campaign, snapshot_campaign, write_campaign)
     from aphelion.sim.habitat.dose import AMBIENT_MSV_DAY
@@ -917,8 +920,11 @@ def run(argv: list[str] | None = None) -> int:
         research_open = True
     elif want == "base":
         bases.append(BaseSite("Peary Base", 0.0, campaign_rng))
-        base_screen = True
+        bases[-1].crew.append("J. Okafor")     # QA: a resident for the
+        base_screen = True                     # humans-v2 hourly path
     boot_ascent = want == "ascent"
+    if args.warp:
+        warp_idx = min(args.warp, len(_WARP_LADDER) - 1)
 
     menu_cursor = 0
     menu_mode = "main"
@@ -1651,7 +1657,16 @@ def run(argv: list[str] | None = None) -> int:
                     audio.play("tick")
                 elif event.key == pygame.K_RETURN:
                     action = opts[surface_cursor % len(opts)][0]
-                    if action[0] == "eva":
+                    if action[0] == "eva" and (
+                            (w0 := crew.get(av0.crew[0])) is not None
+                            and not w0.eva_ok()):
+                        toast = (f"{av0.crew[0]} cannot EVA — "
+                                 + ("bedridden" if w0.bedridden else
+                                    f"deconditioned (C {w0.cond:.0f} < 40"
+                                    f"; exercise or surface gravity)"))
+                        toast_until = t + 8
+                        audio.play("warn")
+                    elif action[0] == "eva":
                         body_w = tree.body(av0.frame_id)
                         g_loc = body_w.mu / (body_w.radius ** 2)
                         sec_id = SITES[av0.landed_at].get(
@@ -3858,8 +3873,141 @@ def run(argv: list[str] | None = None) -> int:
             else:
                 env_state["spe_capped"] = False
 
-            # Mars dust (03 S-9): storms throttle every solar array on Mars
+            # ---- humans v2 (08 §4): morale, conditioning, energy — the
+            # daily character dynamics, integrated at the hourly cadence
             from aphelion.game.basebuild import CATALOG as _CAT
+            base_of = {n: b for b in bases for n in b.crew}
+            fv_of = {n: fv for fv in vessels for n in fv.crew}
+            starved_dead = []
+            for cname, member in crew.items():
+                fv0 = fv_of.get(cname)
+                b0 = base_of.get(cname)
+                if fv0 is not None:
+                    body0 = fv0.frame_id
+                    d_au = BODY_OPS.get(body0, {}).get("d", 1.0)
+                    if fv0.landed_at is not None:
+                        _bw = tree.body(body0)
+                        g_eff = _bw.mu / _bw.radius ** 2
+                    else:
+                        g_eff = 0.0
+                    ctx = {"vol_m3": 14.0, "private_quarters": False,
+                           "window": True, "g_eff": g_eff,
+                           "light_min": abs(d_au - 1.0) * 8.32}
+                    fed = True        # the vessel LSS clock owns starving
+                elif b0 is not None:
+                    body0 = SITES[b0.site_id]["body"]
+                    d_au = BODY_OPS.get(body0, {}).get("d", 1.0)
+                    _bw = tree.body(body0)
+                    g_eff = _bw.mu / _bw.radius ** 2
+                    beds = sum(_CAT.get(k, {}).get("beds", 0)
+                               for k in b0.built)
+                    n_res = max(1, len(b0.crew))
+                    fresh = any(
+                        m.state == "RUNNING"
+                        and m.module_id.rsplit("_", 1)[0] in
+                        ("greenhouse", "bio_farm", "salad_rack")
+                        for m in b0.net.modules)
+                    food_buf = b0.net.buffers.get("FoodRations")
+                    fed = food_buf is not None and food_buf.level > 0.5
+                    ctx = {"vol_m3": 25.0 * max(1, beds) / n_res,
+                           "private_quarters": beds >= n_res,
+                           "fresh_food": fresh, "plants": fresh,
+                           "window": True, "g_eff": g_eff,
+                           "light_min": abs(d_au - 1.0) * 8.32}
+                else:                 # on Earth between flights: recover
+                    member.step_morale(75.0, days)
+                    member.step_conditioning(9.81, 0.0, days)
+                    member.energy_kcal = BODY_RESERVE_KCAL
+                    member.conditions.clear()       # Earth hospitals
+                    continue
+                member.step_morale(morale_target(ctx, member), days)
+                member.step_conditioning(
+                    g_eff, 2.0 if g_eff < 3.71 else 0.0, days)
+                need = 2_500.0 * days
+                member.energy_kcal = min(
+                    BODY_RESERVE_KCAL,
+                    member.energy_kcal + (need if fed else 0.0) - need)
+                if member.energy_kcal <= 0.0:
+                    starved_dead.append(cname)
+            for cname in starved_dead:
+                crew.pop(cname, None)
+                for v in vessels:
+                    if cname in v.crew:
+                        v.crew.remove(cname)
+                for b in bases:
+                    if cname in b.crew:
+                        b.crew.remove(cname)
+                for m2 in crew.values():
+                    m2.morale = max(0.0, m2.morale - 25.0)
+                toast = f"{cname} STARVED — the food chain failed"
+                toast_until = t + 14
+                audio.play("alarm")
+
+            # medicine runs on a daily cadence (08 §4.6)
+            env_state["med_acc"] = env_state.get("med_acc", 0.0) + days
+            if env_state["med_acc"] >= 1.0:
+                d_med = env_state["med_acc"]
+                env_state["med_acc"] = 0.0
+                # transient per-day generator: registry streams serialize
+                # into saves, and a key-per-day would bloat them forever
+                med_rng = np.random.Generator(np.random.PCG64(
+                    np.random.SeedSequence(
+                        entropy=campaign_rng.campaign_seed ^ 0x4D454443,
+                        spawn_key=(int(t // 86_400),))))
+                med_dead = []
+                for cname, member in crew.items():
+                    fv0 = fv_of.get(cname)
+                    b0 = base_of.get(cname)
+                    if fv0 is None and b0 is None:
+                        continue                  # home: handled above
+                    if b0 is not None:
+                        med_lvl = max(
+                            (crew[n].skills.get("medic", 0)
+                             for n in b0.crew if n in crew), default=0)
+                        if "med_bay" not in b0.built:
+                            med_lvl = min(med_lvl, 1)   # field care only
+                        sup_buf = b0.net.buffers.get("MedSupplies")
+                        sup = sup_buf.level if sup_buf else 0.0
+                        crowded = len(b0.crew) > sum(
+                            _CAT.get(k, {}).get("beds", 0)
+                            for k in b0.built)
+                    else:
+                        med_lvl = best_skill(fv0, crew, "medic")
+                        sup_buf, sup = None, 2.0        # flight medkit
+                        crowded = len(fv0.crew) > 3
+                    kind = member.roll_medical(med_rng, crowded=crowded,
+                                               medic_aboard=med_lvl)
+                    if kind:
+                        toast = (f"MEDICAL: {cname} — "
+                                 f"{kind.replace('_', ' ')}"
+                                 + ("" if med_lvl > 0
+                                    else " (no medic nearby)"))
+                        toast_until = t + 10
+                        audio.play("warn")
+                    out_med = member.step_medical(d_med, med_lvl, sup,
+                                                  med_rng)
+                    if sup_buf is not None and out_med["supplies_used"]:
+                        sup_buf.level = max(
+                            0.0, sup_buf.level - out_med["supplies_used"])
+                    if out_med["died_of"]:
+                        med_dead.append((cname, out_med["died_of"]))
+                for cname, cause in med_dead:
+                    crew.pop(cname, None)
+                    for v in vessels:
+                        if cname in v.crew:
+                            v.crew.remove(cname)
+                    for b in bases:
+                        if cname in b.crew:
+                            b.crew.remove(cname)
+                    for m2 in crew.values():
+                        m2.morale = max(0.0, m2.morale - 25.0)
+                    toast = (f"{cname} DIED of {cause.replace('_', ' ')}"
+                             f" — a medbay, a surgeon and MedSupplies "
+                             f"would have saved them")
+                    toast_until = t + 14
+                    audio.play("alarm")
+
+            # Mars dust (03 S-9): storms throttle every solar array on Mars
             mars_storm = mars_wx.global_storm_active(t)
             fd_mars = mars_f_dust(mars_wx.tau(t))
             for b in bases:
@@ -5150,20 +5298,24 @@ def run(argv: list[str] | None = None) -> int:
                                 color=theme.COLORS["accent"], font="small")
 
         if crew_open:
+            from aphelion.game.crew import ROLES as _ROLES
             cands = candidates(crew)
             roster = list(crew.items())
             ph = 154 + 30 * (len(roster) + len(cands))
-            kp = theme.panel(640, ph, "CREW ROSTER & HIRING")
-            kx, ky = size[0] // 2 - 320, 100
+            kp = theme.panel(780, ph, "CREW ROSTER & HIRING")
+            kx, ky = size[0] // 2 - 390, 100
             screen.blit(kp, (kx, ky))
             yy = ky + 36
             theme.draw_text(
                 screen, kx + 14, yy,
-                f"ROSTER — ENTER trains (+1 skill, "
+                f"ROSTER — ENTER trains primary (+1, "
                 f"${CrewMember.TRAIN_COST/1e6:,.0f}M, "
                 f"{CrewMember.TRAIN_DAYS:.0f} d on Earth)"
                 + ("  ◄" if crew_focus == "roster" else ""),
                 color=theme.COLORS["gold"], font="small")
+            theme.draw_text(
+                screen, kx + 388, yy, "P E S M A   morale  cond  dose",
+                color=theme.COLORS["text_dim"], font="small")
             yy += 24
             aboard_names = {n for v in vessels for n in v.crew}
             resident_names = {n for b in bases for n in b.crew}
@@ -5172,7 +5324,7 @@ def run(argv: list[str] | None = None) -> int:
                 sel_r = (crew_focus == "roster"
                          and ri == roster_cursor % max(1, len(roster)))
                 if sel_r:
-                    screen.blit(theme.row_glow(608, 26), (kx + 10, yy - 4))
+                    screen.blit(theme.row_glow(748, 26), (kx + 10, yy - 4))
                 screen.blit(theme.portrait(cname, 24), (kx + 14, yy - 2))
                 where = next((v.name for v in vessels if cname in v.crew),
                              None)
@@ -5180,21 +5332,46 @@ def run(argv: list[str] | None = None) -> int:
                     where = next((b.name for b in bases
                                   if cname in b.crew), "Earth")
                 if not member.available(t):
-                    where = (f"TRAINING "
+                    where = (f"TRAIN "
                              f"{theme.fmt_duration(member.busy_until - t)}")
-                frac = member.dose.career_fraction
-                theme.draw_text(
-                    screen, kx + 48, yy,
-                    f"{cname:18s} {member.role:9s} skill {member.skill}   "
-                    f"dose {frac:5.0%}   {where}",
-                    color=(theme.COLORS["warn"]
-                           if not member.available(t)
-                           else theme.COLORS["accent"]
-                           if cname in aboard_names
-                           or cname in resident_names
-                           else theme.COLORS["text"]), font="small")
+                if member.conditions:
+                    where = ("⚕ " + member.conditions[0]["kind"]
+                             .replace("_", " "))
+                name_col = (theme.COLORS["danger"] if member.bedridden
+                            else theme.COLORS["warn"]
+                            if member.conditions or member.crisis
+                            else theme.COLORS["accent"]
+                            if cname in aboard_names
+                            or cname in resident_names
+                            else theme.COLORS["text"])
+                theme.draw_text(screen, kx + 48, yy,
+                                f"{cname:17.17s} {member.role:10.10s}",
+                                color=name_col, font="small")
+                tracks = " ".join(
+                    str(member.skills.get(s, 0)) for s in _ROLES)
+                theme.draw_text(screen, kx + 388, yy, tracks,
+                                color=theme.COLORS["text"], font="small")
+                bx0 = kx + 488
+                for frac_b, col_b in (
+                        (member.morale / 100.0,
+                         theme.COLORS["danger"] if member.crisis
+                         else theme.COLORS["accent"]),
+                        (member.cond / 100.0,
+                         theme.COLORS["danger"] if member.cond < 40.0
+                         else theme.COLORS["accent"]),
+                        (min(1.0, member.dose.career_fraction),
+                         theme.COLORS["danger"]
+                         if member.dose.caution
+                         else theme.COLORS["text_dim"])):
+                    screen.blit(theme.bar(44, 9,
+                                          max(0.0, min(1.0, frac_b)),
+                                          col_b), (bx0, yy + 3))
+                    bx0 += 56
+                theme.draw_text(screen, bx0 + 4, yy, f"{where:13.13s}",
+                                color=theme.COLORS["text_dim"],
+                                font="small")
                 overlay_rects["crew"].append(
-                    (pygame.Rect(kx + 10, yy - 4, 608, 28), 40_000 + ri))
+                    (pygame.Rect(kx + 10, yy - 4, 748, 28), 40_000 + ri))
                 yy += 30
             yy += 8
             theme.draw_text(
@@ -5207,22 +5384,27 @@ def run(argv: list[str] | None = None) -> int:
                 sel = (crew_focus == "cands"
                        and i == crew_cursor % len(cands) if cands else False)
                 if sel:
-                    screen.blit(theme.row_glow(608, 26), (kx + 10, yy - 4))
+                    screen.blit(theme.row_glow(748, 26), (kx + 10, yy - 4))
+                tracks_c = " ".join(
+                    str(cand.skills.get(s, 0)) for s in _ROLES)
                 theme.draw_text(
                     screen, kx + 14, yy,
-                    f"{'>' if sel else ' '} {cand.name:18s} "
-                    f"{cand.role:9s} skill {cand.skill}   "
+                    f"{'>' if sel else ' '} {cand.name:18.18s} "
+                    f"{cand.role:10.10s}  "
                     f"${cand.hire_cost/1e6:,.0f}M",
                     color=(theme.COLORS["gold"] if sel
                            else theme.COLORS["text"]), font="small")
+                theme.draw_text(screen, kx + 388, yy, tracks_c,
+                                color=theme.COLORS["text_dim"],
+                                font="small")
                 overlay_rects["crew"].append(
-                    (pygame.Rect(kx + 10, yy - 4, 608, 28), i))
+                    (pygame.Rect(kx + 10, yy - 4, 748, 28), i))
                 yy += 30
             theme.draw_text(
                 screen, kx + 14, yy + 4,
-                "pilots cut docking cost · engineers stretch life support · "
-                "scientists multiply science", color=theme.COLORS["text_dim"],
-                font="small")
+                "P pilot · E engineer · S scientist · M medic · A agronomist"
+                "  —  morale low = errors; conditioning < 40 blocks EVA",
+                color=theme.COLORS["text_dim"], font="small")
 
         if research_open:
             # R&D board (11): 10 branch columns of tier-sorted cards with
