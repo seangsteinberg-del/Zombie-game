@@ -217,6 +217,8 @@ class ResearchState:
     # sample pools: "activity|region" -> draws analyzed so far
     pools: dict[str, int] = field(default_factory=dict)
     milestones: set[str] = field(default_factory=set)
+    # one-shot survey awards, keyed "kind|region_code" (11 §3.1)
+    surveys: set[str] = field(default_factory=set)
     # part-type prototype states: type id -> True once full-duration success
     type_proven: set[str] = field(default_factory=set)
     # part types ever built (anything built but unproven is PROTOTYPE)
@@ -462,6 +464,18 @@ class ResearchState:
             return 0.0
         self.milestones.add(key)
         award = MILESTONE_K[kind] * BODY_X.get(body_id, 3.0)
+        self.science += award
+        self.history.append((t, key))
+        return award
+
+    def award_survey(self, kind: str, region_code: str, x: float,
+                     t: float = 0.0) -> float:
+        """One-shot per (kind, region): orbital 15·X, ground 10·X (11 §3.1)."""
+        key = f"{kind}|{region_code}"
+        if key in self.surveys:
+            return 0.0
+        self.surveys.add(key)
+        award = (15.0 if kind == "orbital" else 10.0) * x
         self.science += award
         self.history.append((t, key))
         return award

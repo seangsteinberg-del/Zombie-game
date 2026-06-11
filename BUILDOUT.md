@@ -14,8 +14,8 @@ bible doc, implementable without re-reading the bible). DECISIONS.md wins confli
 
 | # | Chunk | Status | Delivers |
 |---|-------|--------|----------|
-| R | Research & tech | IN PROGRESS | 132-node tree (T0–T4, 10 branches), ED per-family high-water thresholds, prototyping ×3/×2 + maturation m(D), fog of research, 18 Discoveries scaffold, milestone/observation SCI sources, board UI v2 (pan/zoom branches) |
-| S | Solar system v2 | PENDING | body JSON growth (atmo/thermal/radiation/sectors), ~176 curated sectors, land-anywhere sector targeting, anomaly catalog AN-01..50 + procedural, radiation v2 (f_cycle, SPE events, belts), Mars climate/dust, prospecting K0–K4 + survey instruments, SurveyData→SCI |
+| R | Research & tech | **DONE** (c3ae6b6, 5bab011) | 132-node tree (T0–T4, 10 branches), ED per-family high-water thresholds, prototyping ×3/×2 + maturation m(D), fog of research, 18 Discoveries scaffold, milestone/observation SCI sources, board UI v2 (pan/zoom branches) |
+| S | Solar system v2 | IN PROGRESS | body JSON growth (atmo/thermal/radiation/sectors), ~176 curated sectors, land-anywhere sector targeting, anomaly catalog AN-01..50 + procedural, radiation v2 (f_cycle, SPE events, belts), Mars climate/dust, prospecting K0–K4 + survey instruments, SurveyData→SCI |
 | B | Bases v2 | PENDING | placement grid, Deploy→Outfit→Commission, four utility networks, HAB-01..18/AL/AR catalog, pressure-vessel + berm rules, per-body packages (Moon night, Mars dust, Venus aerostat float, Titan cold, Europa siege), deposits + RX-01..22 ISRU recipes + extraction machines |
 | G | Power & thermal v2 | PENDING | thermal node network (H-6), grid dispatch/shedding (P-1), generation/storage/radiator catalogs, sink temps per body, failure modes |
 | W | EVA & interiors | PENDING | walk the surface at any landed site/colony (astronaut controller, terrain from sector), enter modules → walkable interiors, consoles open system screens, flags/sample pickup; THE marquee feature |

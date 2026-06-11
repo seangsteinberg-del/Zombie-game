@@ -54,7 +54,8 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
                       milestones: set[str] | None = None,
                       builder_stack: list | None = None,
                       difficulty: str = "DIRECTOR",
-                      tutorial_state: dict | None = None) -> dict:
+                      tutorial_state: dict | None = None,
+                      explore: dict | None = None) -> dict:
     """bases: objects with .name .last_t .pending_repairs .net (BaseSite)."""
     save = {
         "schema_version": SCHEMA_VERSION,
@@ -93,6 +94,7 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
                 "tranches": dict(research.tranches),
                 "pools": dict(research.pools),
                 "sci_milestones": sorted(research.milestones),
+                "surveys": sorted(research.surveys),
                 "type_proven": sorted(research.type_proven),
                 "type_built": sorted(research.type_built),
                 "history": [list(h) for h in research.history],
@@ -103,6 +105,7 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
                      for name, m in crew.items()},
             "difficulty": difficulty,
             "tutorial_state": tutorial_state,
+            "explore": explore or {},
             "visited": sorted(visited),
             "visited_surface": sorted(visited_surface or set()),
             "milestones": sorted(milestones or set()),
@@ -149,6 +152,7 @@ def restore_campaign(save: dict, db, tree):
             tranches=dict(r.get("tranches", {})),
             pools=dict(r.get("pools", {})),
             milestones=set(r.get("sci_milestones", [])),
+            surveys=set(r.get("surveys", [])),
             type_proven=set(r.get("type_proven", [])),
             type_built=set(r.get("type_built", [])),
             history=[tuple(h) for h in r["history"]])
@@ -213,6 +217,7 @@ def restore_campaign(save: dict, db, tree):
         "builder_stack": c.get("builder_stack", []),
         "difficulty": c.get("difficulty", "DIRECTOR"),
         "tutorial_state": c.get("tutorial_state"),
+        "explore": c.get("explore", {}),
         "bases": bases,
         "rng_state": save.get("rng"),
     }

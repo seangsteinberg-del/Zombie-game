@@ -188,15 +188,31 @@ def _ascent_env(body_id: str) -> str:
 
 from aphelion.game.fleet import FleetVessel  # noqa: E402  (campaign vessel)
 from aphelion.game.sites import SITES, sites_for_body  # noqa: E402
+from aphelion.game.sectors import (  # noqa: E402
+    BODY_OPS, landable, sector_site)
+from aphelion.sim.environment.mars_climate import (  # noqa: E402
+    MarsWeather, f_dust as mars_f_dust)
+from aphelion.sim.environment.space_env import (  # noqa: E402
+    SpeSchedule, spe_distance_factor)
 
 
-def _surface_options(av, bases) -> list[tuple[tuple, str]]:
+def _surface_options(av, bases, db=None,
+                     investigated=frozenset()) -> list[tuple[tuple, str]]:
     """Context actions for the surface-ops panel (G)."""
     opts: list[tuple[tuple, str]] = []
     if av.landed_at is not None:
         site = SITES[av.landed_at]
         opts.append((("relaunch",),
                      f"RELAUNCH — fly the ascent   (~{site['ascent_dv']:,.0f} m/s)"))
+        if db is not None:
+            anomalies = db.by_type("anomalies")
+            for aid in site.get("anomalies", []):
+                if aid in investigated:
+                    continue
+                an = anomalies[aid]
+                opts.append((("investigate", aid),
+                             f"INVESTIGATE {an['class']}: {an['name']}   "
+                             f"(+{an['gb']:.0f} GB, +{2 * an['gb']:.0f} sci)"))
         home = next((b for b in bases
                      if getattr(b, "site_id", None) == av.landed_at), None)
         if home is None:
@@ -659,6 +675,19 @@ def run(argv: list[str] | None = None) -> int:
                      key=lambda i: db.bodies[i]["elements"]["a_m"])
     moons_of = {i: tree.children(i) for i in planets}
 
+    # land ANYWHERE (03 S-7): every landable sector joins the site registry
+    # so descent, founding and surface ops work across the whole system
+    for _sec_id, _sec in db.by_type("sectors").items():
+        if landable(_sec) and _sec["body"] in BODY_OPS:
+            SITES[_sec_id] = sector_site(db, _sec_id)
+    # body -> (region code, X) for orbital-survey awards; Earth prefers LEO
+    ORBIT_REGION: dict[str, tuple[str, float]] = {}
+    SURF_REGION: dict[str, tuple[str, float]] = {}
+    for _rr in sorted(db.by_type("regions").values(),
+                      key=lambda r: r["code"]):
+        slot = ORBIT_REGION if _rr["kind"] == "orbit" else SURF_REGION
+        slot.setdefault(_rr["body"], (_rr["code"], _rr["x"]))
+
     pygame.init()
     size = (1280, 720)
     fullscreen = False
@@ -710,7 +739,9 @@ def run(argv: list[str] | None = None) -> int:
                                                   "engineer", 1)},
                     research=_fresh_research(db), visited={"core:earth"},
                     visited_surface=set(), milestones=set(),
-                    tutorial=first_flight_tutorial())
+                    tutorial=first_flight_tutorial(),
+                    explore={"investigated": set(), "surveydata_gb": 0.0,
+                             "survey_progress": {}})
 
     def loaded_campaign(path=None) -> dict:
         got = read_campaign(path or latest_save() or qs_path, db, tree)
@@ -724,9 +755,14 @@ def run(argv: list[str] | None = None) -> int:
             b["net"].rng = rng      # resume the SAME failure streams
         for v in got["vessels"]:
             apply_crew_bonuses(v, got["crew"])
-            if "core:tech_closed_loop_eclss" in got["research"].unlocked:
+            if "core:tech_ls07_closed_loop_eclss" in got["research"].unlocked:
                 v.lss_bonus *= 2.5
+        ex = got.get("explore") or {}
         return dict(clock=SimClock(t0=got["t"]), vessels=got["vessels"],
+                    explore={"investigated": set(ex.get("investigated", [])),
+                             "surveydata_gb": ex.get("surveydata_gb", 0.0),
+                             "survey_progress": dict(
+                                 ex.get("survey_progress", {}))},
                     active_idx=got["active_idx"], next_vid=got["next_vid"],
                     program=got["program"], rng=rng,
                     bases=[BaseSite.from_restore(b["name"], b["last_t"],
@@ -752,14 +788,26 @@ def run(argv: list[str] | None = None) -> int:
                 st["research"], st["visited"], st["visited_surface"],
                 st["milestones"], st["tutorial"], b,
                 st.get("difficulty", "DIRECTOR"),
+                st.get("explore") or {"investigated": set(),
+                                      "surveydata_gb": 0.0,
+                                      "survey_progress": {}},
                 None, 0, False, False, False, False, False, 0.0, "", 0.0)
 
     (clock, vessels, active_idx, next_vid, program, campaign_rng, bases,
      crew, research, visited, visited_surface, milestones, tutorial, builder,
-     difficulty,
+     difficulty, explore,
      node, warp_idx, paused, base_screen, builder_open, research_open,
      crew_warned, last_dose_t, toast, toast_until) = \
         campaign_tuple(fresh_campaign())
+
+    def env_models(rng):
+        """SPE storms + Mars weather: pure functions of the campaign seed,
+        so they rebuild identically after save/load with no extra state."""
+        return (SpeSchedule(rng.campaign_seed ^ 0x53504531),
+                MarsWeather(rng.campaign_seed ^ 0x4D525357))
+
+    spe_sched, mars_wx = env_models(campaign_rng)
+    env_state = {"spe_warned": -1.0, "spe_capped": False, "storm_was": False}
 
     def crew_refit(fv) -> None:
         """Crew bonuses + the closed-loop ECLSS retrofit when researched
@@ -767,6 +815,27 @@ def run(argv: list[str] | None = None) -> int:
         apply_crew_bonuses(fv, crew)
         if "core:tech_ls07_closed_loop_eclss" in research.unlocked:
             fv.lss_bonus *= 2.5
+
+    def surface_award(av0, sid, site, t) -> str:
+        """First-arrival science at a surface: site lump, the one-shot
+        region ground survey (10·X, 11 §3.1), body firsts (k·X), and the
+        AeroFlight EDL event for atmosphere worlds."""
+        if sid in visited_surface:
+            return ""
+        visited_surface.add(sid)
+        sci = site["science"] * science_multiplier(av0, crew)
+        research.earn_science(sci)
+        body = site["body"]
+        sci += research.award_milestone("landing", body, t)
+        if av0.crew:
+            sci += research.award_milestone("crewed_landing", body, t)
+        if "region_code" in site:
+            sci += research.award_survey("ground", site["region_code"],
+                                         site["x"], t)
+        if site.get("aero"):
+            research.accrue_event(db, "AeroFlight", "aero_event",
+                                  env_class="dense_atmosphere")
+        return f"  +{sci:.0f} science"
 
     def do_quicksave(path=None, label="QUICKSAVED") -> str:
         snap = snapshot_campaign(
@@ -778,7 +847,10 @@ def run(argv: list[str] | None = None) -> int:
             builder_stack=builder.stack, difficulty=difficulty,
             tutorial_state={"rail": tutorial.rail, "index": tutorial.index,
                             "visible": tutorial.visible,
-                            "done": sorted(tutorial.done_rails)})
+                            "done": sorted(tutorial.done_rails)},
+            explore={"investigated": sorted(explore["investigated"]),
+                     "surveydata_gb": explore["surveydata_gb"],
+                     "survey_progress": dict(explore["survey_progress"])})
         write_campaign(path or qs_path, snap)
         return label
 
@@ -1314,7 +1386,9 @@ def run(argv: list[str] | None = None) -> int:
                         running = False
             elif event.type == pygame.KEYDOWN and surface_open:
                 av0 = vessels[active_idx % len(vessels)] if vessels else None
-                opts = _surface_options(av0, bases) if av0 else []
+                opts = (_surface_options(av0, bases, db,
+                                         explore["investigated"])
+                        if av0 else [])
                 if event.key in (pygame.K_ESCAPE, pygame.K_g) or not opts:
                     surface_open = False
                 elif event.key == pygame.K_UP:
@@ -1325,7 +1399,21 @@ def run(argv: list[str] | None = None) -> int:
                     audio.play("tick")
                 elif event.key == pygame.K_RETURN:
                     action = opts[surface_cursor % len(opts)][0]
-                    if action[0] == "relaunch":
+                    if action[0] == "investigate":
+                        aid = action[1]
+                        an = db.by_type("anomalies")[aid]
+                        explore["investigated"].add(aid)
+                        gb = float(an["gb"])
+                        sci = 2.0 * gb              # 2 SCI/GB, one-shot (03)
+                        research.earn_science(sci)
+                        explore["surveydata_gb"] += gb
+                        toast = (f"{an['class']} INVESTIGATED: {an['name']} "
+                                 f"— +{gb:.0f} GB SurveyData, +{sci:.0f} sci"
+                                 + ("  · HERITAGE SITE preserved"
+                                    if an.get("heritage") else ""))
+                        toast_until = t + 12
+                        audio.play("paid")
+                    elif action[0] == "relaunch":
                         site = SITES[av0.landed_at]
                         if av0.dv_remaining < site["ascent_dv"] * 0.8:
                             toast = (f"ascent needs ~{site['ascent_dv']:,.0f}"
@@ -1444,6 +1532,16 @@ def run(argv: list[str] | None = None) -> int:
                         if not ok_land:
                             toast, toast_until = f"no descent: {why}", t + 6
                             audio.play("warn")
+                        elif site.get("landing_class") == "A":
+                            # dock-mode microgravity world: anchor, don't fly
+                            av0._pay_dv(site.get("land_dv", 10.0))
+                            surface_open = False
+                            if av0.land_at(sid, site, t):
+                                burn_glow = 0.4
+                                msg = f"ANCHORED: {site['name']}"
+                                msg += surface_award(av0, sid, site, t)
+                                toast, toast_until = msg, t + 10
+                                audio.play("soi")
                         elif site.get("aero"):
                             # the atmosphere adjudicates the entry first
                             body_b = tree.body(av0.frame_id)
@@ -1490,27 +1588,14 @@ def run(argv: list[str] | None = None) -> int:
                                              + ", ".join(lost))
                                     toast_until = t + 12
                                     audio.play("alarm")
-                                if sid == "site:venus_cloud":
+                                if site.get("kind") == "aerostat":
                                     # aerostat: balloon deploy, no descent
                                     if av0.land_at(sid, site, t):
                                         burn_glow = 0.8
-                                        msg = f"AEROSTAT DEPLOYED: {site['name']}"
-                                        if sid not in visited_surface:
-                                            visited_surface.add(sid)
-                                            sci = (site["science"]
-                                                   * science_multiplier(av0, crew))
-                                            research.earn_science(sci)
-                                            body = site.get("body",
-                                                            "core:venus")
-                                            sci += research.award_milestone(
-                                                "landing", body, t)
-                                            if av0.crew:
-                                                sci += research.award_milestone(
-                                                    "crewed_landing", body, t)
-                                            research.accrue_event(
-                                                db, "AeroFlight", "aero_event",
-                                                env_class="dense_atmosphere")
-                                            msg += f"  +{sci:.0f} science"
+                                        msg = (f"AEROSTAT DEPLOYED: "
+                                               f"{site['name']}")
+                                        msg += surface_award(av0, sid,
+                                                             site, t)
                                         toast, toast_until = msg, t + 10
                                         audio.play("soi")
                                 else:
@@ -2231,11 +2316,14 @@ def run(argv: list[str] | None = None) -> int:
         if start_new:
             (clock, vessels, active_idx, next_vid, program, campaign_rng,
              bases, crew, research, visited, visited_surface, milestones,
-             tutorial, builder, difficulty, node, warp_idx, paused,
+             tutorial, builder, difficulty, explore, node, warp_idx, paused,
              base_screen, builder_open, research_open, crew_warned,
              last_dose_t, toast,
              toast_until) = campaign_tuple(fresh_campaign(
                  start_new if start_new in _DIFFICULTIES else "DIRECTOR"))
+            spe_sched, mars_wx = env_models(campaign_rng)
+            env_state = {"spe_warned": -1.0, "spe_capped": False,
+                         "storm_was": False}
             scene, pause_open, focus_idx = "flight", False, 0
             surface_open = False
         if load_save:
@@ -2244,10 +2332,13 @@ def run(argv: list[str] | None = None) -> int:
                     (clock, vessels, active_idx, next_vid, program,
                      campaign_rng, bases, crew, research, visited,
                      visited_surface, milestones, tutorial, builder,
-                     difficulty, node,
+                     difficulty, explore, node,
                      warp_idx, paused, base_screen, builder_open,
                      research_open, crew_warned, last_dose_t, toast,
                      toast_until) = campaign_tuple(loaded_campaign())
+                    spe_sched, mars_wx = env_models(campaign_rng)
+                    env_state = {"spe_warned": -1.0, "spe_capped": False,
+                                 "storm_was": False}
                     scene, pause_open, focus_idx = "flight", False, 0
                     surface_open = False
                     toast, toast_until = "QUICKSAVE LOADED", clock.t + 5.0
@@ -2343,20 +2434,7 @@ def run(argv: list[str] | None = None) -> int:
                 burn_glow = 0.8
                 msg = (f"TOUCHDOWN: {site['name']} at "
                        f"{descent.td_speed:,.1f} m/s")
-                if sid not in visited_surface:
-                    visited_surface.add(sid)
-                    sci = site["science"] * science_multiplier(descent_av,
-                                                               crew)
-                    research.earn_science(sci)
-                    body = site.get("body", "core:moon")
-                    sci += research.award_milestone("landing", body, t)
-                    if descent_av.crew:
-                        sci += research.award_milestone("crewed_landing",
-                                                        body, t)
-                    if body in _ATMO_BODIES:
-                        research.accrue_event(db, "AeroFlight", "aero_event",
-                                              env_class="dense_atmosphere")
-                    msg += f"  +{sci:.0f} science"
+                msg += surface_award(descent_av, sid, site, t)
                 toast, toast_until = msg, t + 10
                 audio.play("soi")
             elif descent_av is not None:
@@ -3145,7 +3223,87 @@ def run(argv: list[str] | None = None) -> int:
                 shield = (20.0 if cname in aboard
                           else 100.0 if cname in resident else 1_000.0)
                 member.dose.accrue(loc, days, areal_g_cm2=shield,
-                                   material="water")
+                                   material="water", t=t)
+            # solar-particle events (03 S-8b): warning, storm dose, warp cap
+            warn = spe_sched.warning(t)
+            if warn is not None and env_state["spe_warned"] != warn[0]:
+                env_state["spe_warned"] = warn[0]
+                toast = ("SOLAR PARTICLE EVENT INBOUND — protons in "
+                         "~45 min; flying crews will take storm dose")
+                toast_until = t + 12
+                audio.play("alarm")
+            ev_spe = spe_sched.active(t)
+            if ev_spe is not None:
+                _, spe_dur, spe_dose_1au = ev_spe
+                spe_frac = min(days * 86_400.0, spe_dur) / spe_dur
+                for cname, member in crew.items():
+                    loc = aboard.get(cname)
+                    if loc is None:     # residents bermed, Earth under sky
+                        continue
+                    d_au = BODY_OPS.get(loc, {}).get("d", 1.0)
+                    member.dose.accrue_event_msv(
+                        spe_dose_1au * spe_distance_factor(d_au) * spe_frac,
+                        areal_g_cm2=20.0, material="water")
+                if any(fv.crew and fv.landed_at is None for fv in vessels) \
+                        and warp_idx > 2:
+                    warp_idx = 2
+                    if not env_state["spe_capped"]:
+                        env_state["spe_capped"] = True
+                        toast = ("SPE IN PROGRESS — warp capped while "
+                                 "crews fly unsheltered")
+                        toast_until = t + 10
+                        audio.play("alarm")
+            else:
+                env_state["spe_capped"] = False
+
+            # Mars dust (03 S-9): storms throttle every solar array on Mars
+            from aphelion.game.basebuild import CATALOG as _CAT
+            mars_storm = mars_wx.global_storm_active(t)
+            fd_mars = mars_f_dust(mars_wx.tau(t))
+            for b in bases:
+                if SITES[b.site_id]["body"] != "core:mars":
+                    continue
+                base_solar = _CAT["solar_array"]["power_kw"] \
+                    * SITES[b.site_id].get("solar", 1.0)
+                for m in b.net.modules:
+                    if m.module_id.startswith("solar_array"):
+                        m.power_kw = base_solar * fd_mars
+            if mars_storm != env_state["storm_was"]:
+                env_state["storm_was"] = mars_storm
+                toast = (("MARS GLOBAL DUST STORM — solar output collapsing"
+                          f" (f_dust {fd_mars:.2f})") if mars_storm
+                         else "Mars dust storm clearing — arrays recovering")
+                toast_until = t + 12
+                audio.play("alarm" if mars_storm else "blip")
+
+            # orbital surveys (03 S-10): mapping accrues in low orbit; L1
+            # completion pays the one-shot region survey + SurveyData
+            for fv in vessels:
+                sbody = fv.frame_id
+                if (fv.landed_at is not None or sbody == "core:sun"
+                        or fv.elements.alpha <= 0.0):
+                    continue
+                reg = ORBIT_REGION.get(sbody) or SURF_REGION.get(sbody)
+                if reg is None or f"orbital|{reg[0]}" in research.surveys:
+                    continue
+                bb = tree.body(sbody)
+                srx, sry, _, _ = fv.state(t)
+                if math.hypot(srx, sry) > bb.radius + 5.0e6:
+                    continue            # above the 5,000 km scan ceiling
+                prog = explore["survey_progress"].get(sbody, 0.0) \
+                    + days / 30.0       # full map in ~30 days on station
+                explore["survey_progress"][sbody] = prog
+                if prog >= 1.0:
+                    code, x_reg = reg
+                    sci = research.award_survey("orbital", code, x_reg, t)
+                    gb = max(5.0, 20.0 * math.sqrt(bb.radius / 1.0e6))
+                    explore["surveydata_gb"] += gb
+                    toast = (f"ORBITAL SURVEY COMPLETE: "
+                             f"{sbody.split(':')[1]} — +{sci:.0f} sci, "
+                             f"+{gb:.0f} GB SurveyData")
+                    toast_until = t + 12
+                    audio.play("paid")
+
             # engineering data tracks OPERATIONS per part FAMILY (11 §3.5):
             # running modules accrue to their family with √N damping and
             # the ×3 novel-environment window per site class
@@ -4309,29 +4467,45 @@ def run(argv: list[str] | None = None) -> int:
                     color=theme.COLORS["text_dim"], font="small")
 
         if surface_open and av is not None:
-            opts = _surface_options(av, bases)
-            n_rows = max(len(opts), 1)
-            spanel = theme.panel(620, 96 + 30 * n_rows, "SURFACE OPERATIONS")
-            spx, spy = size[0] // 2 - 310, 140
+            opts = _surface_options(av, bases, db, explore["investigated"])
+            max_rows = 14                       # 18-sector worlds scroll
+            n_rows = max(min(len(opts), max_rows), 1)
+            spanel = theme.panel(640, 96 + 30 * n_rows, "SURFACE OPERATIONS")
+            spx, spy = size[0] // 2 - 320, 110
             screen.blit(spanel, (spx, spy))
             if not opts:
                 theme.draw_text(screen, spx + 16, spy + 40,
-                                f"no surveyed sites at "
-                                f"{av.frame_id.split(':')[1]} — explore on",
+                                f"no landable surface at "
+                                f"{av.frame_id.split(':')[1]}",
                                 color=theme.COLORS["text_dim"])
             overlay_rects["surface"] = []
-            for i, (action, label) in enumerate(opts):
-                sel = i == surface_cursor % len(opts)
+            cur = surface_cursor % len(opts) if opts else 0
+            first = 0
+            if len(opts) > max_rows:
+                first = max(0, min(cur - max_rows // 2,
+                                   len(opts) - max_rows))
+            for row, (action, label) in enumerate(
+                    opts[first:first + max_rows]):
+                i = first + row
+                sel = i == cur
                 color = theme.COLORS["gold"] if sel else theme.COLORS["text"]
                 if sel:
-                    screen.blit(theme.row_glow(588, 26),
-                                (spx + 12, spy + 34 + i * 30))
-                theme.draw_text(screen, spx + 16, spy + 38 + i * 30,
-                                ("> " if sel else "  ") + label, color=color)
+                    screen.blit(theme.row_glow(608, 26),
+                                (spx + 12, spy + 34 + row * 30))
+                theme.draw_text(screen, spx + 16, spy + 38 + row * 30,
+                                ("> " if sel else "  ") + label[:78],
+                                color=color, font="small")
                 overlay_rects["surface"].append(
-                    (pygame.Rect(spx + 12, spy + 34 + i * 30, 588, 28), i))
+                    (pygame.Rect(spx + 12, spy + 34 + row * 30, 608, 28), i))
+            if first > 0:
+                theme.draw_text(screen, spx + 300, spy + 26, "▲ more",
+                                color=theme.COLORS["text_dim"], font="small")
+            if first + max_rows < len(opts):
+                theme.draw_text(screen, spx + 300, spy + 36 + max_rows * 30,
+                                "▼ more", color=theme.COLORS["text_dim"],
+                                font="small")
             if opts:
-                action = opts[surface_cursor % len(opts)][0]
+                action = opts[cur][0]
                 blurb = ""
                 if action[0] == "land":
                     blurb = SITES[action[1]]["blurb"]

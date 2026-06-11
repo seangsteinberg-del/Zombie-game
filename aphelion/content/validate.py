@@ -158,9 +158,45 @@ def _validate_discoveries(db: ContentDB) -> None:
                 raise ContentError(f"{src}: {item_id}: bad discount {d!r}")
 
 
+def _validate_system(db: ContentDB) -> None:
+    """Sectors/regions/anomalies cross-references (03 S-7/S-10/§4.7)."""
+    bodies, sectors = db.bodies, db.by_type("sectors")
+    regions, anomalies = db.by_type("regions"), db.by_type("anomalies")
+    for item_id, raw in regions.items():
+        _check_fields("regions", item_id, raw, db.sources[item_id])
+        if bodies and raw["body"] not in bodies:
+            raise ContentError(f"{item_id}: unknown body {raw['body']!r}")
+    per_body_idx: dict[str, set[int]] = {}
+    for item_id, raw in sectors.items():
+        src = db.sources[item_id]
+        _check_fields("sectors", item_id, raw, src)
+        if bodies and raw["body"] not in bodies:
+            raise ContentError(f"{src}: {item_id}: unknown body")
+        if raw["region"] not in regions:
+            raise ContentError(f"{src}: {item_id}: unknown region "
+                               f"{raw['region']!r}")
+        idxs = per_body_idx.setdefault(raw["body"], set())
+        if raw["idx"] in idxs:
+            raise ContentError(f"{src}: {item_id}: duplicate idx")
+        idxs.add(raw["idx"])
+        # PSR sectors must carry the PSR flag — or PEL for the
+        # Shackleton-style eternal-light rim exception (03 §8 assert 3)
+        if raw["terrain"] == "PSR" and not ({"PSR", "PEL"} & set(raw["flags"])):
+            raise ContentError(f"{src}: {item_id}: PSR terrain without flag")
+    for item_id, raw in anomalies.items():
+        src = db.sources[item_id]
+        _check_fields("anomalies", item_id, raw, src)
+        if bodies and raw["body"] not in bodies:
+            raise ContentError(f"{src}: {item_id}: unknown body")
+        if raw["sector"] != "orbit" and raw["sector"] not in sectors:
+            raise ContentError(f"{src}: {item_id}: unknown sector "
+                               f"{raw['sector']!r}")
+
+
 def validate(db: ContentDB) -> None:
     _validate_bodies(db)
     _validate_parts(db)
     _validate_recipes(db)
     _validate_tech(db)
     _validate_discoveries(db)
+    _validate_system(db)

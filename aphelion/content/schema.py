@@ -118,6 +118,49 @@ TECH_SCHEMA: dict[str, tuple[bool, Check]] = {
     "anchor": (False, _string),
 }
 
+TERRAIN_CLASSES = {"MARE", "HIGHLAND", "DUNE", "ICE_PLAIN", "CHAOS",
+                   "VOLCANIC", "PSR", "SEA", "CLOUD_BAND", "REGOLITH_PILE"}
+LANDING_CLASSES = {"A", "B", "C", "D", "E", "F"}
+
+SECTOR_SCHEMA: dict[str, tuple[bool, Check]] = {
+    "id": (True, _is_id),
+    "body": (True, _is_id),
+    "idx": (True, _num(lo=1)),
+    "name": (True, _string),
+    "terrain": (True, lambda v: v in TERRAIN_CLASSES),
+    "arc_deg": (True, _num(lo=0.0, hi=360.0)),
+    "phi_center_deg": (True, _num(lo=0.0, hi=360.0)),
+    "slope_sigma": (True, _num(lo=0.0)),
+    "rock_abundance": (True, _num(lo=0.0, hi=1.0)),
+    "dust_index": (True, _num(lo=0.0, hi=1.0)),
+    "anomaly_slots": (True, _num(lo=0, hi=3)),
+    "landing_class": (True, lambda v: v in LANDING_CLASSES),
+    "region": (True, _is_id),
+    "site_kind": (True, _string),
+    "f_atm": (False, _num(lo=0.0, hi=1.5)),
+    "flags": (True, lambda v: isinstance(v, list)),
+}
+
+REGION_SCHEMA: dict[str, tuple[bool, Check]] = {
+    "id": (True, _is_id),
+    "code": (True, _string),
+    "body": (True, _is_id),
+    "x": (True, _num(lo=0.5, hi=14.0)),     # exoticism cap 14 (11 §3.2)
+    "kind": (True, lambda v: v in ("orbit", "surface", "special")),
+}
+
+ANOMALY_SCHEMA: dict[str, tuple[bool, Check]] = {
+    "id": (True, _is_id),
+    "body": (True, _is_id),
+    "sector": (True, _string),               # sector id or "orbit"
+    "class": (True, lambda v: v in ("DERELICT", "WONDER", "COLDTRAP",
+                                    "TUBE", "EVENT")),
+    "name": (True, _string),
+    "gb": (True, _num(lo=1.0, hi=200.0)),
+    "reward": (True, lambda v: isinstance(v, str)),
+    "heritage": (True, lambda v: isinstance(v, bool)),
+}
+
 DISCOVERY_SCHEMA: dict[str, tuple[bool, Check]] = {
     "id": (True, _is_id),
     "name": (True, _string),
@@ -137,6 +180,9 @@ TYPE_SCHEMAS: dict[str, dict[str, tuple[bool, Check]]] = {
     "recipes": RECIPE_SCHEMA,
     "tech": TECH_SCHEMA,
     "discoveries": DISCOVERY_SCHEMA,
+    "sectors": SECTOR_SCHEMA,
+    "regions": REGION_SCHEMA,
+    "anomalies": ANOMALY_SCHEMA,
 }
 
 RECIPE_MASS_BALANCE_TOL = 0.005     # 0.5 % (05 §3.2 rule)
