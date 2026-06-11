@@ -90,32 +90,37 @@ def test_dose_rates_canon():
     assert dose_rate_msv_day("deep_space") == pytest.approx(1.8)
 
 
-def test_shielding_halving_and_floor():
-    # one halving thickness of regolith -> exactly half, until the floor
-    assert attenuation(22.0) == pytest.approx(0.5)
-    # heavy shielding hits the 0.30 GCR floor (08 §3.6)
-    assert attenuation(200.0) == pytest.approx(0.30)
-    # ...and the floor itself decays past 1,000 g/cm2 (DECISIONS A3):
-    # Titan's 10,900 g/cm2 column must NOT be floored at 0.3 (canon says
-    # Titan surface is ~Earth-quiet)
-    assert attenuation(10_900.0) < 1e-5
+def test_shielding_two_channel_law():
+    # GCR law (08 §4.2): f_GCR = 0.30 + 0.70·exp(−σ/30)
+    assert attenuation(22.0) == pytest.approx(
+        0.30 + 0.70 * 2.718281828 ** (-22.0 / 30.0), rel=1e-6)
+    # heavy shielding approaches the 0.30 secondary floor
+    assert attenuation(200.0) == pytest.approx(0.30, abs=2e-3)
+    # ...and the floor itself decays past 1,000 g/cm2, e-fold 1,000
+    # (DECISIONS A3): Titan's 10,900 g/cm2 column reads near-zero
+    assert attenuation(10_900.0) < 1e-4
+    # storm-shelter worked example (08 §4.2): σ=35 water walls
+    assert attenuation(35.0) == pytest.approx(0.52, abs=0.01)
+    assert attenuation(35.0, channel="spe") == pytest.approx(0.054,
+                                                             abs=0.005)
 
 
 def test_europa_surface_is_lethal_fast():
-    """5.4 Sv/day unshielded: a career dose in under 5 hours — the canon's
-    'burrow within days' is generous."""
+    """5.4 Sv/day unshielded: a career dose (600 mSv) in under 3 hours."""
     crew = CrewDose()
     crew.accrue("core:europa", days=0.2)
     assert crew.over_limit
 
 
 def test_europa_ice_burrow_works():
-    """Under ~3 m of ice (~270 g/cm2 -> floor 0.30 -> 1,620 mSv/d... the
-    floor forces DEEP burrows: ~1,250 g/cm2 to get under 10 mSv/d."""
-    shallow = dose_rate_msv_day("core:europa", areal_g_cm2=270.0, material="water")
-    assert shallow > 1_000.0          # floored: shallow burrows DON'T work
-    deep = dose_rate_msv_day("core:europa", areal_g_cm2=1_400.0, material="water")
-    assert deep < 200.0               # decaying floor: depth eventually wins
+    """Europa's field is trapped electrons/protons — SPE-channel physics:
+    a metre-plus of ice overburden ends it (the GCR share underneath is
+    Earth-orbit-class). Burrow or die, but burrowing WORKS."""
+    raw = dose_rate_msv_day("core:europa")
+    assert raw == pytest.approx(5_400.0)
+    burrow = dose_rate_msv_day("core:europa", areal_g_cm2=140.0,
+                               material="water")
+    assert burrow < 1.0               # ~1.5 m of ice: storm over
 
 
 # ---- Venus aerostat (07 B-8 / HAVOC) -------------------------------------------

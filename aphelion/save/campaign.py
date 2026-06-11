@@ -101,6 +101,7 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
             },
             "crew": {name: {"msv": m.dose.accumulated_msv, "role": m.role,
                             "skill": m.skill,
+                            "acute": [list(p) for p in m.dose.acute_log],
                             "busy": getattr(m, "busy_until", 0.0)}
                      for name, m in crew.items()},
             "difficulty": difficulty,
@@ -172,7 +173,8 @@ def restore_campaign(save: dict, db, tree):
     for name, cd in c["crew"].items():
         if isinstance(cd, dict):
             crew[name] = CrewMember(name, cd["role"], cd["skill"],
-                                    CrewDose(cd["msv"]),
+                                    CrewDose(cd["msv"],
+                                             cd.get("acute", [])),
                                     busy_until=cd.get("busy", 0.0))
         else:                       # early-v2 shape: bare msv float
             crew[name] = CrewMember(name, "pilot", 1, CrewDose(cd))
