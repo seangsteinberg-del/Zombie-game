@@ -785,6 +785,15 @@ def run(argv: list[str] | None = None) -> int:
             screen.blit(fs, (0, 0))
             fade = max(0.0, fade - 2.6 * real_dt)
 
+    def apply_flash() -> None:
+        nonlocal flash
+        if flash > 0.0:
+            fl2 = pygame.Surface(size)
+            fl2.fill((255, 228, 196))
+            fl2.set_alpha(int(220 * min(1.0, flash)))
+            screen.blit(fl2, (0, 0))
+            flash = max(0.0, flash - 2.2 * real_dt)
+
     def planner_rows_for(av0, t0: float) -> list[dict]:
         """Transfer-window quotes from the active vessel's parking orbit —
         built entirely on the tested Hohmann/synodic toolkit in
@@ -848,6 +857,9 @@ def run(argv: list[str] | None = None) -> int:
     pending_assigned = False
     ascent_av = None               # FleetVessel being RELAUNCHED (None = pad)
     ascent_body_id = "core:earth"
+    shake = 0.0                    # camera shake (ignition/staging/loss/max-q)
+    flash = 0.0                    # white-out flash (vehicle loss)
+    ascent_boomed = False          # explosion VFX fired for this outcome
 
     # descent scene state (the landing, FLOWN)
     descent: LiveDescent | None = None
@@ -886,6 +898,51 @@ def run(argv: list[str] | None = None) -> int:
     pygame.surfarray.blit_array(sky_grad,
                                 np.repeat(_sky[None, :, :], size[0],
                                           axis=0).astype("uint8"))
+    # ---- ascent/descent scene dressing (cached, procedural) -------------
+    ground_tex_cache: dict[str, pygame.Surface] = {}
+
+    def ground_texture(bid: str) -> pygame.Surface:
+        tex = ground_tex_cache.get(bid)
+        if tex is None:
+            rngg = np.random.default_rng(sum(ord(c) for c in bid))
+            col = np.array(_GROUND_COLORS.get(bid, (60, 62, 68)), float)
+            tex = pygame.Surface((size[0], 110))
+            for x in range(size[0]):
+                v = 0.82 + 0.36 * float(rngg.random())
+                pygame.draw.line(tex, tuple(int(min(255.0, c * v))
+                                            for c in col), (x, 0), (x, 110))
+            ground_tex_cache[bid] = tex
+        return tex
+
+    pad_sprite = pygame.Surface((150, 150), pygame.SRCALPHA)
+    pygame.draw.rect(pad_sprite, (88, 90, 96), (8, 138, 134, 10),
+                     border_radius=3)
+    pygame.draw.ellipse(pad_sprite, (38, 38, 42), (45, 139, 60, 8))
+    for _ty in range(8, 132, 12):        # lattice service tower
+        pygame.draw.line(pad_sprite, (118, 78, 58), (118, _ty),
+                         (130, _ty + 12), 2)
+        pygame.draw.line(pad_sprite, (118, 78, 58), (130, _ty),
+                         (118, _ty + 12), 2)
+    pygame.draw.line(pad_sprite, (140, 95, 70), (118, 8), (118, 140), 3)
+    pygame.draw.line(pad_sprite, (140, 95, 70), (130, 8), (130, 140), 3)
+    pygame.draw.circle(pad_sprite, (150, 156, 168), (24, 130), 9)
+    pygame.draw.circle(pad_sprite, (148, 154, 166), (44, 132), 7)
+    pygame.draw.circle(pad_sprite, (190, 196, 208), (21, 127), 3)
+
+    cloud_spr = pygame.Surface((150, 52), pygame.SRCALPHA)
+    for _cx, _cy, _cr in ((40, 30, 22), (72, 24, 27), (104, 30, 20),
+                          (60, 34, 24), (88, 34, 22)):
+        pygame.draw.ellipse(cloud_spr, (255, 255, 255, 14),
+                            (_cx - _cr, _cy - _cr // 2, _cr * 2, _cr))
+    _CLOUD_DECK = ((1_500.0, 180.0), (2_400.0, 660.0), (3_300.0, 1_040.0),
+                   (4_600.0, 420.0), (6_200.0, 880.0), (7_800.0, 130.0),
+                   (5_400.0, 1_180.0))
+
+    haze = pygame.Surface((size[0], 70), pygame.SRCALPHA)
+    for _hy in range(70):
+        pygame.draw.line(haze, (235, 240, 248, int(54 * (1.0 - _hy / 70.0))),
+                         (0, 69 - _hy), (size[0], 69 - _hy))
+
     if boot_ascent:                      # --scene ascent: QA flight
         from aphelion.sim.vessels.vessel import Vessel
         _rows, _plan = [], []
@@ -997,11 +1054,13 @@ def run(argv: list[str] | None = None) -> int:
                     if event.key == pygame.K_SPACE:
                         if not live.ignited:
                             live.ignite()
-                            audio.play("burn")
+                            shake = 1.0
+                            audio.play("ignition")
                         elif live.t < 2.0:
                             pass        # debounce: SPACE-spam must not stage
                         elif live.stage():
-                            audio.play("blip")
+                            shake = max(shake, 0.6)
+                            audio.play("stage")
                     elif event.key == pygame.K_x:
                         live.throttle_cmd = 1.0     # X = burn, as in flight
                     elif event.key == pygame.K_z:
@@ -1806,9 +1865,11 @@ def run(argv: list[str] | None = None) -> int:
                     else:
                         next_vid += 1
                         vessels.append(split)
-                        toast = f"UNDOCKED: {split.name} is free-flying"
+                        toast = (f"UNDOCKED: {split.name} free-flying — "
+                                 f"spring separation "
+                                 f"{FleetVessel.UNDOCK_SEP_MS:.1f} m/s")
                         toast_until = t + 6
-                        audio.play("blip")
+                        audio.play("clunk")
                 elif event.key == pygame.K_t and vessels:
                     av0 = vessels[active_idx % len(vessels)]
                     moved = av0.crossfeed()
@@ -2187,7 +2248,7 @@ def run(argv: list[str] | None = None) -> int:
                             + ("s" if prox.bounces != 1 else "")
                             if prox.bounces else "") + ")")
                 toast_until = t + 8
-                audio.play("paid")
+                audio.play("clunk")
             else:
                 if prox_chaser is not None:
                     prox_chaser._pay_dv(min(prox.used_dv,
@@ -2203,6 +2264,13 @@ def run(argv: list[str] | None = None) -> int:
         if scene != prev_scene:
             fade = 1.0 if prev_scene else 0.0
             prev_scene = scene
+        # music mood rides the scene; engine rumble only where engines live
+        audio.update(real_dt)
+        audio.set_mood("tense" if scene in ("ascent", "descent", "proxops")
+                       else "warm" if scene == "victory" or base_screen
+                       else "calm")
+        if scene not in ("ascent", "descent"):
+            audio.set_engine(0.0)
 
         if scene == "ascent" and live is not None:
             # continuous stick: SHIFT/CTRL throttle, arrows pitch
@@ -2230,9 +2298,16 @@ def run(argv: list[str] | None = None) -> int:
                 for _ in range(n_steps):
                     live.step(0.02)
                     if live.outcome is not None:
-                        audio.play("paid" if live.outcome == "orbit"
-                                   else "alarm")
+                        if live.outcome == "orbit":
+                            audio.play("paid")
+                        else:
+                            audio.play("boom")
+                            shake = 1.5
+                            flash = 1.0
                         break
+            audio.set_engine(live.throttle_eff
+                             if live.ignited and live.outcome is None
+                             else 0.0)
 
             # ---- draw: sky fades to space with THIS body's air density ----
             screen.fill((6, 8, 14))
@@ -2250,6 +2325,15 @@ def run(argv: list[str] | None = None) -> int:
             px_per_m = max(0.0022, 0.26 * 1500.0 / (1500.0 + live.h))
             rocket_y = int(size[1] * 0.62)
 
+            # camera shake: ignition/staging/loss impulses + max-q rattle
+            if (live.q > 0.55 * live.params.q_limit
+                    and live.outcome is None):
+                shake = max(shake, min(0.4, 0.3 * live.q
+                                       / live.params.q_limit))
+            sox = int(7.0 * shake * math.sin(ui_t * 67.0))
+            soy = int(6.0 * shake * math.sin(ui_t * 53.0 + 1.7))
+            shake *= math.exp(-2.6 * real_dt)
+
             stack_now = live_stack[live.stages_spent:]
             tilt = -(90.0 - live.gamma_deg)
             rs = max(0.12, 1500.0 / (1500.0 + 1.2 * live.h))
@@ -2261,8 +2345,8 @@ def run(argv: list[str] | None = None) -> int:
                         else craft_icon(math.radians(live.gamma_deg), 16))
                 rot_cache[rkey] = pygame.transform.rotozoom(base, tilt, rs)
             rspr = rot_cache[rkey]
-            rx = size[0] // 2 - rspr.get_width() // 2
-            ry = rocket_y - rspr.get_height() // 2 - int(12 * rs)
+            rx = size[0] // 2 - rspr.get_width() // 2 + sox
+            ry = rocket_y - rspr.get_height() // 2 - int(12 * rs) + soy
             # ground anchors to the rocket's BASE so the vehicle never
             # draws buried in the terrain at low altitude
             ground_y = ry + rspr.get_height() + int(max(live.h, 0.0)
@@ -2271,28 +2355,56 @@ def run(argv: list[str] | None = None) -> int:
             pad_ang = (theta - live.omega * live.t + math.pi) % (
                 2.0 * math.pi) - math.pi
             downrange = pad_ang * live.radius
-            pad_x = size[0] // 2 - int(downrange * px_per_m)
+            pad_x = size[0] // 2 - int(downrange * px_per_m) + sox
+
+            # clouds sweep past while there is air to hold them
+            if rho0 > 0.0 and sky_a > 8 and live.h < 12_000.0:
+                for c_alt, c_x in _CLOUD_DECK:
+                    cy2 = ry + rspr.get_height() // 2 + int(
+                        (live.h - c_alt) * px_per_m)
+                    cx2 = int(c_x - downrange * px_per_m * 0.9) % (
+                        size[0] + 300) - 150
+                    if -60 < cy2 < size[1] + 60:
+                        screen.blit(cloud_spr, (cx2, cy2))
+
             if ground_y < size[1] + 600:
-                pygame.draw.rect(screen,
-                                 _GROUND_COLORS.get(live.body_id,
-                                                    (60, 62, 68)),
+                gcol_a = _GROUND_COLORS.get(live.body_id, (60, 62, 68))
+                pygame.draw.rect(screen, gcol_a,
                                  (0, min(ground_y, size[1]), size[0],
                                   max(0, size[1] - ground_y) + 4))
+                if ground_y < size[1] + 8:
+                    tex = ground_texture(live.body_id)
+                    tex_x = int(-downrange * px_per_m) % size[0]
+                    screen.blit(tex, (tex_x - size[0], ground_y))
+                    screen.blit(tex, (tex_x, ground_y))
+                if rho0 > 0.0 and sky_a > 8 and ground_y < size[1] + 70:
+                    haze.set_alpha(int(140 * sky_a / 255))
+                    screen.blit(haze, (0, ground_y - 70))
                 if ascent_av is None and -300 < pad_x < size[0] + 300:
-                    pygame.draw.rect(screen, (70, 74, 82),
-                                     (pad_x - 52, ground_y - 6, 104, 8))
-                    pygame.draw.rect(screen, (96, 60, 48),
-                                     (pad_x + 58, ground_y - 70, 8, 66))
-            screen.blit(rspr, (rx, ry))
-            if live.throttle_eff > 0.0:
+                    screen.blit(pad_sprite, (pad_x - 75, ground_y - 148))
+            if not (live.outcome == "lost" and ascent_boomed):
+                screen.blit(rspr, (rx, ry))
+            if live.throttle_eff > 0.0 and live.outcome is None:
                 ang = math.radians(live.gamma_deg)
                 ex = -math.cos(ang)
                 ey = math.sin(ang)              # exhaust dir, screen y-down
-                ccx = size[0] // 2
+                ccx = size[0] // 2 + sox
                 ccy = ry + rspr.get_height() // 2
                 hh = rspr.get_height() / 2.0 - 4.0
+                n_fl = int(2 + 10 * live.throttle_eff)
                 particles.emit_burn(ccx + ex * hh, ccy + ey * hh, ex, ey,
-                                    n=3)
+                                    n=n_fl)
+                if live.h < 6_000.0 and frame_count % 3 == 0:
+                    particles.emit_burn(ccx + ex * hh, ccy + ey * hh,
+                                        ex, ey, n=1, color=(126, 126, 132),
+                                        smoke=True, speed=(60.0, 130.0),
+                                        life=(0.7, 1.4))
+            if live.outcome == "lost" and not ascent_boomed:
+                ascent_boomed = True
+                particles.explosion(size[0] // 2,
+                                    ry + rspr.get_height() // 2, 1.3)
+            elif live.outcome is None:
+                ascent_boomed = False
             if len(live.events) > ascent_event_count:
                 for ev_line in live.events[ascent_event_count:]:
                     if "STAGE" in ev_line:       # separation debris puff
@@ -2300,11 +2412,14 @@ def run(argv: list[str] | None = None) -> int:
                                             ry + rspr.get_height(),
                                             0.0, 1.0, n=22,
                                             color=(220, 224, 232))
-                        audio.play("blip")
+                        shake = max(shake, 0.6)
+                        audio.play("stage")
                     elif "MECO" in ev_line or "CIRC" in ev_line:
                         audio.play("soi")
                 ascent_event_count = len(live.events)
-            particles.update_draw(screen, real_dt)
+            particles.update_draw(
+                screen, real_dt,
+                floor_y=ground_y if live.h < 2_000.0 else None)
             bloom.apply(screen)        # bloom the world, not the HUD glass
 
             # ---- HUD ----
@@ -2365,6 +2480,7 @@ def run(argv: list[str] | None = None) -> int:
                 "./, warp   ESC revert (T+20s)",
                 color=theme.COLORS["text_dim"], font="small", shadow=False)
             screen.blit(vig, (0, 0))
+            apply_flash()
             apply_fade()
             pygame.display.flip()
             frame_count += 1
@@ -2389,9 +2505,15 @@ def run(argv: list[str] | None = None) -> int:
                 for _ in range(n_steps):
                     descent.step(0.02)
                     if descent.outcome is not None:
-                        audio.play("soi" if descent.outcome == "landed"
-                                   else "alarm")
+                        if descent.outcome == "landed":
+                            shake = max(shake, 0.7)
+                            audio.play("thud")
+                        else:
+                            shake, flash = 1.5, 1.0
+                            audio.play("boom")
                         break
+            audio.set_engine(descent.throttle_eff
+                             if descent.outcome is None else 0.0)
 
             # ---- draw: this body's sky, seeded terrain, the lander ----
             screen.fill((6, 8, 14))
@@ -2409,6 +2531,10 @@ def run(argv: list[str] | None = None) -> int:
             else:
                 starfield.draw(screen, cam)
 
+            sox = int(7.0 * shake * math.sin(ui_t * 67.0))
+            soy = int(6.0 * shake * math.sin(ui_t * 53.0 + 1.7))
+            shake *= math.exp(-2.6 * real_dt)
+
             ppm_d = max(0.004, 0.30 * 900.0 / (900.0 + descent.h))
             dstack = [[descent.vessel.rows[i].part_id for i in st]
                       for st in descent.vessel.stage_plan]
@@ -2420,8 +2546,8 @@ def run(argv: list[str] | None = None) -> int:
                     rot_cache.clear()
                 rot_cache[dkey] = pygame.transform.rotozoom(dspr0, 0.0, ds)
             dspr = rot_cache[dkey]
-            drx = size[0] // 2 - dspr.get_width() // 2
-            dry = int(size[1] * 0.40) - dspr.get_height() // 2
+            drx = size[0] // 2 - dspr.get_width() // 2 + sox
+            dry = int(size[1] * 0.40) - dspr.get_height() // 2 + soy
             ground_y = (dry + dspr.get_height()
                         + int(max(descent.h, 0.0) * ppm_d))
             if ground_y < size[1] + 800:
@@ -2445,13 +2571,22 @@ def run(argv: list[str] | None = None) -> int:
                     pygame.draw.line(screen, theme.COLORS["gold"],
                                      (lz_x, ground_y - 18),
                                      (lz_x, ground_y - 2), 2)
-            screen.blit(dspr, (drx, dry))
+            if not (descent.outcome == "crash" and ascent_boomed):
+                screen.blit(dspr, (drx, dry))
             if descent.throttle_eff > 0.0 and descent.outcome is None:
-                particles.emit_burn(size[0] // 2,
+                particles.emit_burn(size[0] // 2 + sox,
                                     dry + dspr.get_height() - 2,
                                     0.0, 1.0,
                                     n=int(2 + 8 * descent.throttle_eff))
-            particles.update_draw(screen, real_dt)
+            if descent.outcome == "crash" and not ascent_boomed:
+                ascent_boomed = True
+                particles.explosion(size[0] // 2,
+                                    dry + dspr.get_height() // 2, 1.4)
+            elif descent.outcome is None:
+                ascent_boomed = False
+            particles.update_draw(
+                screen, real_dt,
+                floor_y=ground_y if descent.h < 2_000.0 else None)
             bloom.apply(screen)
 
             # ---- HUD ----
@@ -2515,6 +2650,7 @@ def run(argv: list[str] | None = None) -> int:
                 "SPACE stage   ./, warp   keep contact under 3 m/s",
                 color=theme.COLORS["text_dim"], font="small", shadow=False)
             screen.blit(vig, (0, 0))
+            apply_flash()
             apply_fade()
             pygame.display.flip()
             frame_count += 1
