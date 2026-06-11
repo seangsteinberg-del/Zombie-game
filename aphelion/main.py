@@ -919,6 +919,10 @@ def run(argv: list[str] | None = None) -> int:
     eva_state = None                  # EvaState while walking the surface
     eva_av = None                     # the landed vessel the walker left
     EVA_TIME_FACTOR = 30.0            # EVA ops run at 30x sim time
+    interior_x = 2.0                  # walker x inside the hab strip, m
+    interior_home = None              # the BaseSite whose interior we walk
+    interior_rooms: tuple = ()        # habitable module keys, build order
+    interior_return_x = 0.0           # where on the surface we re-emerge
     surface_open = False
     surface_cursor = 0
     base_cursor = 0
@@ -1397,16 +1401,35 @@ def run(argv: list[str] | None = None) -> int:
                                  if b.site_id == eva_av.landed_at), None)
                             handled = False
                             if home_b is not None:
+                                from aphelion.render.interior_art import \
+                                    HABITABLE
                                 pos = eva_sim.module_positions(home_b.built)
                                 for bi, bx in pos.items():
-                                    if eva_state.near(bx):
+                                    if not eva_state.near(bx):
+                                        continue
+                                    key_b = home_b.built[bi]
+                                    if key_b in HABITABLE:
+                                        # step inside: airlock + rooms
+                                        interior_home = home_b
+                                        interior_rooms = tuple(
+                                            k for k in home_b.built
+                                            if k in HABITABLE)
+                                        interior_x = 4.0
+                                        interior_return_x = eva_state.x
+                                        eva_state.o2_s = eva_sim.SUIT_O2_S
+                                        scene = "interior"
+                                        toast = (f"INSIDE {home_b.name} — "
+                                                 f"suit recharged; walk "
+                                                 f"the rooms, E at the "
+                                                 f"airlock to exit")
+                                        toast_until = t + 8
+                                        audio.play("clunk")
+                                    else:
                                         home_b.advance(t)
-                                        mid = None
-                                        for m in home_b.net.modules:
-                                            if m.module_id.startswith(
-                                                    home_b.built[bi]):
-                                                mid = m
-                                                break
+                                        mid = next(
+                                            (m for m in home_b.net.modules
+                                             if m.module_id.startswith(
+                                                 key_b)), None)
                                         if mid is not None:
                                             toast = (f"CONSOLE "
                                                      f"{mid.module_id}: "
@@ -1415,9 +1438,9 @@ def run(argv: list[str] | None = None) -> int:
                                                      f" kW  ·  F2 manages "
                                                      f"the colony")
                                             toast_until = t + 8
-                                        handled = True
                                         audio.play("blip")
-                                        break
+                                    handled = True
+                                    break
                             if not handled and eva_state.near(
                                     eva_sim.ANOMALY_X_M, 6.0):
                                 site_e = SITES[eva_av.landed_at]
@@ -1471,6 +1494,36 @@ def run(argv: list[str] | None = None) -> int:
                         toast_until = t + 5
                     elif event.key == pygame.K_F2 and base_screen:
                         base_screen = False
+            elif scene == "interior":
+                if event.type == pygame.KEYDOWN and eva_state is not None:
+                    from aphelion.render.interior_art import ROOM_W
+                    ppm_i = 24.0
+                    if event.key == pygame.K_e:
+                        if interior_x < ROOM_W / ppm_i:      # the airlock
+                            scene = "eva"
+                            eva_state.x = interior_return_x
+                            toast = "back on the surface"
+                            toast_until = t + 5
+                            audio.play("clunk")
+                        else:
+                            room_i = int(interior_x * ppm_i // ROOM_W) - 1
+                            if (interior_home is not None
+                                    and 0 <= room_i < len(interior_rooms)):
+                                key_i = interior_rooms[room_i]
+                                interior_home.advance(t)
+                                mid = next(
+                                    (m for m in interior_home.net.modules
+                                     if m.module_id.startswith(key_i)),
+                                    None)
+                                if mid is not None:
+                                    toast = (f"{mid.module_id}: {mid.state}"
+                                             f"  ·  {abs(mid.power_kw):,.0f}"
+                                             f" kW")
+                                    toast_until = t + 7
+                                    audio.play("blip")
+                    elif event.key == pygame.K_ESCAPE:
+                        toast = "exit through the airlock (far left, E)"
+                        toast_until = t + 5
             elif scene == "victory":
                 if event.type == pygame.KEYDOWN and event.key in (
                         pygame.K_RETURN, pygame.K_ESCAPE):
@@ -3453,6 +3506,80 @@ def run(argv: list[str] | None = None) -> int:
                 size[0],
                 "A/D walk   SHIFT run   SPACE jump   E interact   "
                 "F plant flag   R scoop sample"),
+                (0, size[1] - theme.FOOTER_H))
+            screen.blit(vig, (0, 0))
+            apply_fade()
+            pygame.display.flip()
+            frame_count += 1
+            if args.frames and frame_count >= args.frames:
+                running = False
+            continue
+
+        if scene == "interior" and eva_state is not None \
+                and interior_home is not None:
+            # ---- inside the hab: walk the rooms, meet the residents ----
+            from aphelion.render.interior_art import (
+                FLOOR_Y, ROOM_H, ROOM_W, room_strip)
+            clock.advance_analytic(clock.t + EVA_TIME_FACTOR * real_dt)
+            t = clock.t
+            ppm_i = 24.0
+            strip = room_strip(interior_rooms)
+            total_m = strip.get_width() / ppm_i
+            keys = pygame.key.get_pressed()
+            move = 0
+            if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+                move -= 1
+            if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+                move += 1
+            if move:
+                eva_state.facing = move
+                eva_state.frame += real_dt * 6.0
+                interior_x = max(1.0, min(total_m - 1.0,
+                                          interior_x + move * 1.8 * real_dt))
+
+            screen.fill((10, 12, 18))
+            scale_i = 2.2
+            sw = int(strip.get_width() * scale_i)
+            sh = int(strip.get_height() * scale_i)
+            strip_big = pygame.transform.scale(strip, (sw, sh))
+            ox = size[0] / 2 - interior_x * ppm_i * scale_i
+            oy = size[1] / 2 - sh / 2
+            screen.blit(strip_big, (ox, oy))
+            # residents at home in their rooms
+            from aphelion.render.base_art import walker_sprite
+            for ri, rname in enumerate(interior_home.crew[:6]):
+                rx_m = (1.5 + (ri + 1) * (total_m - 3.0) / 7.0
+                        + 0.8 * math.sin(ui_t * 0.7 + ri * 2.1))
+                wspr = walker_sprite(rname, int(ui_t * 4 + ri) & 3, 40)
+                screen.blit(wspr, (ox + rx_m * ppm_i * scale_i
+                                   - wspr.get_width() / 2,
+                                   oy + FLOOR_Y * scale_i
+                                   - wspr.get_height()))
+            # you
+            aspr = eva_art.astronaut(int(eva_state.frame), eva_state.facing,
+                                     False, h_px=int(40 * scale_i * 0.8))
+            screen.blit(aspr, (size[0] / 2 - aspr.get_width() / 2,
+                               oy + FLOOR_Y * scale_i - aspr.get_height()))
+            # room label + prompt
+            room_i = int(interior_x * ppm_i // ROOM_W) - 1
+            label = ("AIRLOCK — E exits to the surface"
+                     if room_i < 0 else
+                     interior_rooms[room_i].replace("_", " ").upper()
+                     + "   ·   E console")
+            theme.draw_text(screen, size[0] / 2 - 120, int(oy) - 26, label,
+                            color=theme.COLORS["gold"], font="ui_small")
+            chx_i = 10
+            for chip_txt, chip_col in (
+                    (f"INSIDE  {interior_home.name}", theme.COLORS["text"]),
+                    (f"residents {len(interior_home.crew)}",
+                     theme.COLORS["text_dim"]),
+                    (f"beds {interior_home.beds()}",
+                     theme.COLORS["text_dim"])):
+                cs = theme.chip(chip_txt, chip_col)
+                screen.blit(cs, (chx_i, 8))
+                chx_i += cs.get_width() + 8
+            screen.blit(theme.footer(
+                size[0], "A/D walk   E console / airlock"),
                 (0, size[1] - theme.FOOTER_H))
             screen.blit(vig, (0, 0))
             apply_fade()
