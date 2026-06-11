@@ -1,4 +1,4 @@
-# 15 — Audio Direction & Sound Architecture
+﻿# 15 — Audio Direction & Sound Architecture
 
 Status: DRAFT v1 for design-bible integration. Owner: audio domain.
 Sibling docs: 01-orbital-mechanics.md … 13-architecture.md, plus 90-14-visual-direction-rendering.md.
@@ -357,7 +357,7 @@ Bank sizes: ~12–18 min unique music per act + stingers; total score ~90–110 
 
 ## 9. Open Questions
 
-1. **Original vs licensed score.** §4.6 assumes ~90–110 min of original commissioned music (single composer voice). Licensing (e.g., existing ambient catalog) halves cost but breaks per-act/per-world stem keying (AU-20) and the color-stem progression (§6). Recommendation: original; decide at Phase 2 budgeting.
+1. **Original vs licensed score.** §4.6 assumes ~90–110 min of original commissioned music (single composer voice). Licensing (e.g., existing ambient catalog) halves cost but breaks per-act/per-world stem keying (AU-20) and the color-stem progression (§6). RESOLVED (DECISIONS G35b): original minimal-ambient score confirmed; only the budget figure is deferred to Phase 2.
 2. **Hand-rolled adaptive mixer vs middleware.** FMOD/Wwise would give runtime filters, real sidechains, and authoring tools, but violates 13 §3.1's pygame+numpy-only runtime law. This doc's design (pre-baked variants, gain-only runtime) deliberately fits the law. Standing question: if pre-baked `_struct`/`_thin` variants bloat the asset count past ~400, revisit a numpy-based offline bake tool first, middleware last.
 3. **Runtime DSP via numpy.** A small block-processing path (one-pole low-pass on int16 arrays via `sndarray`) could replace `_struct` variants and enable continuous pressure-filtering (AU-6 currently quantizes to full/thin/struct). Feasible within the dependency law; costs latency (+1 block) and complexity. Prototype at Phase 1; adopt only if the variant library proves unwieldy.
 4. **Cell-level occlusion (07).** v1 treats each pressurized volume as one acoustic space (AU-6 cabin P, no per-wall occlusion). Does INTERIOR play need door/bulkhead muffling from 07's cell graph (hear the fire behind the hatch)? Depends on 13 §9-Q3's crew-agents decision; recommend: defer with the same v1-icons logic, revisit post-1.0.

@@ -222,6 +222,8 @@ Adopted from 13 §6 (binding there for Phases 0–6) and extended with a release
 
 ## 7. Bible-Wide Open Questions (harvested from every doc §9, deduplicated, grouped)
 
+> **STATUS (2026-06-11): ALL 35 QUESTIONS RULED.** Every item below was decided by the Director and recorded in [DECISIONS.md](DECISIONS.md), then applied to the docs by the canon-cleanup pass. This section is preserved as the historical register; where it conflicts with DECISIONS.md, DECISIONS.md wins.
+
 The items below are the ones worth deciding **before coding starts** or at the named phase gate. Source docs in parentheses. Recommendations recorded in the source docs are noted where they exist.
 
 ### A. Canon reconciliation — blocking, schedule as one pre-code pass
