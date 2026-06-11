@@ -1,15 +1,19 @@
-"""APHELION entry point — Phase 0 orbital sandbox.
+"""APHELION — playable orbital sandbox (Phases 0-2 engine, flyable).
 
-The real solar system: 37 canon bodies loaded from data/core/bodies (the
-03-solar-system.md tables), validated at launch, propagated on rails by the
-universal-variable Kepler engine. Moons render around their primaries; the
-demo craft rides an Earth->Mars transfer ellipse.
+You fly a craft starting in LEO-300. Burns are applied along your current
+velocity (prograde/retrograde) or radially; the predicted patched-conic
+trajectory — across up to 5 SOI transitions — is drawn live ahead of you.
+Warp through an encounter and the sim re-expresses your orbit in the new
+frame exactly as the planner predicted (same math, by construction).
 
-Controls: . / ,  warp up/down | space pause | wheel zoom | TAB / Shift+TAB
-focus next/prev body | ESC quit.
+Controls
+  . / ,        warp up / down            space   pause
+  TAB / S-TAB  focus next / prev body    C       focus your craft
+  X / Z        +10 / -10 m/s prograde    A / D   +10 / -10 m/s radial
+  (hold shift for 100 m/s steps)         wheel   zoom
+  ESC          quit
 
-Dev flags: --frames N (exit after N frames), --screenshot PATH (save last
-frame), --headless (SDL dummy driver).
+Dev flags: --frames N  --screenshot PATH  --headless
 """
 
 from __future__ import annotations
@@ -20,12 +24,12 @@ import os
 import sys
 
 from aphelion.core.clock import RAILS_RATES, SimClock
-from aphelion.core.units import AU, SECONDS_PER_DAY
+from aphelion.core.units import SECONDS_PER_DAY
 from aphelion.render.camera import Camera, ZoomLayer
 from aphelion.sim.orbits.ephemeris import load_solar_system
 from aphelion.sim.orbits.kepler import elements_to_state, state_to_elements
-
-MU_SUN = 1.32712440018e20
+from aphelion.sim.orbits import transfers as tr
+from aphelion.sim.orbits.trajectory import predict_trajectory
 
 _BODY_COLORS = {
     "core:sun": (255, 220, 120), "core:mercury": (140, 130, 120),
@@ -33,20 +37,73 @@ _BODY_COLORS = {
     "core:moon": (170, 170, 175), "core:mars": (230, 110, 70),
     "core:jupiter": (220, 180, 140), "core:saturn": (230, 210, 160),
     "core:uranus": (160, 210, 220), "core:neptune": (110, 140, 230),
-    "core:pluto": (200, 180, 170), "core:europa": (200, 190, 170),
-    "core:titan": (220, 170, 90), "core:io": (210, 190, 110),
 }
 _DEFAULT_COLOR = (130, 135, 145)
 _ORBIT_COLOR = (40, 50, 70)
 _MOON_ORBIT_COLOR = (55, 65, 85)
+_CRAFT_COLOR = (120, 255, 170)
+_LEG_COLORS = [(120, 255, 170), (255, 200, 60), (255, 120, 200),
+               (140, 200, 255), (255, 160, 90), (200, 140, 255)]
 _WARP_LADDER = (1.0,) + RAILS_RATES
+_PREDICT_HORIZON = 60.0 * SECONDS_PER_DAY
 
 
-def build_demo_craft():
-    """Heliocentric Earth->Mars transfer ellipse (perihelion 1 AU)."""
-    a_t = 0.5 * (1.0 + 1.5237) * AU
-    vp = math.sqrt(MU_SUN * (2.0 / AU - 1.0 / a_t))
-    return state_to_elements(AU, 0.0, 0.0, vp, 0.0, MU_SUN)
+class Craft:
+    """A rails craft: elements in a frame, re-expressed at SOI crossings."""
+
+    def __init__(self, tree, frame_id: str, elements) -> None:
+        self.tree = tree
+        self.frame_id = frame_id
+        self.elements = elements
+        self.legs = []
+        self._legs_t0 = -1.0
+
+    def state(self, t: float):
+        return elements_to_state(self.elements, t)
+
+    def burn(self, t: float, dv_prograde: float, dv_radial: float) -> None:
+        rx, ry, vx, vy = self.state(t)
+        v = math.hypot(vx, vy)
+        r = math.hypot(rx, ry)
+        if v == 0.0 or r == 0.0:
+            return
+        px, py = vx / v, vy / v
+        ux, uy = rx / r, ry / r
+        nvx = vx + dv_prograde * px + dv_radial * ux
+        nvy = vy + dv_prograde * py + dv_radial * uy
+        mu = self.tree.body(self.frame_id).mu
+        self.elements = state_to_elements(rx, ry, nvx, nvy, t, mu)
+        self._legs_t0 = -1.0          # invalidate prediction
+
+    def predict(self, t: float):
+        if self._legs_t0 < 0.0 or abs(t - self._legs_t0) > 600.0:
+            self.legs = predict_trajectory(
+                self.tree, self.frame_id, self.elements, t, _PREDICT_HORIZON)
+            self._legs_t0 = t
+        return self.legs
+
+    def advance_to(self, t: float) -> list[str]:
+        """Follow predicted legs through any SOI crossings up to time t."""
+        notes: list[str] = []
+        for _ in range(8):
+            legs = self.predict(max(self._legs_t0, 0.0) if self._legs_t0 >= 0 else t)
+            current = None
+            for leg in legs:
+                if leg.t_start <= t < leg.t_end or leg is legs[-1]:
+                    current = leg
+                    if leg.t_start <= t:
+                        break
+            if current is None:
+                break
+            if current.frame_id != self.frame_id or current.elements != self.elements:
+                if t >= current.t_start:
+                    self.frame_id = current.frame_id
+                    self.elements = current.elements
+                    notes.append(f"frame -> {current.frame_id.split(':')[1]}")
+                    self._legs_t0 = -1.0
+                    continue
+            break
+        return notes
 
 
 def run(argv: list[str] | None = None) -> int:
@@ -55,7 +112,6 @@ def run(argv: list[str] | None = None) -> int:
     parser.add_argument("--screenshot", type=str, default="")
     parser.add_argument("--headless", action="store_true")
     args = parser.parse_args(argv)
-
     if args.headless:
         os.environ["SDL_VIDEODRIVER"] = "dummy"
 
@@ -63,11 +119,15 @@ def run(argv: list[str] | None = None) -> int:
     from aphelion.render.draw_conics import draw_conic
 
     db, tree = load_solar_system()
-    planets = sorted(
-        (i for i, b in db.bodies.items() if b["parent"] == "core:sun"),
-        key=lambda i: db.bodies[i]["elements"]["a_m"])
+    planets = sorted((i for i, b in db.bodies.items() if b["parent"] == "core:sun"),
+                     key=lambda i: db.bodies[i]["elements"]["a_m"])
     moons_of = {i: tree.children(i) for i in planets}
-    craft = build_demo_craft()
+
+    mu_e = tree.body("core:earth").mu
+    r_leo = 6.678e6
+    craft = Craft(tree, "core:earth",
+                  state_to_elements(r_leo, 0.0, 0.0,
+                                    tr.circular_speed(mu_e, r_leo), 0.0, mu_e))
 
     pygame.init()
     size = (1280, 720)
@@ -78,20 +138,25 @@ def run(argv: list[str] | None = None) -> int:
     font = pygame.font.SysFont("consolas", 14)
 
     clock = SimClock(t0=0.0)
-    warp_idx = 3
+    warp_idx = 0
     paused = False
-    cam = Camera(*size, frame_id="core:sun", zoom=1.2e-9, layer=ZoomLayer.SYSTEM)
-    focus_order = ["core:sun"] + planets
+    cam = Camera(*size, frame_id="core:earth", zoom=3.0e-5, layer=ZoomLayer.LOCAL)
+    focus_order = ["craft", "core:sun"] + planets
     focus_idx = 0
+    toast = ""
+    toast_until = 0.0
 
     frame_count = 0
     running = True
     while running:
         real_dt = pygame_clock.tick(60) / 1000.0
+        t = clock.t
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.KEYDOWN:
+                shift = event.mod & pygame.KMOD_SHIFT
+                step = 100.0 if shift else 10.0
                 if event.key == pygame.K_ESCAPE:
                     running = False
                 elif event.key == pygame.K_SPACE:
@@ -101,8 +166,21 @@ def run(argv: list[str] | None = None) -> int:
                 elif event.key == pygame.K_COMMA:
                     warp_idx = max(warp_idx - 1, 0)
                 elif event.key == pygame.K_TAB:
-                    step = -1 if event.mod & pygame.KMOD_SHIFT else 1
-                    focus_idx = (focus_idx + step) % len(focus_order)
+                    focus_idx = (focus_idx + (-1 if shift else 1)) % len(focus_order)
+                elif event.key == pygame.K_c:
+                    focus_idx = 0
+                elif event.key == pygame.K_x:
+                    craft.burn(t, +step, 0.0)
+                    toast, toast_until = f"prograde +{step:.0f} m/s", t + 5
+                elif event.key == pygame.K_z:
+                    craft.burn(t, -step, 0.0)
+                    toast, toast_until = f"retrograde {step:.0f} m/s", t + 5
+                elif event.key == pygame.K_a:
+                    craft.burn(t, 0.0, +step)
+                    toast, toast_until = f"radial-out +{step:.0f} m/s", t + 5
+                elif event.key == pygame.K_d:
+                    craft.burn(t, 0.0, -step)
+                    toast, toast_until = f"radial-in {step:.0f} m/s", t + 5
             elif event.type == pygame.MOUSEWHEEL:
                 if event.y > 0:
                     cam.zoom_in(event.y)
@@ -112,55 +190,82 @@ def run(argv: list[str] | None = None) -> int:
         if not paused:
             clock.advance_analytic(clock.t + _WARP_LADDER[warp_idx] * real_dt)
         t = clock.t
+        for note in craft.advance_to(t):
+            toast, toast_until = f"SOI {note}", t + 8
+
+        # camera follow (positions in ROOT frame; camera frame is the root)
+        def body_root(bid: str) -> tuple[float, float]:
+            rx, ry, _, _ = tree.state_in_root(bid, t)
+            return rx, ry
 
         focus = focus_order[focus_idx]
-        if focus == "core:sun":
+        if focus == "craft":
+            frx, fry = body_root(craft.frame_id)
+            crx, cry, _, _ = craft.state(t)
+            cam.follow(frx + crx, fry + cry)
+        elif focus == "core:sun":
             cam.follow(0.0, 0.0)
         else:
-            fx, fy, _, _ = tree.state_in_parent(focus, t)
-            cam.follow(fx, fy)
+            cam.follow(*body_root(focus))
 
         screen.fill((6, 8, 14))
 
-        # planet orbits + bodies
         for pid in planets:
             draw_conic(screen, tree.body(pid).elements, cam, _ORBIT_COLOR)
-        draw_conic(screen, craft, cam, (255, 200, 60))
-
         sun_px = cam.world_to_screen(0.0, 0.0)
         pygame.draw.circle(screen, _BODY_COLORS["core:sun"], sun_px, 5)
         for pid in planets:
-            rx, ry, _, _ = tree.state_in_parent(pid, t)
-            px = cam.world_to_screen(rx, ry)
-            if -60 < px[0] < size[0] + 60 and -60 < px[1] < size[1] + 60:
-                color = _BODY_COLORS.get(pid, _DEFAULT_COLOR)
-                pygame.draw.circle(screen, color, px, 3)
+            prx, pry = body_root(pid)
+            ppx = cam.world_to_screen(prx, pry)
+            on_screen = -60 < ppx[0] < size[0] + 60 and -60 < ppx[1] < size[1] + 60
+            if on_screen:
+                pygame.draw.circle(screen, _BODY_COLORS.get(pid, _DEFAULT_COLOR), ppx, 3)
                 screen.blit(font.render(pid.split(":")[1], True, (150, 160, 180)),
-                            (px[0] + 6, px[1] - 6))
-            # moons render around their primary (visible when zoomed in)
+                            (ppx[0] + 6, ppx[1] - 6))
             for mid in moons_of.get(pid, []):
                 mel = tree.body(mid).elements
-                draw_conic(screen, mel, cam, _MOON_ORBIT_COLOR, origin=(rx, ry))
+                draw_conic(screen, mel, cam, _MOON_ORBIT_COLOR, origin=(prx, pry))
                 mrx, mry, _, _ = tree.state_in_parent(mid, t)
-                mpx = cam.world_to_screen(rx + mrx, ry + mry)
+                mpx = cam.world_to_screen(prx + mrx, pry + mry)
                 if (2.0 * abs(mel.a) * cam.zoom > 8.0
-                        and -60 < mpx[0] < size[0] + 60
-                        and -60 < mpx[1] < size[1] + 60):
-                    pygame.draw.circle(screen, _BODY_COLORS.get(mid, _DEFAULT_COLOR),
-                                       mpx, 2)
+                        and -60 < mpx[0] < size[0] + 60 and -60 < mpx[1] < size[1] + 60):
+                    pygame.draw.circle(screen, _BODY_COLORS.get(mid, _DEFAULT_COLOR), mpx, 2)
                     screen.blit(font.render(mid.split(":")[1], True, (120, 130, 150)),
                                 (mpx[0] + 5, mpx[1] - 5))
 
-        crx, cry, _, _ = elements_to_state(craft, t)
-        cpx = cam.world_to_screen(crx, cry)
-        pygame.draw.circle(screen, (255, 200, 60), cpx, 2)
+        # craft: predicted legs + marker
+        for i, leg in enumerate(craft.predict(t)):
+            frx, fry = body_root(leg.frame_id)
+            r_soi = tree.body(leg.frame_id).soi_radius
+            r_max = r_soi if math.isfinite(r_soi) else None
+            draw_conic(screen, leg.elements, cam,
+                       _LEG_COLORS[i % len(_LEG_COLORS)],
+                       r_max=r_max, origin=(frx, fry))
+        frx, fry = body_root(craft.frame_id)
+        crx, cry, cvx, cvy = craft.state(t)
+        cpx = cam.world_to_screen(frx + crx, fry + cry)
+        pygame.draw.circle(screen, _CRAFT_COLOR, cpx, 3)
 
-        hud = (f"t = {t / SECONDS_PER_DAY:9.2f} d   warp {_WARP_LADDER[warp_idx]:>9,.0f}x"
-               f"{'  [PAUSED]' if paused else ''}   focus: {focus.split(':')[1]}   "
-               f"zoom {cam.zoom:.2e} px/m   bodies: {len(db.bodies)}")
-        screen.blit(font.render(hud, True, (190, 200, 215)), (10, 8))
+        el = craft.elements
+        body = tree.body(craft.frame_id)
+        alt = math.hypot(crx, cry) - body.radius
+        hud1 = (f"t = {t / SECONDS_PER_DAY:9.3f} d   warp {_WARP_LADDER[warp_idx]:>9,.0f}x"
+                f"{'  [PAUSED]' if paused else ''}   focus: {focus.split(':')[-1]}   "
+                f"zoom {cam.zoom:.2e}")
+        peri = el.periapsis - body.radius
+        apo = (el.apoapsis - body.radius) if el.alpha > 0 else float("inf")
+        hud2 = (f"CRAFT @ {craft.frame_id.split(':')[1]}   alt {alt/1e3:,.0f} km   "
+                f"v {math.hypot(cvx, cvy):,.0f} m/s   "
+                f"peri {peri/1e3:,.0f} km   apo {apo/1e3:,.0f} km   e {el.e:.4f}")
+        screen.blit(font.render(hud1, True, (190, 200, 215)), (10, 8))
+        screen.blit(font.render(hud2, True, _CRAFT_COLOR), (10, 28))
+        if t < toast_until and toast:
+            screen.blit(font.render(toast, True, (255, 230, 140)), (10, 48))
+        screen.blit(font.render(
+            "X/Z prograde±  A/D radial±  (shift=100)  C craft  TAB focus  ./, warp",
+            True, (110, 120, 135)), (10, size[1] - 24))
+
         pygame.display.flip()
-
         frame_count += 1
         if args.frames and frame_count >= args.frames:
             running = False
