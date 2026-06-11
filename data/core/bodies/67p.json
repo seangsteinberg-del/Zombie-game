@@ -1,0 +1,15 @@
+{
+ "id": "core:67p",
+ "parent": "core:sun",
+ "mu_m3s2": 670.0,
+ "radius_m": 2000.0,
+ "rotation_period_s": 44640.0,
+ "elements": {
+  "a_m": 518000000000.0,
+  "e": 0.641,
+  "lon_peri_rad": 1.0978120995,
+  "t_peri_s": -47445548.993536,
+  "sense": 1
+ },
+ "soi_m": 0.0
+}

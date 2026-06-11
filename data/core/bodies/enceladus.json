@@ -1,0 +1,15 @@
+{
+ "id": "core:enceladus",
+ "parent": "core:saturn",
+ "mu_m3s2": 7210000000.0,
+ "radius_m": 252100.0,
+ "rotation_period_s": 118414.43998092935,
+ "elements": {
+  "a_m": 237948000.0,
+  "e": 0.0047,
+  "lon_peri_rad": 0.0,
+  "t_peri_s": -4933.934999,
+  "sense": 1
+ },
+ "soi_m": 487593.0781487652
+}

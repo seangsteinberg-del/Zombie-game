@@ -1,0 +1,15 @@
+{
+ "id": "core:itokawa",
+ "parent": "core:sun",
+ "mu_m3s2": 2.1,
+ "radius_m": 165.0,
+ "rotation_period_s": 43668.0,
+ "elements": {
+  "a_m": 198100000000.0,
+  "e": 0.28,
+  "lon_peri_rad": 4.0474185354,
+  "t_peri_s": -39673883.451314,
+  "sense": 1
+ },
+ "soi_m": 0.0
+}

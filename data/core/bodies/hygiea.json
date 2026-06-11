@@ -1,0 +1,15 @@
+{
+ "id": "core:hygiea",
+ "parent": "core:sun",
+ "mu_m3s2": 5830000000.0,
+ "radius_m": 217000.0,
+ "rotation_period_s": 49788.0,
+ "elements": {
+  "a_m": 469600000000.0,
+  "e": 0.112,
+  "lon_peri_rad": 4.1102503884,
+  "t_peri_s": -22914560.971203,
+  "sense": 1
+ },
+ "soi_m": 33793319.665226474
+}

@@ -1,0 +1,15 @@
+{
+ "id": "core:moon",
+ "parent": "core:earth",
+ "mu_m3s2": 4902800000000.0,
+ "radius_m": 1737400.0,
+ "rotation_period_s": 2371843.604625464,
+ "elements": {
+  "a_m": 384400000.0,
+  "e": 0.0549,
+  "lon_peri_rad": 5.5536376798,
+  "t_peri_s": -889441.351735,
+  "sense": 1
+ },
+ "soi_m": 66182922.33068067
+}

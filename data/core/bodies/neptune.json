@@ -1,0 +1,15 @@
+{
+ "id": "core:neptune",
+ "parent": "core:sun",
+ "mu_m3s2": 6836500000000000.0,
+ "radius_m": 24622000.0,
+ "rotation_period_s": 57996.0,
+ "elements": {
+  "a_m": 4498400000000.0,
+  "e": 0.0086,
+  "lon_peri_rad": 0.7853981634,
+  "t_peri_s": -101182800.69525,
+  "sense": 1
+ },
+ "soi_m": 86661648118.33638
+}

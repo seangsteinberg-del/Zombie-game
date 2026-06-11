@@ -1,0 +1,15 @@
+{
+ "id": "core:deimos",
+ "parent": "core:mars",
+ "mu_m3s2": 98000.0,
+ "radius_m": 6200.0,
+ "rotation_period_s": 109116.24350087433,
+ "elements": {
+  "a_m": 23463000.0,
+  "e": 0.0003,
+  "lon_peri_rad": 0.0,
+  "t_peri_s": -60620.135278,
+  "sense": 1
+ },
+ "soi_m": 0.0
+}

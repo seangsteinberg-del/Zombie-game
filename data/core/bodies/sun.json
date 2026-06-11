@@ -1,0 +1,9 @@
+{
+ "id": "core:sun",
+ "parent": null,
+ "mu_m3s2": 1.32712440018e+20,
+ "radius_m": 695700000.0,
+ "rotation_period_s": 2194560.0,
+ "soi_m": null,
+ "elements": null
+}

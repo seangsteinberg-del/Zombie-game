@@ -1,0 +1,15 @@
+{
+ "id": "core:eris",
+ "parent": "core:sun",
+ "mu_m3s2": 1108000000000.0,
+ "radius_m": 1163000.0,
+ "rotation_period_s": 1365120.0,
+ "elements": {
+  "a_m": 10157000000000.0,
+  "e": 0.44,
+  "lon_peri_rad": 3.2742376767,
+  "t_peri_s": -10053646025.78568,
+  "sense": 1
+ },
+ "soi_m": 5962339521.003067
+}

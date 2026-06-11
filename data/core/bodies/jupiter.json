@@ -1,0 +1,15 @@
+{
+ "id": "core:jupiter",
+ "parent": "core:sun",
+ "mu_m3s2": 1.26686534e+17,
+ "radius_m": 69911000.0,
+ "rotation_period_s": 35730.0,
+ "elements": {
+  "a_m": 778600000000.0,
+  "e": 0.0489,
+  "lon_peri_rad": 0.2583087293,
+  "t_peri_s": -69425494.778209,
+  "sense": 1
+ },
+ "soi_m": 48221634566.64976
+}

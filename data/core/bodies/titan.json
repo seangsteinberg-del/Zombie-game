@@ -1,0 +1,15 @@
+{
+ "id": "core:titan",
+ "parent": "core:saturn",
+ "mu_m3s2": 8978100000000.0,
+ "radius_m": 2574700.0,
+ "rotation_period_s": 1377904.378071491,
+ "elements": {
+  "a_m": 1221870000.0,
+  "e": 0.0288,
+  "lon_peri_rad": 3.241076421,
+  "t_peri_s": -612401.94581,
+  "sense": 1
+ },
+ "soi_m": 43321166.70352706
+}

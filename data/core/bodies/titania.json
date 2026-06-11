@@ -1,0 +1,15 @@
+{
+ "id": "core:titania",
+ "parent": "core:uranus",
+ "mu_m3s2": 228300000000.0,
+ "radius_m": 788900.0,
+ "rotation_period_s": 751258.8806694074,
+ "elements": {
+  "a_m": 435910000.0,
+  "e": 0.0011,
+  "lon_peri_rad": 0.0,
+  "t_peri_s": -146078.115686,
+  "sense": 1
+ },
+ "soi_m": 7544158.402535728
+}

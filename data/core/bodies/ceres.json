@@ -1,0 +1,15 @@
+{
+ "id": "core:ceres",
+ "parent": "core:sun",
+ "mu_m3s2": 62600000000.0,
+ "radius_m": 469700.0,
+ "rotation_period_s": 32652.0,
+ "elements": {
+  "a_m": 413800000000.0,
+  "e": 0.076,
+  "lon_peri_rad": 2.6860617188,
+  "t_peri_s": -106466066.013637,
+  "sense": 1
+ },
+ "soi_m": 76958317.78452693
+}

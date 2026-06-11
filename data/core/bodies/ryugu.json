@@ -1,0 +1,15 @@
+{
+ "id": "core:ryugu",
+ "parent": "core:sun",
+ "mu_m3s2": 30.0,
+ "radius_m": 448.0,
+ "rotation_period_s": 27468.0,
+ "elements": {
+  "a_m": 178000000000.0,
+  "e": 0.1902,
+  "lon_peri_rad": 1.7976891296,
+  "t_peri_s": -2389300.911352,
+  "sense": 1
+ },
+ "soi_m": 0.0
+}

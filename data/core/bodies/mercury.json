@@ -1,0 +1,15 @@
+{
+ "id": "core:mercury",
+ "parent": "core:sun",
+ "mu_m3s2": 22032000000000.0,
+ "radius_m": 2439700.0,
+ "rotation_period_s": 5067014.4,
+ "elements": {
+  "a_m": 57910000000.0,
+  "e": 0.2056,
+  "lon_peri_rad": 1.3526301703,
+  "t_peri_s": -7123558.189091,
+  "sense": 1
+ },
+ "soi_m": 112411432.04585096
+}

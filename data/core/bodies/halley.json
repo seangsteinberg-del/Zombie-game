@@ -1,0 +1,15 @@
+{
+ "id": "core:halley",
+ "parent": "core:sun",
+ "mu_m3s2": 15000.0,
+ "radius_m": 5500.0,
+ "rotation_period_s": 190080.0,
+ "elements": {
+  "a_m": 2667000000000.0,
+  "e": 0.967,
+  "lon_peri_rad": 2.9635690699,
+  "t_peri_s": -1978939603.243734,
+  "sense": -1
+ },
+ "soi_m": 0.0
+}

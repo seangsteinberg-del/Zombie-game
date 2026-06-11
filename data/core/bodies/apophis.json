@@ -1,0 +1,15 @@
+{
+ "id": "core:apophis",
+ "parent": "core:sun",
+ "mu_m3s2": 4.0,
+ "radius_m": 170.0,
+ "rotation_period_s": 110160.0,
+ "elements": {
+  "a_m": 164600000000.0,
+  "e": 0.19,
+  "lon_peri_rad": 5.7735491656,
+  "t_peri_s": -21549931.811753,
+  "sense": 1
+ },
+ "soi_m": 0.0
+}

@@ -1,0 +1,15 @@
+{
+ "id": "core:eros",
+ "parent": "core:sun",
+ "mu_m3s2": 446000.0,
+ "radius_m": 8400.0,
+ "rotation_period_s": 18972.0,
+ "elements": {
+  "a_m": 218100000000.0,
+  "e": 0.223,
+  "lon_peri_rad": 2.1485003092,
+  "t_peri_s": -16974529.059637,
+  "sense": 1
+ },
+ "soi_m": 0.0
+}

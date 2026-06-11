@@ -17,7 +17,7 @@ The tree itself is the campaign's skeleton. Tiers T0–T4 (locked by conventions
 
 Design pillars of this document:
 
-- **129 named nodes** across 10 categories, each with explicit Science cost, ED threshold (naming the donor part family), prerequisites, unlock list, and a real-world anchor.
+- **132 named nodes** across 10 categories, each with explicit Science cost, ED threshold (naming the donor part family), prerequisites, unlock list, and a real-world anchor.
 - **No stat-bump filler.** Roughly one node in twelve is *era-defining*: it changes what kind of game you are playing (§4.12). The rest unlock concrete parts and processes defined in sibling docs.
 - **Prototyping hurts.** The first article of any new part type costs ×3 resources, builds at half speed, and fails 4× more often until it survives one full-duration operation. Maturity is earned, not bought.
 - **Exploration is mandatory, not flavor.** Eighteen location-gated Discoveries (§4.11) are hard prerequisites or large discounts for key nodes. You cannot research polar ice mining from an armchair in LEO.
@@ -167,7 +167,7 @@ Unlock is instantaneous on payment (the *time* cost of new tech lives in prototy
 | T3 | 900–2,500 | 400–2,000 |
 | T4 `[SPECULATIVE]` | 4,000–12,000 | 2,000–4,000 |
 
-Whole-tree totals (sums of §4 as written): T1 ≈ 5,100 / T2 ≈ 21,200 / T3 ≈ 54,000 / T4 ≈ 72,000 → ≈ **152,500 SCI** to research everything (T4 ≈ 47%). Total recoverable Science in the solar system with thorough Earth-return play ≈ **210,000 SCI**, derived from: the §3.6 `V_base` table × 03's region catalog (pools extracted at ×1.25 Earth-return), Discoveries ≈ 12,300, milestones (§3.7), and observation campaigns counted at their **program-wide cap of 15,000 SCI** (§3.5). The figure deliberately **excludes** the repeatable contract trickle (F-2, owned by 12), which is unbounded over infinite time but small by design (≤ 25% of act income, §9 Q4). Finishing the tree therefore requires exploring most of the system; finishing the *campaign* requires roughly half of it.
+Whole-tree totals (sums of §4 as written, after the DECISIONS A6/C19 rebalance — VH-09 retiered to T2 at 700 SCI; gravity-biology arc LS-09/10/11 added): T1 ≈ 5,100 / T2 ≈ 22,300 / T3 ≈ 54,000 / T4 ≈ 77,000 → ≈ **158,400 SCI** to research everything (T4 ≈ 49%). Total recoverable Science in the solar system with thorough Earth-return play ≈ **210,000 SCI**, derived from: the §3.6 `V_base` table × 03's region catalog (pools extracted at ×1.25 Earth-return), Discoveries ≈ 12,300, milestones (§3.7), and observation campaigns counted at their **program-wide cap of 15,000 SCI** (§3.5). The figure deliberately **excludes** the repeatable contract trickle (F-2, owned by 12), which is unbounded over infinite time but small by design (≤ 25% of act income, §9 Q4). Finishing the tree therefore requires exploring most of the system; finishing the *campaign* requires roughly half of it.
 
 ### 3.4 Prototyping and reliability maturation
 
@@ -202,7 +202,7 @@ m(D_f) = 1 + 3 · 2^(−D_f / D_half)            [type-maturity multiplier, 4 �
 ```
 
 - `m_unit` = per-individual-unit infant mortality: ×2.5 for a unit's first 50 operating hours or first 3 ignitions (burn-in on a test stand clears it safely).
-- Wear multipliers from 02 §3.14 (engines, `1 + 9w²`) and machine wear/MTBF models (05) stack multiplicatively on top — this doc owns only `m(D_f)`, `m_state`, `m_unit`.
+- Wear multipliers from 02 §3.14 (engines, `1 + 9w²`) and machine wear/MTBF models (05) stack multiplicatively on top — this doc owns only `m(D_f)`, `m_state`, `m_unit`. **One wear model, confirmed (DECISIONS A5):** 02's per-ignition/wear base × this doc's maturity stack `m(D_f)·m_state·m_unit` × 05's spares/MTBF consumption are **orthogonal multipliers** — no double counting anywhere in the chain — and the contract ships as an interface test in Phase 1.
 
 **`D_half` per family (ED):**
 
@@ -327,7 +327,7 @@ Unlock:          visible(§3.8) ∧ prereqs ∧ discoveries ∧ SCI ≥ cost (sp
 
 ## 4. Content Catalog
 
-The tree: **129 nodes** in 10 categories. Columns: Science cost (SCI, spent), ED threshold (checked against named family), prerequisites — grammar: `+` and `,` both mean AND (all required); `|` means OR and **binds tighter than AND**, so `(A | B) + C` requires C plus at least one of A/B; `DSC-xx` = Discovery §4.11 — unlocks (part/process IDs from sibling docs), real-world anchor. Tier `T4*` = `[SPECULATIVE]`. Start-unlocked T0 nodes cost 0 and have no prerequisites. **(era)** marks era-defining nodes (§4.12).
+The tree: **132 nodes** in 10 categories. Columns: Science cost (SCI, spent), ED threshold (checked against named family), prerequisites — grammar: `+` and `,` both mean AND (all required); `|` means OR and **binds tighter than AND**, so `(A | B) + C` requires C plus at least one of A/B; `DSC-xx` = Discovery §4.11 — unlocks (part/process IDs from sibling docs), real-world anchor. Tier `T4*` = `[SPECULATIVE]`. Start-unlocked T0 nodes cost 0 and have no prerequisites. **(era)** marks era-defining nodes (§4.12).
 
 ### 4.1 Propulsion (PR) — parts in 02-propulsion.md
 
@@ -478,6 +478,12 @@ The tree: **129 nodes** in 10 categories. Columns: Science cost (SCI, spent), ED
 | LS-06 | Advanced Water & Waste Loops | T2 | LS-01 | 450 | 350 (ECLSS-PhysChem) | brine recovery, waste pyrolysis (08) | ISS Brine Processor Assembly (2021–) |
 | LS-07 | Closed-Loop Bioregenerative ECLSS **(era)** | T3 | LS-04, LS-06 | 2,400 | 1,500 (ECLSS-Bio) | algae/bacteria/plant loop (LS-GREEN full-diet racks, 08 §4.1; HB-GRN module, 06): ≥ 95% air/water, η_food 0.80→0.95 (08 §3.3) | ESA MELiSSA; BIOS-3 (Krasnoyarsk, 6-month closures); Lunar Palace 365 (Beihang, 370 d, 2017–18) |
 | LS-08 | Long-Duration Crew Health | T2 | LS-01 | 350 | — | med bay, exercise countermeasures, psych-support systems (08) | ISS medical ops; ARED countermeasure heritage |
+| LS-09 | Partial-Gravity Biology I — Centrifuge Studies | T2 | LS-08 | 400 | 200 (ECLSS-Bio) | the gravity-biology research arc opener (08 §3.14 GENERATIONS — decision log C19): small-animal onboard-centrifuge studies on partial-g development; first gravity-threshold data layer (08 demographic pillar) | NASA rodent centrifuge studies; Bion/Foton biosat program; ISS Rodent Research |
+| LS-10 | Partial-Gravity Biology II — Mammalian Trials | T3 | LS-09, HB-06 | 1,200 | 600 (ECLSS-Bio) | multi-generation mammalian reproduction trials in spin habitats (HB-06/06); narrows the g_repro threshold brackets (08 §3.14); demographic-pillar maturation | rodent multi-generation spin studies; analog-habitat reproduction research |
+| LS-11 | Human Reproduction Protocols `[SPECULATIVE]` | T4* | LS-10 | 5,000 | — | [SPECULATIVE] human partial-gravity gestation/development protocols and spin-habitat prescriptions (08 §3.14 GENERATIONS, Pass 2 / Phase 6+); satisfies the Foundation Audit demographic pillar's biological-continuity requirement (12) | honest speculation — no human off-Earth pregnancy data exists; arc models the uncertainty per C19 |
+| LS-09 | Variable-Gravity Biology (gravity-biology arc I — stub) | T2 | LS-01, SC-04 | 400 | 200 (ECLSS-Bio) | VG-LAB variable-g rodent/plant centrifuge rack; partial-g development datasets → first gravity-threshold bracket (08 §3.14) | ISS rodent research; JAXA MHU mouse centrifuge (1 g vs µg cohorts, flown 2016–) |
+| LS-10 | Mammalian Gestation Trials (gravity-biology arc II — stub) | T3 | LS-09, HB-06 | 1,200 | 600 (ECLSS-Bio) | conception-to-birth mammal trials in spin-g (HB-06 centrifuge); narrows the g_repro bracket; hard prerequisite for any human protocol | Cosmos/Bion biosatellite developmental biology; no off-Earth mammalian birth has ever been completed — that gap *is* the content |
+| LS-11 | Human Reproduction Protocols `[SPECULATIVE]` (gravity-biology arc III — stub) | T
 
 ### 4.9 Vehicles (VH) — chassis/craft in 10-vehicles.md
 
@@ -492,7 +498,7 @@ The tree: **129 nodes** in 10 categories. Columns: Science cost (SCI, spent), ED
 | VH-06 | Titan Rotorcraft | T3 | VH-05, SC-03 | 1,300 | 600 (AeroFlight) | heavy Titan rotorcraft (dense N2, low g) | Dragonfly (NASA New Frontiers, launch 2028) |
 | VH-07 | Titan Submarine | T3 | DSC-13 | 1,800 | 800 (AeroFlight) | submarine for Kraken/Ligeia Mare; sea-floor sampling | NASA Glenn COMPASS Titan Submarine (NIAC, 90-day cruise design) |
 | VH-08 | Ice-Penetrating Cryobot | T3 | DSC-10, PW-04 | 2,200 | 800 (AeroFlight) | fission-heated melt probe (km-class ice shells) + ocean sampler | NASA SESAME program; Honeybee SLUSH; Europa shell 15–25 km |
-| VH-09 | Venus Atmospheric Platforms | T3 | DSC-08, GN-04 | 1,200 | 500 (AeroFlight) | variable-altitude balloons, cloud-layer drones | Soviet VEGA balloons (1985, ~46 h at ~54 km); JPL variable-altitude balloon studies |
+| VH-09 | Venus Atmospheric Platforms | T2 | DSC-08, GN-04 | 700 | 500 (AeroFlight) | **robotic** variable-altitude balloons, cloud-layer drones, helium-cell starter aerostats (07 §4.3.3) — the **T2 robotic aerostat tier** per DECISIONS A6 (crewed HB-05 stays T3); Act-4 timing preserved by the DSC-08 gate | Soviet VEGA balloons (1985, ~46 h at ~54 km); JPL variable-altitude balloon studies |
 | VH-10 | Venus Surface Systems | T3 | DSC-08 | 1,400 | 300 (Avionics) | long-duration surface stations (SiC electronics, 737 K / 9,200 kPa [≈91 atm]) | NASA Glenn LLISSE (60-day design target) |
 
 ### 4.10 Science Instruments & Labs (SC) — this doc's own parts
@@ -560,7 +566,7 @@ Discoveries are one-time acquisitions tied to physical presence. Each grants its
 
 ### 4.13 T4 endgame summary — all `[SPECULATIVE]`, honestly
 
-Nine nodes: PR-21 (fission-fragment), PR-22 (fusion torch), PW-12 (fusion plant), IS-20 (He3 kiln), IS-21 (gas-giant scoop), IN-14 (self-expanding seed), SH-08 (skyhook), SH-09 (interstellar precursor), HB-08 (rotating settlement). Honesty notes, rendered in-game on each node tooltip:
+Ten nodes: PR-21 (fission-fragment), PR-22 (fusion torch), PW-12 (fusion plant), IS-20 (He3 kiln), IS-21 (gas-giant scoop), IN-14 (self-expanding seed), SH-08 (skyhook), SH-09 (interstellar precursor), HB-08 (rotating settlement), LS-11 (human reproduction protocols). Honesty notes, rendered in-game on each node tooltip:
 
 - **Fusion (PR-22, PW-12):** no net-energy D-He3 device exists; confinement physics is sound, engineering is not done. Anchors are concept studies (Princeton DFD, Daedalus), not hardware.
 - **He3 economy (IS-20, IS-21):** abundances (5–20 ppb in mare regolith) are measured and honest — which is precisely why the kiln must move ~100,000 t of regolith per kg of He3. The game does not inflate the ore grade; it gives you T3 strip miners instead.
@@ -568,6 +574,7 @@ Nine nodes: PR-21 (fission-fragment), PR-22 (fusion torch), PW-12 (fusion plant)
 - **Self-expanding seed (IN-14):** 98% closure, never 100% — the 1980 AASM study's own conclusion; Electronics closure still requires IN-11 fab capacity.
 - **Rotating settlement (HB-08):** spin gravity is plain Newton; the speculation is economic scale, hence its placement behind mass driver + light-metal ISRU.
 - **Interstellar precursor (SH-09):** a 500+ AU probe in decades needs T4 propulsion; this is the campaign's victory monument, anchored to real mission studies (TAU 1987, Interstellar Probe 2021).
+- **Human reproduction protocols (LS-11):** no human off-Earth pregnancy or partial-g development data exists — the node is the *end* of the §3.14 GENERATIONS arc (decision log C19), and it ships the uncertainty honestly: gravity thresholds are discovered per save within defensible bounds, never asserted as fact. Anchors are rodent centrifuge/spin studies, not human outcomes.
 
 ---
 
@@ -610,14 +617,14 @@ The intended research spine (mirrors 02 §6): methalox reuse → cryo depots →
 |---|---|---|---|---|
 | **Act 1 — Earth + LEO** | T0→T1 | LEO/Earth surveys (X=1–1.5), first-milestones, 12's contracts; ≈ 1,500–2,500 SCI | the ~1,400-SCI spine to the Moon: GN-01/02/03, PR-01/02/04/05, SH-01, LS-03 (Σ = 1,390) | KeroloxEngines + CryoFluidMgmt hours from flight rate; first depot ops |
 | **Act 2 — Moon** | T1→T2 | lunar regions X=2–4, PSR anomalies, first sample returns (×1.25 path); ≈ 8,000 SCI on a thorough Moon | finish T1 (Σ ≈ 5,100), enter T2: IS-05 chain, PW-04/05, PR-09 | **DSC-01, DSC-02, DSC-03**; MiningMachines + ISRU-Chem hours; NTR test-stand campaign |
-| **Act 3 — Mars + NEAs** | T2 | Mars X=5, Phobos/Deimos, C/S-type NEAs, comet option; ≈ 15,000 SCI | bulk of T2 (Σ ≈ 21,000): IS-06, SH-04/05/06, LS-04/05/06, VH-04/05 | **DSC-04, DSC-05, DSC-06, DSC-15**; AeroFlight EDL events; Methalox field ops |
-| **Act 4 — Belt + Venus** | T2→T3 | belt X=6, M-types, Venus clouds X=6 / surface X=8; ≈ 25,000 SCI | T3 industry/ISRU (IS-13..18, IN-09..13), HB-05, HB-09 (optional Mercury crawler), PW-08/09 | **DSC-07, DSC-08, DSC-09, DSC-16**; RoboticsAutonomy + FissionSystems hours |
-| **Act 5 — Jupiter/Saturn** | T3→T4 | Europa/Io X=10, Titan/Enceladus X=10–12, oceans X=14; ≈ 40,000+ SCI | finish T3 (Σ ≈ 54,000); open T4 (Σ ≈ 72,000) | **DSC-10..14, DSC-17, DSC-18**; EPThrusters throughput on long hauls |
+| **Act 3 — Mars + NEAs** | T2 | Mars X=5, Phobos/Deimos, C/S-type NEAs, comet option; ≈ 15,000 SCI | bulk of T2 (Σ ≈ 22,300): IS-06, SH-04/05/06, LS-04/05/06/09, VH-04/05 | **DSC-04, DSC-05, DSC-06, DSC-15**; AeroFlight EDL events; Methalox field ops |
+| **Act 4 — Belt + Venus** | T2→T3 | belt X=6, M-types, Venus clouds X=6 / surface X=8; ≈ 25,000 SCI | T3 industry/ISRU (IS-13..18, IN-09..13), HB-05, HB-09 (optional Mercury crawler), PW-08/09; **robotic** VH-09 aerostats land at T2 (A6) | **DSC-07, DSC-08, DSC-09, DSC-16**; RoboticsAutonomy + FissionSystems hours |
+| **Act 5 — Jupiter/Saturn** | T3→T4 | Europa/Io X=10, Titan/Enceladus X=10–12, oceans X=14; ≈ 40,000+ SCI | finish T3 (Σ ≈ 54,000; incl. LS-10 gravity-biology); open T4 (Σ ≈ 77,000) | **DSC-10..14, DSC-17, DSC-18**; EPThrusters throughput on long hauls |
 | **Endgame** | T4* | megaproject milestones, remaining pools | SH-09 victory chain (PR-21/22, IN-14, PW-12) | He3 chain validation; `[SPECULATIVE]` honesty maintained |
 
 **Victory-path guarantee:** SH-09 is reachable via PR-21 (fission-fragment) without any fusion/He3 content, and its discovery prerequisites (DSC-02 chain via IS-20 only applies on the PR-22/PW-12 branch) touch only the Moon. Because researching requires visibility (§3.3 condition 1) and a T4 node is hidden until a T3 node in the same category is researched (§3.8), the audited chain also includes **SH-07 Cycler Architecture** — the SH category's only T3 node — and its prerequisites **GN-07 + HB-06** (≈ 3,300 SCI extra, no Discoveries required, so the geographic claim is unchanged); SH-08 is likewise visibility-gated behind SH-07. Venus, Titan, and Europa content is *optional but lucrative* — discounts and ~40% of total recoverable Science.
 
-**Pacing note:** tier Science sums (T1 ≈ 5,100 / T2 ≈ 21,200 / T3 ≈ 54,000 / T4 ≈ 72,000) deliberately exceed per-act income until the player pushes outward — the tree *pulls* exploration. ED thresholds independently pull *operations*: you cannot Science your way to an NTR without 500 ED of hydrolox engine hours and 300 ED of reactor time.
+**Pacing note:** tier Science sums (T1 ≈ 5,100 / T2 ≈ 22,300 / T3 ≈ 54,000 / T4 ≈ 77,000, after the A6/C19 rebalance) deliberately exceed per-act income until the player pushes outward — the tree *pulls* exploration. ED thresholds independently pull *operations*: you cannot Science your way to an NTR without 500 ED of hydrolox engine hours and 300 ED of reactor time.
 
 ---
 
@@ -674,7 +681,7 @@ The intended research spine (mirrors 02 §6): methalox reuse → cryo depots →
 
 1. **Research time:** unlocks are currently instantaneous on payment (§3.3); prototyping carries the time cost. Should T3/T4 nodes additionally take calendar time at an R&D facility (queue management), or is that tedium the depots already solved?
 2. **Crew scientist skill (08):** do scientist crew multiply lab throughput (kg/day) only, or also `M_analysis` (capped at +0.1)? Owned by 08; this doc reserves the hook.
-3. **Reliability granularity reconciliation:** 06's open question on per-ignition vs. per-part-wear models — this doc's `m(D)·m_state·m_unit` stack assumes both exist and multiply (02 engines per-ignition; 05/08 machines per-1000 h). Needs a joint pass with 02/05/06 to confirm no double counting.
+3. **Reliability granularity reconciliation — RESOLVED (DECISIONS A5):** one wear model with **orthogonal, multiplicative** factors and **no double counting** — 02's per-ignition/wear base × this doc's `m(D)·m_state·m_unit` maturity stack × 05's spares/MTBF consumption. The confirmation is recorded in §3.2; A5 mandates it ship as an interface test in Phase 1, which subsumes the joint 02/05/06 pass this question asked for.
 4. **Contract science share (12):** what fraction of act-by-act SCI income should contracts provide? Proposal: ≤ 25%, so exploration stays the primary engine.
 5. **Partial Discovery credit:** DSC-02 needs 3 mare sites — award 0/partial SCI at 1–2 sites, or all-or-nothing? Proposal: 25% per site, gate releases at 3.
 6. **Difficulty knobs:** scale SCI costs (×0.7 / ×1.0 / ×1.3) or scale λ floors? Proposal: never touch λ (realism doctrine); scale costs and contract income only.
@@ -682,7 +689,7 @@ The intended research spine (mirrors 02 §6): methalox reuse → cryo depots →
 8. **Optimized perk (−5% dry mass):** confirm with 02/06 that build-time-only application survives ship serialization round-trips (13 schema).
 9. **He3 kiln logistics reality check:** at 5–20 ppb, 1 kg He3 ≈ 10^5 t regolith moved — does 05's T4 logistics throughput actually support a fusion economy at fun timescales, or does the He3 chain need to lean harder on IS-21 gas-giant scooping?
 10. **Era-defining node count per act:** Acts 4–5 currently carry 5 of the 10 era nodes; consider promoting one Act-2 node (candidate: PW-04 Kilopower) to era status for mid-game rhythm.
-11. **HB-05 tier vs. conventions (joint with 07):** project conventions list "aerostat habitats" among the T2 examples, but this tree gates the *crewed* HB-05 at T3 / 2,000 SCI — a deliberate deviation on the reasoning that HAVOC's crewed-phase engineering exceeds the uncrewed aerostat technology 07 may tag T2. If 07 tiers its aerostat modules at T2, retier HB-05 to T2 at ~850 SCI (Act 4 timing is preserved by the DSC-08 gate regardless) and rebalance the T2/T3 sums in §3.3/§6 accordingly.
+11. **HB-05 tier vs. conventions (joint with 07) — RESOLVED (DECISIONS A6):** the split the conventions hinted at is now canon — **robotic aerostat platforms are T2** (VH-09, retiered here to T2 / 700 SCI; 07 §4.3.3 helium-cell starters) while the **crewed aerostat habitat HB-05 stays T3** (HAVOC's crewed-phase engineering genuinely exceeds the uncrewed tech). §3.3 and §6 tier sums were rebalanced accordingly (T2 ≈ 22,300 / T3 ≈ 54,000); Act-4 timing is preserved by the DSC-08 gate on both.
 
 
 

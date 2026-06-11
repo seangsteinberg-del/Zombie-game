@@ -1,0 +1,15 @@
+{
+ "id": "core:europa",
+ "parent": "core:jupiter",
+ "mu_m3s2": 3202700000000.0,
+ "radius_m": 1560800.0,
+ "rotation_period_s": 306899.01837521,
+ "elements": {
+  "a_m": 671100000.0,
+  "e": 0.0094,
+  "lon_peri_rad": 0.0,
+  "t_peri_s": -102299.672792,
+  "sense": 1
+ },
+ "soi_m": 9725267.616599107
+}

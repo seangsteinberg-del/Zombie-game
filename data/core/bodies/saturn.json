@@ -1,0 +1,15 @@
+{
+ "id": "core:saturn",
+ "parent": "core:sun",
+ "mu_m3s2": 3.79312e+16,
+ "radius_m": 58232000.0,
+ "rotation_period_s": 38376.0,
+ "elements": {
+  "a_m": 1433500000000.0,
+  "e": 0.0565,
+  "lon_peri_rad": 1.6126842288,
+  "t_peri_s": -510692617.647368,
+  "sense": 1
+ },
+ "soi_m": 54806450547.8206
+}

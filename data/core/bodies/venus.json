@@ -1,0 +1,15 @@
+{
+ "id": "core:venus",
+ "parent": "core:sun",
+ "mu_m3s2": 324859000000000.0,
+ "radius_m": 6051800.0,
+ "rotation_period_s": -20996928.0,
+ "elements": {
+  "a_m": 108210000000.0,
+  "e": 0.0068,
+  "lon_peri_rad": 2.2951079664,
+  "t_peri_s": -15348203.253827,
+  "sense": 1
+ },
+ "soi_m": 616283733.1479509
+}

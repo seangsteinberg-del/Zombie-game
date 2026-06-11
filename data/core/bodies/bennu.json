@@ -1,0 +1,15 @@
+{
+ "id": "core:bennu",
+ "parent": "core:sun",
+ "mu_m3s2": 4.9,
+ "radius_m": 245.0,
+ "rotation_period_s": 15465.6,
+ "elements": {
+  "a_m": 168500000000.0,
+  "e": 0.2037,
+  "lon_peri_rad": 1.1920598791,
+  "t_peri_s": -10688618.590835,
+  "sense": 1
+ },
+ "soi_m": 0.0
+}

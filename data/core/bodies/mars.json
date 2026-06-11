@@ -1,0 +1,15 @@
+{
+ "id": "core:mars",
+ "parent": "core:sun",
+ "mu_m3s2": 42828370000000.0,
+ "radius_m": 3389500.0,
+ "rotation_period_s": 88642.8,
+ "elements": {
+  "a_m": 227940000000.0,
+  "e": 0.0934,
+  "lon_peri_rad": 5.8643062867,
+  "t_peri_s": -6281702.177067,
+  "sense": 1
+ },
+ "soi_m": 577229487.455556
+}

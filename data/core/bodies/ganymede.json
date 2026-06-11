@@ -1,0 +1,15 @@
+{
+ "id": "core:ganymede",
+ "parent": "core:jupiter",
+ "mu_m3s2": 9887800000000.0,
+ "radius_m": 2634100.0,
+ "rotation_period_s": 618206.8198472098,
+ "elements": {
+  "a_m": 1070400000.0,
+  "e": 0.0013,
+  "lon_peri_rad": 0.0,
+  "t_peri_s": -429310.291561,
+  "sense": 1
+ },
+ "soi_m": 24349709.705738287
+}

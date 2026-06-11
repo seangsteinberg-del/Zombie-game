@@ -135,9 +135,11 @@ def conic_screen_subtense_px(el: Elements, cam: Camera) -> float:
 
 def draw_conic(surface: pygame.Surface, el: Elements, cam: Camera,
                color: tuple[int, int, int], r_max: float | None = None,
-               closed: bool | None = None) -> int:
-    """Sample, transform through the choke point, clip, draw. Returns the
-    number of chains drawn (0 = culled)."""
+               closed: bool | None = None,
+               origin: tuple[float, float] = (0.0, 0.0)) -> int:
+    """Sample, transform through the choke point, clip, draw. `origin` shifts
+    the conic's frame center within the camera frame (moon orbits drawn in a
+    heliocentric view). Returns the number of chains drawn (0 = culled)."""
     subtense = conic_screen_subtense_px(el, cam)
     if subtense < LOD_CULL_PX:
         return 0
@@ -145,6 +147,8 @@ def draw_conic(surface: pygame.Surface, el: Elements, cam: Camera,
         pts = sample_conic(el, n=2, r_max=r_max)
     else:
         pts = sample_conic(el, r_max=r_max)
+    if origin != (0.0, 0.0):
+        pts = pts + np.asarray(origin, dtype=np.float64)
     px = cam.world_to_screen_np(pts)
     if closed is None:
         closed = el.e < 1.0

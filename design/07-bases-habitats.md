@@ -493,21 +493,35 @@ Package structures: **Gallery Network** (HAB-13 stacks; berths 20/1,000 m³ make
 | Moon equator | 1.62 | vacuum | 390 / 95 | 250 | 708.7 h | 1.37 (LND, measured) | 1,361 | dust ledger on |
 | Moon polar rim | 1.62 | vacuum | 230 / 120 | 190 | 708.7 h, 80–90% lit | 1.37 | 1,361 grazing | mast PV |
 | Moon PSR floor | 1.62 | vacuum | 40 / 25 | 38 | never lit | 1.37 | 0 | B-9e heat discipline |
-| Mars datum | 3.71 | 0.61 kPa CO2 | 270 / 185 | 215 | 24.66 h | 0.67 (RAD, measured; 03 S-8a) | 490–715 | storms B-9b; perchlorate |
-| Venus 54 km | 8.87 | ≈ 61 kPa CO2 (53–80 kPa over the 52–55 km band) | 310 / 295 | — | ≈ 6 d (super-rotation) | 0.03 [model] | 400–1,000 day | acid ledger; B-8 |
+| Mars datum | 3.71 | 0.61 kPa CO2 | 245 / 175 | 210 | 24.66 h | 0.67 (RAD, measured; 03 S-8a) | 490–715 | storms B-9b; perchlorate; T = 210 ± 35 (03 S-6c, ΔT 70 default) |
+| Venus 54 km | 8.87 | ≈ 60 kPa CO2 (45–81 kPa over the 52–56 km V-Temperate band, 03 §4.4.2) | 310 / 295 | — | ≈ 6 d (super-rotation) | 0.03 [model] | ≈ 1,430 day (f_atm 0.55; bands 780–1,820, B-8d) | acid ledger; B-8 |
 | Venus surface | 8.87 | 9,200 kPa | 737 / 737 | 737 | 116.8 d | ~0.001 [model] | ~15–20 (heavy overcast; Tomasko/Pioneer Venus net-flux) | T4 sorties only |
-| Titan surface | 1.352 | 146.7 kPa N2 | 94 / 93.5 | 94 | 15.95 d (moot) | < 0.01 [model] | ~1 (useless) | iso-baric; fission |
-| Europa trailing | 1.315 | vacuum | 125 / 85 | 100 | 85.2 h | 5,400 (JPL) | 50 | robot-only surface |
-| Europa leading | 1.315 | vacuum | 125 / 85 | 100 | 85.2 h | 200 [model] | 50 | 1-h EVA budgets |
-| Callisto | 1.235 | vacuum | 165 / 80 | 120 | 400.5 h | 0.1 (JPL ladder) | 50 | HOPE crew staging; dust ledger off |
+| Titan surface | 1.35 | 146.7 kPa N2 | 94 / 93.5 | 94 | 15.95 d (moot) | 0.01 [model] | ≈ 1.5 noon (useless) | iso-baric; fission |
+| Europa trailing | 1.31 | vacuum | 110 / 50 | 100 | 85.2 h | 5,400 (JPL) | 50 | robot-only surface |
+| Europa leading | 1.31 | vacuum | 110 / 50 | 100 | 85.2 h | 200 [model] | 50 | 1-h EVA budgets |
+| Callisto | 1.24 | vacuum | 165 / 80 | 120 | 400.5 h | 0.14 + GCR (03 §4.1) | 50 | HOPE crew staging; dust ledger off |
 | Enceladus (non-stripe) | 0.113 | vacuum | 80 / 65 | 75 | 32.9 h | ~1 [model] | 14.8 | anchoring lite |
-| NEA @ 1 AU | ~10⁻⁴ | vacuum | 350 / 150 (fast cycle) | 230 | hours | 1.8·f_cyc (03 §4 table) | 1,361 | 04 M-6 rules |
+| NEA @ 1 AU | ~10⁻⁴ | vacuum | 330 / 200 (fast cycle; 03 §4.4.8) | 230 | hours | 1.8·f_cyc (03 §4 table) | 1,361 | 04 M-6 rules |
 | Belt C-type @ 2.7 AU | ~10⁻⁴–10⁻² | vacuum | 233 / 120 | 160 | hours | 1.8·f_cyc (flat GCR, B-6a) | 187 | gallery doctrine |
 | Ceres | 0.28 | vacuum | 235 / 110 | 160 | 9.07 h | 1.8·f_cyc (03 §4 table) | 178 | ice crust (04) |
-| Mercury equator | 3.70 | vacuum | 700 / 100 | 350 | 4,223 h | 1.8·f_cyc + SPE ×6.6 mean / ×10.6 perihelion | 6,270–14,450 | crawler or pole |
-| Mercury PSR | 3.70 | vacuum | < 100 | 90 | never lit | 1.8·f_cyc | 0 | purest PSR ice |
+| Mercury equator | 3.70 | vacuum | 700 / 100 | 350 | 4,224 h | 1.8·f_cyc + SPE ×6.7 mean / ×10.6 perihelion | 6,270–14,450 | crawler or pole |
+| Mercury PSR | 3.70 | vacuum | ~50 (PSR floor, 03 §4.1) | 50 | never lit | 1.8·f_cyc | 0 | purest PSR ice |
 
 (B-5a derives `T_env,eff` from the T_day/T_night columns via the half-sky rule `T_env,eff⁴ = 0.5·T_ground⁴ + 0.5·T_sky⁴`, T_sky = 3 K [LUMPED]; buried structures substitute T_deep per B-9a. `03-solar-system.md` owns orbital-season refinements.)
+
+### 4.5 Aerostat deployment hardware (AR-* — this catalog owns it)
+
+Migrated verbatim from 06-ships-stations.md §4.9 "Cargo, utility, entry & landing" per DECISIONS A10 (table columns: ID | Name | Tier | Size | Mass (t) | Cost | Class | Key stats | Anchor):
+
+| ID | Name | Tier | Size | Mass (t) | Cost | Class | Key stats | Anchor |
+|---|---|---|---|---|---|---|---|---|
+| AR-ENV | Aerostat envelope kit | T3 | 2×3 stowed | 1.3 | 6 | HAB | ≈2,500 m² Vectran/PTFE laminate; 11,700 m³ inflated; lift math per §4.11(d); DEPLOY event (blocked while stowed in bay/fairing, §8.15) | HAVOC envelope |
+| AR-GON | Aerostat gondola | T3 | 2×2 | 4.6 | 25 | ELEC | command source; 2 kWe solar, relay comms, atmosphere-ISRU sampler (07 operates) | HAVOC gondola |
+| AR-INF | Aerostat inflation hardware | T3 | 1×2 | 0.7 | 3 | MECH | inflates AR-ENV during parachute descent (≈20 min); feeds from any connected Hydrogen tank | HAVOC mid-air inflation system |
+
+Context carried with the entries (06 §4.9 note, applies to the whole AR-* set): "The AR-* aerostat deployment set is **T3**, matching 07 §4.3.3 (Venus aerostat = Act 4, T3; HAB-11/12 at T3) and 11's gating of crewed aerostats/Venus platforms (HB-05, VH-09 behind DSC-08)." Hull-area default 2·(w+h) m² and frontal-area default w×1 m² per 06 §4 preamble. 06 Build D (§4.11d) still uses these masses (AR-ENV 1.3, AR-GON 4.6, AR-INF 0.7) and now cites 07's catalog as the owner.
+
+*(The §-references inside the Key-stats column are 06's section numbers, kept with the migrated entries; the lift physics itself is B-8a here. Tier note: the AR-* deployment set serves the crewed T3 cloud base — the robotic-platform T2 tier of decision log A6 is carried by 11's VH-09 hardware, not this set.)*
 
 ---
 
@@ -532,7 +546,7 @@ Package structures: **Gallery Network** (HAB-13 stacks; berths 20/1,000 m³ make
 |---|---|---|
 | **T0 (Act 1)** | HAB-01, AL-1; LEO station modules live in `06-ships-stations.md` | Sortie camps only; first lunar landings are tents-with-leak-ledgers |
 | **T1 (Acts 1–2)** | HAB-02/03/05/17, AL-2/AL-4, Berm Kit, flex couplings, storm-shelter doctrine | First permanent Moon base: berm it or bleed crew dose; night survival = storage sizing lesson (09) |
-| **T2 (Acts 2–3)** | HAB-04/06/07/09, AL-3/AL-7, sinter printer + pads, EDS, Ice Home, Mars package | ISRU construction begins: imported mass per berth drops ~10× (HAB-07: 1.5 t imported / 5 berths vs HAB-02: 15 t / 3); classic Mars base; dust/perchlorate discipline |
+| **T2 (Acts 2–3)** | HAB-04/06/07/09, AL-3/AL-7, sinter printer + pads, EDS, Ice Home, Mars package, robotic Venus aerostat platforms (helium-cell starters, B-8c; 11 VH-09 — decision log A6) | ISRU construction begins: imported mass per berth drops ~10× (HAB-07: 1.5 t imported / 5 berths vs HAB-02: 15 t / 3); classic Mars base; dust/perchlorate discipline |
 | **T3 (Acts 4–5)** | HAB-10/11/12/13/16/18, AL-5/AL-6, Venus Cloud Base, Titan package, asteroid galleries, Mercury crawler, Europa robotic phase, Enceladus collectors | The exotic-habitat act: every new body is a new physics puzzle; belt galleries become the cheap habitable volume; Callisto-staging doctrine for the Jupiter system |
 | **T4 (Endgame) [SPECULATIVE-adjacent]** | HAB-14 crewed Europa galleries, HAB-15 Venus Crucible, Titan/Europa/Enceladus ocean bores, Mercury mass-driver port city | Megaprojects: ocean access, surface-of-Venus sorties, self-sufficient off-Earth settlements (berth count × closed loops from 08 define the campaign-end "civilization" metric in 12) |
 
@@ -544,8 +558,8 @@ Research costs/prereqs live in `11-research-tech.md`. Act-gating teeth: Europa c
 
 **Consumes:**
 - `03-solar-system.md`: body/site catalogs with terrain tags (PSR, shore, fissure, crater-wall), environment columns of §4.4 (seasonal refinement), storm and SPE event streams, solar flux vs distance, asteroid spin/class data.
-- `04-resources-isru.md`: Regolith for berms/sinter (2–3 t/m² canon), Water for ice structures and shelter fills, BasaltFiber/Glass for ISRU hulls, gas inventories for commissioning (N2/O2), site tailings-slot pressure (M-8), digging energy e_dig for excavation, environment maintenance multipliers (M-9 canon).
-- `05-industry-logistics.md`: StructuralParts/Electronics/MachineParts for Outfit stage (B-2), HEPA/filter consumables, hauling for berm emplacement, the filament winder and sinter-printer build chains, mass-driver port industrial stats.
+- `04-resources-isru.md`: Regolith for berms/sinter (2–3 t/m² canon), Water for ice structures and shelter fills, BasaltFiber/Glass for ISRU hulls, gas inventories for commissioning (N2/O2), site tailings-slot pressure (M-8), digging energy e_dig for excavation.
+- `05-industry-logistics.md`: StructuralParts/Electronics/MachineParts for Outfit stage (B-2), HEPA/filter consumables, hauling for berm emplacement, the filament winder and sinter-printer build chains, mass-driver port industrial stats, and the canonical maintenance/spares ledger F-9 with its k_env environment multipliers (consumed by B-10 — decision log A5).
 - `08-life-support-crew.md`: cabin atmosphere standards (101.3 kPa default; Titan 146.7 kPa iso-baric; 70.3 kPa/26.5% O2 outpost option), crew-hours for Outfit/repairs, health consequences of dose/dust/perchlorate ledgers we feed it.
 - `09-power-thermal.md`: electric power and thermal-loop service for heater/cooler nodes, heat-trace loads (B-5d), PSR mast radiators, night storage, the 30 kWe Venus Crucible cooling plant, cryobot 500 kWt cores.
 - `10-vehicles.md`: rover-cranes for Deploy, dust-washed vehicle docking, Mercury crawler drivetrain, Titan submarine + shore dock, Europa hardened robots (+0.3 t vaults).
@@ -558,7 +572,7 @@ Research costs/prereqs live in `11-research-tech.md`. Act-gating teeth: Europa c
 - `08-life-support-crew.md`: berth counts and net habitable volume per base, interior dose rates (B-6b), Dust/perchlorate/acid exposure ledgers, shelter compliance state, cabin gas inventories and leak makeup demands.
 - `09-power-thermal.md`: envelope thermal loads Q_env per module (B-5a/b), per-module electrical hotel loads (P_hotel rule, §4.1), heat-trace W/m totals, glazing night loads, heater/cooler node placement on its loops.
 - `04-resources-isru.md` / `05-industry-logistics.md`: the surface grid, site definitions, and 16 tailings slots per site; sintered pads halving dust; construction demand for their products.
-- `06-ships-stations.md`: shared pressure-vessel rules B-3a (it reuses σ_a table and leak model for hulls), storm-shelter rule B-6e for crewed vessels.
+- `06-ships-stations.md`: shared pressure-vessel rules B-3a (it reuses σ_a table and leak model for hulls), storm-shelter rule B-6e for crewed vessels, and the AR-* aerostat deployment hardware catalog (§4.5 — migrated from its §4.9 per DECISIONS A10; 06 keeps a pointer and its Build D cites this catalog).
 - `10-vehicles.md`: dock interfaces (AL-4/AL-5/AL-6), pad locations, Mercury crawler platform spec.
 - `12-gameplay-economy-ui.md`: settlement metrics (berths, mSv/day, closure), base-level alert definitions.
 - `13-architecture.md`: data schemas for sites/cells/networks, the closed-form environment functions, dose-ledger integration contract.
@@ -571,7 +585,7 @@ Research costs/prereqs live in `11-research-tech.md`. Act-gating teeth: Europa c
 |---|---|---|
 | F-1 | **Depressurization** (puncture B-4c, seal wear D > 70, quake damage) | Leak ×10 (pinhole) or ×100 (tear) per the B-4c severity roll until patched; cabin reserve time = m_gas/ṁ; crew don suits at < 55 kPa alarm (08); module auto-isolates if hatches powered |
 | F-2 | **Moonquake on rigid couplings** | Severity-4+ event without flex joints: leak ×5 on affected tunnel + 1 repair task (B-9c) |
-| F-3 | **Mars storm power crisis** | B-9b solar ×0.2 floor for 30–100 sols; canon with 04 F-4; fission-less bases must shed load (08 triage order: shelter > LS > ISRU) |
+| F-3 | **Mars storm power crisis** | B-9b global storm: f_dust = max(0.04, exp(−0.45·τ)) — down to the ×0.04 floor for 60–100 sols (canon 03 S-9; 04 F-4 restates); fission-less bases must shed load (08 triage order: shelter > LS > ISRU) |
 | F-4 | **PSR thermal pollution** | Canon: 04 F-5 (1%/yr grade decay if > 110 K dumped in PSR); mast-radiator or rim-siting avoids |
 | F-5 | **Aerostat envelope leak** | Lift loss per B-8c: 65 m sink per 1% gas; below 48 km = thermal kill band; repair = EVA patch task (acid suit, 2 crew-h per 10 m² hole-equivalent); double-jeopardy means cabin pressure alarms double as altitude alarms |
 | F-6 | **Acid degradation neglected** | Unwashed external kit: leak/optical +50% after 30 days; upkeep ×2 baseline (canon 04 F-9) |
@@ -595,13 +609,13 @@ Research costs/prereqs live in `11-research-tech.md`. Act-gating teeth: Europa c
 ## 9. Open Questions
 
 1. **Grid scale vs body size**: 10 m cells × 64² site works for the Moon/Mars; is it right for aerostat keels (mass-slots, not cells) and asteroid interiors (3D-ish galleries flattened to 2D decks)? Current answer: keel = slot list, gallery = stacked 2D decks; needs a UI prototype.
-2. **Deep-burial GCR floor (B-6b)**: 08's canonical f_GCR floor (0.30, secondaries) is adopted here as binding at every depth, so 10 m asteroid galleries and 4 m Europa ice bottom out at 0.30 × ambient GCR — yet 03's measured thick-atmosphere overrides (Earth 0.01 mSv/day under 1,033 g/cm², Titan < 0.01 under ~10,900 g/cm²) show the floor must physically break somewhere past ~1,000 g/cm². Escalated to 08: either confirm that habitat shield stacks never graduate past the floor (the current binding answer), or publish a deep-shield extension (e.g. the floor itself decaying with an e-fold of ~1,000 g/cm²) — that would restore "Earth-surface-class" deep galleries and materially buff belt and Europa endgame real estate. Related fidelity items deliberately left out of the material-blind model: polyethylene's hydrogen advantage and the thin-shield secondary-buildup bump below ~20 g/cm² (08 Q5).
+2. **Deep-burial GCR floor (B-6b)** — **RESOLVED (DECISIONS A3)**: 08 published the deep-shield extension exactly as escalated — the 0.30 floor binds unchanged up to 1,000 g/cm², then decays with an e-fold of 1,000 g/cm² (B-6b; consistent with 03's thick-atmosphere data). "Earth-surface-class" deep galleries are restored and belt/Europa endgame real estate is materially buffed (HAB-13/14, §4.3.7, B-6f updated). Still deliberately out of the material-blind model: polyethylene's hydrogen advantage and the thin-shield secondary-buildup bump below ~20 g/cm² (08 Q5 remains open on those).
 3. **Leak-rate canon**: rigid 0.02%/day is anchored (ISS ≈ 0.025%); inflatable 0.04–0.05 and ISRU-liner 0.06–0.10 are extrapolations. Hostile reviewers will ask for BEAM leak data (NASA reports it performed *better* than rigid spec) — consider flipping inflatables to 0.02 and making ISRU liners the only leaky class.
-4. **Venus 52–56 km solar flux band** (B-8d, 400–1,000 W/m² + 40% albedo bonus): verify against Pioneer Venus LSFR/Tomasko net-flux profiles before 09 locks its power curves (the surface value, ~15–20 W/m² in §4.4, is already anchored to the same Tomasko et al. 1980 dataset).
+4. **Venus 52–56 km solar flux band** — **RESOLVED (A2 canon cleanup)**: B-8d and §4.4 now carry 03's canonical values — f_atm 0.30–0.70 of S ≈ 2,602 W/m² (≈ 780–1,820 W/m²; V-Temperate 0.55 ≈ 1,430 at the 54 km station) plus the +0.15 *absolute* below-cloud albedo bonus for two-sided arrays (03 S-6a + §4.4.2; 09 §3.8 implements the same column). The old 400–1,000 W/m² + relative-40% figures are gone; any further Tomasko/Pioneer-Venus verification is 03's grounding burden (the ~15–20 W/m² surface value in §4.4 stands, same dataset).
 5. **Europa leading-hemisphere dose** (200 mSv/day game value): model-based; Paranicas maps suggest possibly lower at high latitude on the leading side. If much lower, leading-pole surface ops become too easy — re-check before tuning Act 5 difficulty.
 6. **Enceladus Plume-Curtain Collector** (20–100 kg/day): no published engineering study at this fidelity; either find a NIAC-class anchor or down-scope to a science instrument and let bulk ice mining carry the resource role.
 7. **Cryo-ice structural allowable** (5 MPa at < 150 K): literature gives tens of MPa short-term compressive at 100 K, but long-term data is thin; conservative factor chosen — needs a citation pass or an [ICE-SIMPLIFIED] tag in the final bible.
 8. **Mercury crawler vs polar base balance**: the crawler is spectacular but the polar base is strictly cheaper; does the crawler need an exclusive economic hook (equatorial mass-driver alignment? subsolar solar-furnace metallurgy at 14 kW/m²?) to be more than flavor?
 9. **Titan iso-baric hyperbaric physiology**: 146.7 kPa with pN2 ≈ 126 kPa is fine for steady-state but creates mild decompression bookkeeping when crew transfer to 101.3 kPa ships — does 08 want the full saturation/decompression model or a flat 2-h transfer-acclimation timer?
 10. **Quake damage model**: severity-roll-only (B-9c) vs per-structure fragility curves — fragility is more sim-honest but likely over-engineering for the fun delivered; decide with 13's complexity budget.
-11. **Shared-canon audit**: berm areal-mass guidance (2–3 t/m²), storm solar floor (×0.2), maintenance multipliers, and the §4.4 master table must match `03-solar-system.md`, `04-resources-isru.md`, `08-life-support-crew.md`, and `09-power-thermal.md` final drafts byte-for-byte — schedule the reconciliation pass.
+11. **Shared-canon audit** — **RESOLVED (A2 reconciliation pass applied; this document conformed to the owning docs)**: berm guidance held at 2–3 t/m² (04 canon; HAB-08 corrected), the storm model and solar floor now follow 03 S-9 (`f_dust = max(0.04, exp(−0.45·τ))` — the old ×0.2 floor and three-class table are gone; B-9b/B-7/F-3/§4.3.2 updated), maintenance k_env follows 05 F-9 (Moon ×2 = Mars ×2, Titan ×1.5; B-10 rewritten per DECISIONS A5), and the §4.4 master table is reconciled to 03 §4.1 (Mars 245/175, Europa 50–110 K, Callisto 0.14 mSv/day, Mercury PSR ~50 K, NEA 200–330 K, Mercury solar day 176 d = 4,224 h, g values at 03 rounding, Venus band 45–81 kPa / f_atm solar, Titan 0.01 mSv/day and 1.5 W/m² noon, SPE ×6.7 mean and 30–60 min warning). Future drafts must not re-diverge: the owning doc wins on any diff.

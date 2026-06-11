@@ -254,16 +254,20 @@ Each crew member carries two **distinct** dose accumulators (do **not** equate t
 | Main belt / Ceres | 1.8 · f_cycle | GCR-dominated (S-8a; no belt override) |
 | Jupiter system (outside Europa) | 10-100+ (D_jup(r), S-8c) | magnetosphere |
 | **Europa surface** | **~5,400** | 5.4 Gy/day, lethal in hours (S-8c) |
-| SPE event (unshielded, peak) | +100 to +3,000 over hours (1/d²) | Aug-1972-class (S-8b) |
+| SPE event (unshielded, 1 AU) | lognormal: median +100, σ_ln = 1.2, **capped +2,000**, delivered over 6–48 h (×1/d²) | Aug-1972-class, Carrington-class tail capped (S-8b) |
 
-**Reading the table for the shielding formula.** Each region's tabulated `Ḋ_env` is its **GCR background** rate and is used as `Ḋ_GCR` (the quantity the GCR shielding factor multiplies). `Ḋ_SPE` is **zero except during an active SPE event**, which supplies the `+100…+3,000 mSv-over-hours` term (the last row) as `Ḋ_SPE` for the duration of the event. The **Van Allen belt field** is *not* GCR: it is 03 S-8c's piecewise proton/electron field already expressed behind a nominal 5 g/cm² hull, evaluated by geocentric radius r [R_E] along the trajectory; 08 applies any *additional* habitat shielding (§3.6 factors, treated as SPE-like proton attenuation) on top, integrates dose over the time spent in the belts, and reproduces 03's anchor of **~1–5 mSv per chemical transit pass** (an EP spiral lingers for weeks → Sv-class, the in-game reason SEP tugs fly uncrewed). Where a region is GCR-dominated, set `Ḋ_GCR = Ḋ_env` and `Ḋ_SPE = 0` between events.
+**Reading the table for the shielding formula.** Each region's tabulated `Ḋ_env` is its **GCR background** rate and is used as `Ḋ_GCR` (the quantity the GCR shielding factor multiplies). `Ḋ_SPE` is **zero except during an active SPE event**, which supplies the lognormal `median 100 mSv / hard cap 2,000 mSv over 6–48 h` term (the last row) as `Ḋ_SPE` for the duration of the event. The **Van Allen belt field** is *not* GCR: it is 03 S-8c's piecewise proton/electron field already expressed behind a nominal 5 g/cm² hull, evaluated by geocentric radius r [R_E] along the trajectory; 08 applies any *additional* habitat shielding (§3.6 factors, treated as SPE-like proton attenuation) on top, integrates dose over the time spent in the belts, and reproduces 03's anchor of **~1–5 mSv per chemical transit pass** (an EP spiral lingers for weeks → Sv-class, the in-game reason SEP tugs fly uncrewed). Where a region is GCR-dominated, set `Ḋ_GCR = Ḋ_env` and `Ḋ_SPE = 0` between events.
 
 **Shielding.** Habitat areal density `σ` (g/cm²) is the sum of hull, dedicated shielding, stored Water walls, regolith overburden (`07`), and any structure between the crew and the sky (owned/aggregated by `06 §3.9` and `07`). The dose multiplier differs for GCR vs SPE:
 ```
-GCR:  f_GCR(σ) = 0.30 + 0.70 · exp(−σ / 30)      (floor 0.30 — secondaries prevent full blocking; thick shields give diminishing returns)
+GCR:  f_GCR(σ) = F(σ) + 0.70 · exp(−σ / 30)
+      F(σ) = 0.30                                for σ ≤ 1,000 g/cm²   (the 0.30 floor — secondaries prevent full blocking; thick habitat-scale shields give diminishing returns)
+      F(σ) = 0.30 · exp(−(σ − 1,000) / 1,000)    for σ > 1,000 g/cm²   (deep-shield extension, decision log A3: the floor itself decays, e-fold 1,000 g/cm²)
 SPE:  f_SPE(σ) = exp(−σ / 12)                    (strong attenuation; ~20 g/cm² cuts an SPE ~80%)
 ```
 Effective rate `Ḋ = f_GCR(σ)·Ḋ_GCR + f_SPE(σ)·Ḋ_SPE`. Worked: storm shelter with water walls σ = 35 g/cm² → f_GCR = 0.30+0.70·exp(−1.17) = 0.52; f_SPE = exp(−2.92) = 0.054. So GCR is only halved (live with it; minimize transit time and use time warp wisely), but an SPE is nearly eliminated — which is exactly why the design is "thin hull for cruise, thick shelter for storms." A 1 g/cm² bare hull gives f_GCR ≈ 0.98, f_SPE ≈ 0.92.
+
+**Deep-shield extension (decision log A3 — this doc owns the law; `07` reproduces it verbatim in B-6b).** For every habitat-scale stack (hulls, water walls, berms at the canonical 2–3 t/m²) σ ≤ ~300 g/cm² and nothing changes: the 0.30 floor binds exactly as before. Past σ ≈ 1,000 g/cm² (≈ 6 m of regolith, ≈ 11 m of ice — reachable only by burial columns, never by hull stacks) the secondary-particle shower that creates the floor is itself absorbed, and the floor decays with an e-fold of 1,000 g/cm² as in the formula above. This is physically correct and consistent with `03`'s thick-atmosphere data: Titan reads 0.01 mSv/day under its ≈ 10,900 g/cm² column (the extension yields f_GCR ≈ 1.5×10⁻⁵ there, comfortably below the measured value), while Earth's 0.01 mSv/day under 1,033 g/cm² adds geomagnetic shielding on top of its column. 03's measured/model ambients remain **overrides of the site dose, not outputs of this law**; the extension exists so that *player-built* deep shield stacks — asteroid galleries, deep Europa ice (`07` HAB-13/14) — keep improving instead of pinning at 0.30. Thick-atmosphere/deep-ice sites keep getting better with depth, which materially upgrades belt and Europa endgame habitability (e.g. 30 m of belt rock ≈ 4,500 g/cm² → f_GCR ≈ 0.009 — Earth-surface-class background).
 
 **Career consequences** (uses NASA 600 mSv anchor):
 - D_career ≥ 400 mSv → crew flagged "radiation caution"; recruitment/medical UI warns.
@@ -458,6 +462,20 @@ Untreated conditions escalate over days; an unstaffed or unsupplied medbay canno
 
 The biology is identical for founder and crew — there is no protagonist plot armor at the physics layer; the only difference is the meta-rule about whether their death ends the campaign.
 
+### 3.14 GENERATIONS — births, demographics & partial-gravity reproduction (skeleton; full design at Pass 2)
+
+**Doctrine (decision log C19 — binding now):** births and generations are **MODELED**. Self-sufficiency includes *biological continuity*, not just industrial closure — the campaign-end "civilization" metric cannot be satisfied by an immortal recruited workforce. And because partial-gravity human reproduction is genuinely unknown science (no mammal has ever been carried from conception to birth off Earth), the game refuses to invent an answer: **it models the uncertainty itself as a research arc** — centrifuge studies → mammalian trials → human protocols (`11-research-tech.md` LS-09 → LS-10 → LS-11) — whose payoffs are **gravity-threshold discoveries** (the g-level brackets for safe gestation and development, drawn per save from the deterministic seed within scientifically defensible bounds) and **spin-habitat prescriptions** (g_repro requirements feeding `06 §3.10` spin design and `07` settlement berthing). Human-protocol content is T4 **[SPECULATIVE]** and tagged as such wherever it surfaces. The Foundation Audit (`12`) gains a demographic pillar fed by this section.
+
+Skeleton — the system contracts Pass 2 must fill in (nothing below ships before Phase 6+ except the `11` research-arc hooks):
+
+- **Demographic ledger** per settlement: age structure, conceptions/births/deaths, dependency ratio; children are non-working crew entities with scaled metabolic baselines (§3.1) and education/skill-growth tracks.
+- **Reproduction policy framing**: the player sets settlement-level policy; the sim never forces outcomes on named characters (tone rules with `12`).
+- **Gravity gating**: conception-to-birth and early development are legal only in habitats meeting the *discovered* g_repro threshold (spin habitats per `06`, surface g per body) — the `11` arc converts an unknown into an engineering requirement.
+- **Foundation Audit demographic pillar** (`12`): self-sufficiency scoring gains births, cohort survival, and generational skill transfer alongside industrial closure.
+- **Failure modes** (Pass 2): obstetric medical events (medbay + Medic gating per §3.12), developmental risk outside threshold, demographic collapse of an aging closed settlement.
+
+Status: deliberately a skeleton — the doctrine above is binding now; mechanics, numbers, and UI land in the Pass 2 expansion (implementation Phase 6+ per DECISIONS C19).
+
 ## 4. Content Catalog
 
 Masses in t, power in kW, all anchored. ECLSS hardware performance (throughput, power, spares) is canonical here; the *part* mass/size/cost also appears in `06`/`07` builder catalogs and must match.
@@ -578,7 +596,7 @@ Each candidate also rolls hidden traits affecting morale/health: e.g. *Resilient
 | **T1** | CDRA, OGA (water-fed O2), WRS (~90% water), salad-crop racks (morale + trace food, `11` LS-02), private quarters, scavenge airlock, telemedicine | ISS ECLSS / ISS Veggie | Act 1-2: weeks-to-months stations; water recycling makes LEO stations sustainable |
 | **T2** | Sabatier/Bosch (40-50% O2 closure), BPA (98% water), **EDEN-class greenhouse (LS-GARDEN, partial diet η_food 0.25–0.50)**, hard suits, lunar/Mars Water → OGA O2, fission power for ECLSS, storm shelters | ISS+ / EDEN ISS / Fission Surface Power | Act 2-3 (Moon, Mars): months-long surface bases; ISRU Water closes O2 locally and **the first off-Earth food harvest** begins |
 | **T3** | Bioregenerative loops: full-diet greenhouses (CEA, η_food 0.80→0.95), algae bioreactors, ~95-98% closure, agronomist skill cap 5, MCP suits | BIOS-3, MELiSSA, CELSS | Act 3-4 (Mars, belt, Venus): permanent self-feeding settlements; full food independence |
-| **T4** | [SPECULATIVE] advanced closed ecologies for interstellar-precursor crews; multi-generation life support; not required for v1 win | speculative closed-loop | Endgame: self-sufficient off-Earth civilization |
+| **T4** | [SPECULATIVE] advanced closed ecologies for interstellar-precursor crews; multi-generation life support and the §3.14 GENERATIONS demographic layer (births modeled — decision log C19; design Pass 2, implementation Phase 6+); not required for v1 win | speculative closed-loop | Endgame: self-sufficient off-Earth civilization |
 
 **Cross-act survival curve**: Act 1 you fight the clock with stored consumables; Act 2 you close the *water* loop (the biggest mass) and feed O2 from ISRU Water; Act 3 you begin closing *food* — a **T2 EDEN-class greenhouse** delivers the first off-Earth harvest (partial diet, η_food 0.25–0.50) while **full** food closure (T3 bioregenerative, the last and hardest loop, gated on power) lands at the Act 3→4 transition; Act 4-5 you operate where humans barely can (Venus aerostat habitable zone via `07`; Jupiter system where Europa is robots-only). The greenhouse's huge power appetite (~11 kW/crew) explicitly couples this ladder to the nuclear-power ladder in `09`.
 
@@ -600,7 +618,8 @@ Each candidate also rolls hidden traits affecting morale/health: e.g. *Resilient
 - To `04`/`05`: crew/greenhouse demand signals for Oxygen, Water, Food, Nitrogen, Ammonia, MedSupplies (drives ISRU/production planning); surplus CO2 from crew (minor) and grey-water streams.
 - To `06`/`07`: crew capacity constraints (life-support throughput as a cap independent of volume), storm-shelter requirement beyond LEO, atmosphere choice (sets structural pressure load and fire policy).
 - To `09`: ECLSS and grow-light electrical load profiles and CHX heat loads.
-- To `12`: crew morale/health state for narrative events, death/casualty events, the "days of life support remaining" headline stat, founder permadeath/succession events.
+- To `12`: crew morale/health state for narrative events, death/casualty events, the "days of life support remaining" headline stat, founder permadeath/succession events; demographic-pillar state for the Foundation Audit (§3.14 GENERATIONS — Pass 2).
+- To `07`/`10`: the Venus crewed surface sortie interface stub [SPECULATIVE, T4 — decision log C17]: crew thermal-survival envelope, cooled suit-vehicle physiology limits, and sortie dose budget for the single trophy sortie staged from 07's HAB-15; full interface design at Pass 2, honest speculation tag mandatory.
 - To `13`: per-crew entity state, error-probability multipliers feeding the reliability/fault model, integration cadence.
 - To `10`: crew conditioning C and EVA-readiness gating surface operations.
 
@@ -634,7 +653,7 @@ Each candidate also rolls hidden traits affecting morale/health: e.g. *Resilient
 - **Sleeping crew** still consume O2/Water/CO2 at A = 0.75 — life support never "pauses" under time warp.
 - **Zero crew (robotic)** vessels run no LSC; this is the Act-1 default and the safest operating mode (doctrine: automation first).
 - **Overcrowding** (crew > capacity) is allowed temporarily (rescue, evacuation) with stacking CO2/humidity/volume penalties — survivable for a short transfer, lethal long-term.
-- **Children/birth** are out of scope for v1 (Open Question Q6).
+- **Children/birth** are **modeled** (decision log C19; §3.14 GENERATIONS): the demographic/reproduction-research layer is designed at Pass 2 and lands Phase 6+ — until that system ships, rosters grow by recruitment only (Q6 RESOLVED).
 - **Corpses**: a deceased crew's mass remains (recovery/burial is a narrative/morale event, `12`); no resource recovery (doctrine: no grim cannibalism mechanics).
 - **Cold-soak food/water**: loss of thermal control can freeze water lines (burst → leak) and spoil fresh food; stored dehydrated food is freeze-tolerant.
 
@@ -645,7 +664,7 @@ Each candidate also rolls hidden traits affecting morale/health: e.g. *Resilient
 - **Q3 — MedSupplies granularity.** v1 pools pharmaceuticals, ECLSS filters, and agri-micronutrients into one resource. Is that too coarse — should ECLSS spares (`05` reliability) be separated from medicine? Risk of resource sprawl vs fidelity.
 - **Q4 — Psychology depth.** How deep should the morale/relationship sim go (inter-crew compatibility, leadership, factions)? Doctrine forbids combat/mutiny-as-violence; how is interpersonal conflict expressed without it?
 - **Q5 — Radiation model fidelity.** Is the f_GCR/f_SPE exponential-with-floor sufficient, or do we need separate dose-equivalent quality factors for protons vs heavy ions, and depth-dose buildup (secondaries can *increase* dose at intermediate shielding)? Current model intentionally ignores the secondary-particle hump.
-- **Q6 — Generational/closed-civilization scope.** The endgame "self-sufficient off-Earth civilization" implies birth, growth, and multi-decade closed ecology. Is reproduction modeled at all in v1, or is "self-sufficient" defined purely as resource/industrial closure with recruited (not born) crew?
+- **Q6 — Generational/closed-civilization scope. RESOLVED (decision log C19):** births & generations are MODELED — self-sufficiency includes biological continuity, not just industrial closure. Partial-gravity reproduction is unknown science, so the game models the uncertainty itself: a research arc (centrifuge studies → mammalian trials → human protocols; `11` LS-09/10/11) with gravity-threshold discoveries and spin-habitat prescriptions; the Foundation Audit (`12`) gains a demographic pillar. Doctrine and skeleton at §3.14; full design Pass 2; implementation Phase 6+.
 - **Q7 — Greenhouse power realism.** ~11 kW/crew of grow light is enormous; should we model **sunlight-fed greenhouses** (transparent/concentrator designs) on bodies with usable insolation to cut electrical load, coordinating with `07`/`09`? This dramatically changes the Mars vs outer-system food economics.
 - **Q8 — Suit/airlock fidelity.** Is the simplified prebreathe tissue-ratio table adequate, or do we need staged-decompression timelines and exercise-prebreathe protocols (ISLE) as explicit minigames? And should suitports (`10`) fully replace airlock gas-loss accounting?
 - **Q9 — Closure never reaching 100%.** We cap bioregen at ~98%. Over a multi-year settlement even 2% leakage compounds. Does the game require a permanent trickle import (realistic) or a T4 "fully closed ecology" unlock — and would full closure violate the entropy-as-antagonist doctrine?

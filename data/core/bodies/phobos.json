@@ -1,0 +1,15 @@
+{
+ "id": "core:phobos",
+ "parent": "core:mars",
+ "mu_m3s2": 711000.0,
+ "radius_m": 11100.0,
+ "rotation_period_s": 27563.88906705896,
+ "elements": {
+  "a_m": 9376000.0,
+  "e": 0.0151,
+  "lon_peri_rad": 2.6197392072,
+  "t_peri_s": -3062.654341,
+  "sense": 1
+ },
+ "soi_m": 0.0
+}

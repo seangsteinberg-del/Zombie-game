@@ -1,0 +1,15 @@
+{
+ "id": "core:miranda",
+ "parent": "core:uranus",
+ "mu_m3s2": 4400000000.0,
+ "radius_m": 235800.0,
+ "rotation_period_s": 121491.37297367776,
+ "elements": {
+  "a_m": 129390000.0,
+  "e": 0.0013,
+  "lon_peri_rad": 0.0,
+  "t_peri_s": -99555.430631,
+  "sense": 1
+ },
+ "soi_m": 461416.7813163554
+}

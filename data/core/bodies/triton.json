@@ -1,0 +1,15 @@
+{
+ "id": "core:triton",
+ "parent": "core:neptune",
+ "mu_m3s2": 1428000000000.0,
+ "radius_m": 1353400.0,
+ "rotation_period_s": 507765.38638846844,
+ "elements": {
+  "a_m": 354759000.0,
+  "e": 1.6e-05,
+  "lon_peri_rad": 0.0,
+  "t_peri_s": -465451.604189,
+  "sense": -1
+ },
+ "soi_m": 11964406.986271886
+}
