@@ -13,6 +13,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
+from aphelion.game.crew import CrewMember
 from aphelion.game.fleet import FleetVessel
 from aphelion.save.serialize import (
     SCHEMA_VERSION, elements_from_dict, elements_to_dict, ledger_from_dict,
@@ -85,7 +86,8 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
                 "unlocked": sorted(research.unlocked),
                 "history": [list(h) for h in research.history],
             },
-            "crew": {name: d.accumulated_msv for name, d in crew.items()},
+            "crew": {name: {"msv": m.dose.accumulated_msv, "role": m.role,
+                            "skill": m.skill} for name, m in crew.items()},
             "visited": sorted(visited),
             "visited_surface": sorted(visited_surface or set()),
             "milestones": sorted(milestones or set()),
@@ -124,7 +126,13 @@ def restore_campaign(save: dict, db, tree):
         science=c["research"]["science"], eng_data=c["research"]["eng_data"],
         unlocked=set(c["research"]["unlocked"]),
         history=[tuple(h) for h in c["research"]["history"]])
-    crew = {name: CrewDose(msv) for name, msv in c["crew"].items()}
+    crew = {}
+    for name, cd in c["crew"].items():
+        if isinstance(cd, dict):
+            crew[name] = CrewMember(name, cd["role"], cd["skill"],
+                                    CrewDose(cd["msv"]))
+        else:                       # early-v2 shape: bare msv float
+            crew[name] = CrewMember(name, "pilot", 1, CrewDose(cd))
     vessels = []
     for vd in c["vessels"]:
         fv = FleetVessel(tree, vd["frame_id"],

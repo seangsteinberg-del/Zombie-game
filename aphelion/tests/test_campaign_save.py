@@ -11,6 +11,7 @@ import pytest
 
 from aphelion.content.loader import default_data_dir, load_packs
 from aphelion.core.rng import RngRegistry
+from aphelion.game.crew import CrewMember
 from aphelion.game.fleet import FleetVessel
 from aphelion.main import BaseSite
 from aphelion.save.campaign import (
@@ -56,7 +57,8 @@ def _campaign(db, tree):
     program.offer(Contract("c1", "Test contract", 1e6, 1e7))
     program.complete(0.0, "c1")
     research = ResearchState(science=512.0, eng_data=64.0)
-    crew = {"A": CrewDose(123.4), "B": CrewDose(0.5)}
+    crew = {"A": CrewMember("A", "scientist", 3, CrewDose(123.4)),
+            "B": CrewMember("B", "engineer", 1, CrewDose(0.5))}
     rng = RngRegistry(99)
     base = BaseSite("Peary Base", 1_000.0, rng)
     base.advance(40.0 * 86_400.0)
@@ -88,7 +90,9 @@ def test_round_trip_exact(tmp_path, world):
         assert row_a.fill == row_b.fill
     assert got["program"].funds == program.funds
     assert got["research"].science == 512.0
-    assert got["crew"]["A"].accumulated_msv == 123.4
+    assert got["crew"]["A"].dose.accumulated_msv == 123.4
+    assert got["crew"]["A"].role == "scientist"
+    assert got["crew"]["A"].skill == 3
     assert got["visited"] == {"core:earth", "core:moon"}
     assert got["tutorial_done"] is True
 

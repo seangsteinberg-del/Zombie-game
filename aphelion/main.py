@@ -253,9 +253,11 @@ def run(argv: list[str] | None = None) -> int:
     from aphelion.ui.tutorial import first_flight_tutorial
 
     from aphelion.core.rng import RngRegistry
+    from aphelion.game.crew import (
+        CrewMember, apply_crew_bonuses, candidates, science_multiplier)
     from aphelion.save.campaign import (
         default_save_dir, read_campaign, snapshot_campaign, write_campaign)
-    from aphelion.sim.habitat.dose import AMBIENT_MSV_DAY, CrewDose
+    from aphelion.sim.habitat.dose import AMBIENT_MSV_DAY
 
     db, tree = load_solar_system()
     planets = sorted((i for i, b in db.bodies.items() if b["parent"] == "core:sun"),
@@ -295,7 +297,10 @@ def run(argv: list[str] | None = None) -> int:
         return dict(clock=SimClock(t0=0.0), vessels=[], active_idx=0,
                     next_vid=1, program=Program(funds=150_000_000.0),
                     rng=RngRegistry(20490101), bases=[],
-                    crew={"V. Ainsworth": CrewDose(), "J. Okafor": CrewDose()},
+                    crew={"V. Ainsworth": CrewMember("V. Ainsworth",
+                                                     "pilot", 2),
+                          "J. Okafor": CrewMember("J. Okafor",
+                                                  "engineer", 1)},
                     research=ResearchState(), visited={"core:earth"},
                     visited_surface=set(), milestones=set(),
                     tutorial=first_flight_tutorial())
@@ -308,6 +313,8 @@ def run(argv: list[str] | None = None) -> int:
                else RngRegistry(20490101))
         for b in got["bases"]:
             b["net"].rng = rng      # resume the SAME failure streams
+        for v in got["vessels"]:
+            apply_crew_bonuses(v, got["crew"])
         return dict(clock=SimClock(t0=got["t"]), vessels=got["vessels"],
                     active_idx=got["active_idx"], next_vid=got["next_vid"],
                     program=got["program"], rng=rng,
@@ -367,6 +374,8 @@ def run(argv: list[str] | None = None) -> int:
     surface_cursor = 0
     base_cursor = 0
     base_idx = 0
+    crew_open = False
+    crew_cursor = 0
     body_click_pts: list = []
     vessel_click_pts: list = []
     burn_glow = 0.0
@@ -574,9 +583,11 @@ def run(argv: list[str] | None = None) -> int:
                             msg = f"TOUCHDOWN: {site['name']}"
                             if sid not in visited_surface:
                                 visited_surface.add(sid)
-                                research.earn_science(site["science"])
-                                research.earn_eng_data(site["science"] * 0.3)
-                                msg += f"  +{site['science']:.0f} science"
+                                sci = (site["science"]
+                                       * science_multiplier(av0, crew))
+                                research.earn_science(sci)
+                                research.earn_eng_data(sci * 0.3)
+                                msg += f"  +{sci:.0f} science"
                             toast, toast_until = msg, t + 10
                             audio.play("soi")
                         else:
@@ -584,6 +595,29 @@ def run(argv: list[str] | None = None) -> int:
                                      f" m/s — not enough propellant")
                             toast_until = t + 6
                             audio.play("alarm")
+            elif event.type == pygame.KEYDOWN and crew_open:
+                cands = candidates(crew)
+                if event.key in (pygame.K_ESCAPE, pygame.K_k):
+                    crew_open = False
+                elif event.key == pygame.K_UP and cands:
+                    crew_cursor = (crew_cursor - 1) % len(cands)
+                elif event.key == pygame.K_DOWN and cands:
+                    crew_cursor = (crew_cursor + 1) % len(cands)
+                elif event.key == pygame.K_RETURN and cands:
+                    cand = cands[crew_cursor % len(cands)]
+                    if program.spend(t, cand.hire_cost,
+                                     f"hire {cand.name}"):
+                        crew[cand.name] = cand
+                        toast = (f"HIRED {cand.name} "
+                                 f"({cand.role}-{cand.skill}) for "
+                                 f"${cand.hire_cost/1e6:,.0f}M")
+                        toast_until = t + 6
+                        audio.play("paid")
+                    else:
+                        toast = (f"hiring {cand.name} needs "
+                                 f"${cand.hire_cost/1e6:,.0f}M")
+                        toast_until = t + 5
+                        audio.play("alarm")
             elif event.type == pygame.KEYDOWN and base_screen:
                 from aphelion.game.basebuild import CATALOG, catalog_for_kind
                 site_b = bases[base_idx % len(bases)] if bases else None
@@ -790,6 +824,9 @@ def run(argv: list[str] | None = None) -> int:
                     focus_idx = 0
                 elif event.key == pygame.K_F1:
                     tutorial.visible = not tutorial.visible
+                elif event.key == pygame.K_k:
+                    crew_open = True
+                    crew_cursor = 0
                 elif event.key in (pygame.K_x, pygame.K_z, pygame.K_a, pygame.K_d):
                     av0 = vessels[active_idx % len(vessels)] if vessels else None
                     if av0 is None:
@@ -905,6 +942,7 @@ def run(argv: list[str] | None = None) -> int:
                 vessels.append(fv)
                 active_idx = len(vessels) - 1
                 milestones.add("orbited")
+                apply_crew_bonuses(fv, crew)
                 crewed = f" — crew: {', '.join(fv.crew)}" if fv.crew else ""
                 toast = (f"{fv.name} IN ORBIT — "
                          f"{fv.dv_remaining:,.0f} m/s remaining{crewed}")
@@ -1165,7 +1203,8 @@ def run(argv: list[str] | None = None) -> int:
                 toast, toast_until = f"SOI {note}", t + 8
             if fv.frame_id not in visited:
                 visited.add(fv.frame_id)
-                sci = _FIRST_ENTRY_SCIENCE.get(fv.frame_id, 200.0)
+                sci = (_FIRST_ENTRY_SCIENCE.get(fv.frame_id, 200.0)
+                       * science_multiplier(fv, crew))
                 research.earn_science(sci)
                 research.earn_eng_data(sci * 0.25)
                 toast = (f"FIRST ENTRY: {fv.frame_id.split(':')[1]} "
@@ -1199,7 +1238,8 @@ def run(argv: list[str] | None = None) -> int:
                 if loc not in AMBIENT_MSV_DAY:
                     loc = "deep_space"
                 shield = 20.0 if cname in aboard else 1_000.0
-                member.accrue(loc, days, areal_g_cm2=shield, material="water")
+                member.dose.accrue(loc, days, areal_g_cm2=shield,
+                                   material="water")
             # operating bases generate engineering data (11: ops currency)
             if bases:
                 research.earn_eng_data(2.0 * days * len(bases))
@@ -1213,11 +1253,13 @@ def run(argv: list[str] | None = None) -> int:
                             if cname in ev_txt:
                                 del crew[cname]
             if crew:
-                worst = max(crew.values(), key=lambda c: c.career_fraction)
-                if worst.career_fraction > 0.8 and not crew_warned:
+                worst = max(crew.values(),
+                            key=lambda c: c.dose.career_fraction)
+                if worst.dose.career_fraction > 0.8 and not crew_warned:
                     crew_warned = True
-                    toast = (f"CREW DOSE WARNING: {worst.career_fraction:.0%}"
-                             f" of career limit — get them home")
+                    toast = (f"CREW DOSE WARNING: {worst.name} at "
+                             f"{worst.dose.career_fraction:.0%} of career "
+                             f"limit — get them home")
                     toast_until = t + 10
                     audio.play("alarm")
 
@@ -1425,10 +1467,11 @@ def run(argv: list[str] | None = None) -> int:
             hud2 = "NO VESSEL — press B to build and launch your first rocket"
         open_contracts = [c for c in program.contracts
                           if c.completed_t is None and not c.failed]
-        worst_dose = max(crew.values(), key=lambda c: c.career_fraction)
+        worst_frac = max((c.dose.career_fraction for c in crew.values()),
+                         default=0.0)
         hud3 = (f"${program.funds/1e6:,.0f}M   sci {research.science:,.0f}"
                 f"  ed {research.eng_data:,.0f}"
-                f"   dose {worst_dose.career_fraction:.0%}   "
+                f"   dose {worst_frac:.0%}   "
                 + (" | ".join(c.description[:30] for c in open_contracts[:3])
                    or "no open contracts"))
         screen.blit(theme.panel(size[0], 76), (0, 0))
@@ -1449,21 +1492,26 @@ def run(argv: list[str] | None = None) -> int:
             ts = theme.toast_surface(toast, kind)
             screen.blit(ts, (size[0] // 2 - ts.get_width() // 2, 84))
 
-        # crew panel (08): portraits + career-dose gauges
-        cw = 196
-        cpanel = theme.panel(cw, 46 + 34 * len(crew), "CREW")
+        # crew panel (08): portraits + role + career-dose gauges (K = roster)
+        cw = 216
+        shown = list(crew.items())[:4]
+        cpanel = theme.panel(cw, 46 + 34 * max(len(shown), 1), "CREW  (K)")
         cx0, cy0 = size[0] - cw - 10, size[1] - cpanel.get_height() - 42
         screen.blit(cpanel, (cx0, cy0))
         yy = cy0 + 32
-        for cname, cdose in crew.items():
+        aboard_names = {n for v in vessels for n in v.crew}
+        for cname, member in shown:
             screen.blit(theme.portrait(cname, 28), (cx0 + 8, yy))
-            theme.draw_text(screen, cx0 + 44, yy, cname,
-                            color=theme.COLORS["text"], font="small")
-            frac = cdose.career_fraction
+            tag = f"{cname}  ({member.role[:3]}-{member.skill})"
+            tcol = (theme.COLORS["accent"] if cname in aboard_names
+                    else theme.COLORS["text"])
+            theme.draw_text(screen, cx0 + 44, yy, tag, color=tcol,
+                            font="small")
+            frac = member.dose.career_fraction
             bcol = (theme.COLORS["good"] if frac < 0.5 else
                     theme.COLORS["warn"] if frac < 0.8 else
                     theme.COLORS["danger"])
-            screen.blit(theme.bar(140, 7, frac, bcol), (cx0 + 44, yy + 17))
+            screen.blit(theme.bar(160, 7, frac, bcol), (cx0 + 44, yy + 17))
             yy += 34
 
         screen.blit(theme.panel(size[0], 26), (0, size[1] - 26))
@@ -1661,6 +1709,48 @@ def run(argv: list[str] | None = None) -> int:
                 theme.draw_text(screen, spx + 16,
                                 spy + 96 + 30 * (n_rows - 1), blurb,
                                 color=theme.COLORS["accent"], font="small")
+
+        if crew_open:
+            cands = candidates(crew)
+            roster = list(crew.items())
+            ph = 130 + 30 * (len(roster) + len(cands))
+            kp = theme.panel(640, ph, "CREW ROSTER & HIRING")
+            kx, ky = size[0] // 2 - 320, 100
+            screen.blit(kp, (kx, ky))
+            yy = ky + 36
+            aboard_names = {n for v in vessels for n in v.crew}
+            for cname, member in roster:
+                screen.blit(theme.portrait(cname, 24), (kx + 14, yy - 2))
+                where = next((v.name for v in vessels if cname in v.crew),
+                             "Earth")
+                frac = member.dose.career_fraction
+                theme.draw_text(
+                    screen, kx + 48, yy,
+                    f"{cname:18s} {member.role:9s} skill {member.skill}   "
+                    f"dose {frac:5.0%}   {where}",
+                    color=(theme.COLORS["accent"] if cname in aboard_names
+                           else theme.COLORS["text"]), font="small")
+                yy += 30
+            yy += 8
+            theme.draw_text(screen, kx + 14, yy,
+                            "CANDIDATES — ENTER hires (boards next launch):",
+                            color=theme.COLORS["gold"], font="small")
+            yy += 26
+            for i, cand in enumerate(cands):
+                sel = i == crew_cursor % len(cands) if cands else False
+                theme.draw_text(
+                    screen, kx + 14, yy,
+                    f"{'>' if sel else ' '} {cand.name:18s} "
+                    f"{cand.role:9s} skill {cand.skill}   "
+                    f"${cand.hire_cost/1e6:,.0f}M",
+                    color=(theme.COLORS["gold"] if sel
+                           else theme.COLORS["text"]), font="small")
+                yy += 30
+            theme.draw_text(
+                screen, kx + 14, yy + 4,
+                "pilots cut docking cost · engineers stretch life support · "
+                "scientists multiply science", color=theme.COLORS["text_dim"],
+                font="small")
 
         if research_open:
             tech_ids = _tech_order(db)

@@ -33,6 +33,8 @@ class FleetVessel:
         self.landed_at: str | None = None
         self.lss_used_days = 0.0
         self.lss_last_t = t_now
+        self.lss_bonus = 1.0                  # engineer aboard (game/crew)
+        self.prox_ops_dv = self.PROX_OPS_DV   # pilot aboard cuts this
         self.dock_joints: list[int] = []      # row offsets of docked stacks
         self.legs = []
         self._legs_t0 = -1.0
@@ -63,7 +65,7 @@ class FleetVessel:
                          * part["crew"]["capacity"])
         if not self.crew:
             return float("inf")
-        return days / len(self.crew)
+        return days * self.lss_bonus / len(self.crew)
 
     @property
     def lss_margin_days(self) -> float:
@@ -211,7 +213,7 @@ class FleetVessel:
         ox, oy, ovx, ovy = other.state(t)
         if math.hypot(rx - ox, ry - oy) > self.RENDEZVOUS_ENVELOPE_M:
             return None
-        return math.hypot(vx - ovx, vy - ovy) + self.PROX_OPS_DV
+        return math.hypot(vx - ovx, vy - ovy) + self.prox_ops_dv
 
     def dock_with(self, other: "FleetVessel", t: float) -> bool:
         """Chaser docks to `other` (the primary keeps name and orbit).
