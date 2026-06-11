@@ -65,6 +65,10 @@ class Module:
     # warp can neither dodge nor farm risk and reloads do not reroll fate
     mtbf_s: float | None = None
     failure_t: float | None = None
+    # thermal slot (09): None = consumers emit their consumed power as heat;
+    # explicit positive = declared waste heat (reactors); negative =
+    # rejection capacity (radiators)
+    heat_kw: float | None = None
 
 
 @dataclass(slots=True)
@@ -90,6 +94,13 @@ class LedgerNetwork:
         self.modules: list[Module] = []
         self.sources: list[Source] = []
         self.rng = rng                  # RngRegistry; None = failures off
+        self.scheduled: list[tuple[float, str, str]] = []   # (t, kind, subject)
+
+    def schedule(self, t: float, kind: str, subject: str) -> None:
+        """Class-c scheduled boundary (13 §3.9): day/night terminator,
+        eclipse entry/exit, shift change, logistics arrival..."""
+        self.scheduled.append((t, kind, subject))
+        self.scheduled.sort()
 
     # -- failure pre-rolls (13 §3.9) -------------------------------------------
 
@@ -279,6 +290,10 @@ class LedgerNetwork:
                 if (m.failure_t is not None and m.state == RUNNING
                         and t < m.failure_t < t_next):
                     t_next, kind, subject = m.failure_t, "module_failed", m.module_id
+            for (ts, k, sub) in self.scheduled:
+                if t < ts < t_next:
+                    t_next, kind, subject = ts, k, sub
+                    break       # list is sorted; first future wins
             for res, buf in self.buffers.items():
                 r = rates.get(res, 0.0)
                 if r > _FIXED_POINT_TOL and buf.capacity - buf.level > 1e-9:
@@ -308,6 +323,9 @@ class LedgerNetwork:
             if kind is not None and t < t1 + _EPS_T:
                 events.append(LedgerEvent(t, kind, subject))
                 self._apply_boundary(kind, subject)
+                fired = (t, kind, subject)
+                if fired in self.scheduled:
+                    self.scheduled.remove(fired)      # one-shot consumed
         return events
 
     def _apply_boundary(self, kind: str, subject: str) -> None:
@@ -317,6 +335,10 @@ class LedgerNetwork:
                 if m.module_id == subject:
                     m.state = FAILED
                     m.failure_t = None
+        elif kind in ("module_off", "module_on"):
+            for m in self.modules:
+                if m.module_id == subject and m.state != FAILED:
+                    m.state = OFF if kind == "module_off" else RUNNING
         if kind == "buffer_empty":
             for m in self.modules:
                 if m.state == RUNNING and subject in m.inputs:
