@@ -66,3 +66,16 @@ def apply_crew_bonuses(fv, crew: dict) -> None:
 
 def science_multiplier(fv, crew: dict) -> float:
     return 1.0 + 0.20 * best_skill(fv, crew, "scientist")
+
+
+def reap_over_limit(crew: dict, vessels: list) -> list[str]:
+    """Career dose past the limit ends a career — permanently (08 §3.6).
+    Returns the names lost; removes them from the roster and any vessel.
+    Europa's 5.4 Sv/day surface makes this arrive in DAYS, not years."""
+    lost = [name for name, m in crew.items() if m.dose.over_limit]
+    for name in lost:
+        del crew[name]
+        for v in vessels:
+            if name in v.crew:
+                v.crew.remove(name)
+    return lost

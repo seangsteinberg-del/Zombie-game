@@ -171,8 +171,12 @@ class FleetVessel:
 
     def land_at(self, site_id: str, site: dict, t: float) -> bool:
         """Descend to a surface site. Pays the site's REAL landing dv from
-        the tanks (aero sites pay only the propulsive terminal phase)."""
+        the tanks (aero sites pay only the propulsive terminal phase).
+        Exotic sites demand their hardware (07): no gondola, no Venus."""
         if self.landed_at is not None or self.frame_id != site["body"]:
+            return False
+        need = site.get("requires_part")
+        if need and not any(r.part_id == need for r in self.vessel.rows):
             return False
         if not self._pay_dv(site["land_dv"]):
             return False

@@ -27,6 +27,7 @@ SITES: dict[str, dict] = {
         "body": "core:venus", "name": "55 km cloud deck (Venus)",
         "kind": "aerostat", "land_dv": 300.0, "ascent_dv": 8_000.0,
         "science": 2_000.0, "aero": True, "solar": 1.30,
+        "requires_part": "core:gondola_havoc",
         "blurb": "HAVOC altitude: 1 bar, 27 C — the only shirt-sleeve sky",
     },
     "site:titan_shore": {

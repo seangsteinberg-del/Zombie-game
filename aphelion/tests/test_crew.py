@@ -68,6 +68,31 @@ def test_engineer_stretches_endurance(world):
     assert fv.endurance_days == pytest.approx(base_days * 1.30)
 
 
+def test_reap_over_limit_removes_everywhere(world):
+    db, tree = world
+    from aphelion.game.crew import reap_over_limit
+    from aphelion.sim.habitat.dose import CrewDose
+    crew = {"Doomed": CrewMember("Doomed", "pilot", 1, CrewDose(1_200.0)),
+            "Fine": CrewMember("Fine", "pilot", 1, CrewDose(10.0))}
+    fv = _vessel_with_crew(db, tree, ["Doomed", "Fine"])
+    lost = reap_over_limit(crew, [fv])
+    assert lost == ["Doomed"]
+    assert "Doomed" not in crew and "Doomed" not in fv.crew
+    assert "Fine" in crew and "Fine" in fv.crew
+
+
+def test_venus_demands_the_gondola(world):
+    db, tree = world
+    from aphelion.game.sites import SITES
+    site = SITES["site:venus_cloud"]
+    fv = _vessel_with_crew(db, tree, [])
+    fv.frame_id = "core:venus"
+    assert fv.land_at("site:venus_cloud", site, 0.0) is False  # no gondola
+    fv.vessel.rows.append(Vessel.fueled_row(db, "core:gondola_havoc"))
+    fv.vessel.stage_plan[-1].append(len(fv.vessel.rows) - 1)
+    assert fv.land_at("site:venus_cloud", site, 0.0) is True
+
+
 def test_scientist_multiplies_science(world):
     db, tree = world
     crew = {"S": CrewMember("S", "scientist", 3),

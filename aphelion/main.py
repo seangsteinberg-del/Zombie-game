@@ -86,8 +86,13 @@ def _surface_options(av, bases) -> list[tuple[tuple, str]]:
                          "FOUND A BASE here (vessel becomes base hardware)"))
     else:
         for sid, s in sites_for_body(av.frame_id):
-            opts.append((("land", sid),
-                         f"LAND: {s['name']}   ({s['land_dv']:,.0f} m/s)"))
+            need = s.get("requires_part")
+            missing = (need and not any(r.part_id == need
+                                        for r in av.vessel.rows))
+            label = f"LAND: {s['name']}   ({s['land_dv']:,.0f} m/s)"
+            if missing:
+                label += f"   [needs {need.split(':')[1]}]"
+            opts.append((("land", sid), label))
     return opts
 
 
@@ -254,7 +259,8 @@ def run(argv: list[str] | None = None) -> int:
 
     from aphelion.core.rng import RngRegistry
     from aphelion.game.crew import (
-        CrewMember, apply_crew_bonuses, candidates, science_multiplier)
+        CrewMember, apply_crew_bonuses, candidates, reap_over_limit,
+        science_multiplier)
     from aphelion.save.campaign import (
         default_save_dir, read_campaign, snapshot_campaign, write_campaign)
     from aphelion.sim.habitat.dose import AMBIENT_MSV_DAY
@@ -1252,6 +1258,11 @@ def run(argv: list[str] | None = None) -> int:
                         for cname in list(crew):
                             if cname in ev_txt:
                                 del crew[cname]
+            for name in reap_over_limit(crew, vessels):
+                toast = (f"{name} has exceeded the career radiation limit "
+                         f"— lost to the program")
+                toast_until = t + 12
+                audio.play("alarm")
             if crew:
                 worst = max(crew.values(),
                             key=lambda c: c.dose.career_fraction)
