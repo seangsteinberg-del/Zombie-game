@@ -1,0 +1,9 @@
+id     = "core:hab_pollux"
+type   = "crew"
+tier   = "T2"
+name   = "PX-6 Pollux deep-space habitat"
+mass_t = 17.0
+
+[crew]
+capacity       = 6
+endurance_days = 950.0

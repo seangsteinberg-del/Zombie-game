@@ -13,13 +13,17 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
+from aphelion.game.fleet import FleetVessel
 from aphelion.save.serialize import (
     SCHEMA_VERSION, elements_from_dict, elements_to_dict, ledger_from_dict,
-    ledger_to_dict, read_save, write_save,
+    ledger_to_dict, read_save, vessel_from_dict, vessel_to_dict, write_save,
 )
 from aphelion.sim.economy import Contract, Program
 from aphelion.sim.habitat.dose import CrewDose
 from aphelion.sim.research import ResearchState
+
+CAMPAIGN_VERSION = 2        # 2: fleet (real-propellant vessels) replaced
+                            # the single dv-scalar craft
 
 
 def default_save_dir() -> Path:
@@ -40,8 +44,8 @@ def _unnum(x):
     return math.inf if x == "inf" else float(x)
 
 
-def snapshot_campaign(*, t: float, craft_frame: str, craft_elements,
-                      craft_dv: float, craft_name: str, program: Program,
+def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
+                      active_idx: int, next_vid: int, program: Program,
                       research: ResearchState, crew: dict[str, CrewDose],
                       visited: set[str], bases: list,
                       tutorial_done: bool, rng=None) -> dict:
@@ -51,12 +55,19 @@ def snapshot_campaign(*, t: float, craft_frame: str, craft_elements,
         "propagator": "patched_conics",
         "t": t,
         "campaign": {
-            "craft": {
-                "frame_id": craft_frame,
-                "elements": elements_to_dict(craft_elements),
-                "dv_remaining": craft_dv,
-                "name": craft_name,
-            },
+            "version": CAMPAIGN_VERSION,
+            "vessels": [{
+                "vid": v.vid,
+                "name": v.name,
+                "frame_id": v.frame_id,
+                "elements": elements_to_dict(v.elements),
+                "vessel": vessel_to_dict(v.vessel),
+                "crew": list(v.crew),
+                "landed_at": v.landed_at,
+                "lss_used_days": v.lss_used_days,
+            } for v in vessels],
+            "active_idx": active_idx,
+            "next_vid": next_vid,
             "program": {
                 "funds": program.funds,
                 "history": [list(h) for h in program.history],
@@ -90,10 +101,14 @@ def snapshot_campaign(*, t: float, craft_frame: str, craft_elements,
     return save
 
 
-def restore_campaign(save: dict):
+def restore_campaign(save: dict, db, tree):
     """Returns a plain dict of reconstructed campaign state; the caller
-    (main) re-wraps craft/bases in its runtime classes."""
+    (main) re-wraps bases in its runtime classes."""
     c = save["campaign"]
+    if c.get("version", 1) != CAMPAIGN_VERSION:
+        raise ValueError(
+            f"save is campaign v{c.get('version', 1)}; this build needs "
+            f"v{CAMPAIGN_VERSION} (pre-fleet saves are not migratable)")
     program = Program(funds=c["program"]["funds"])
     program.history = [tuple(h) for h in c["program"]["history"]]
     for cd in c["program"]["contracts"]:
@@ -103,6 +118,16 @@ def restore_campaign(save: dict):
         unlocked=set(c["research"]["unlocked"]),
         history=[tuple(h) for h in c["research"]["history"]])
     crew = {name: CrewDose(msv) for name, msv in c["crew"].items()}
+    vessels = []
+    for vd in c["vessels"]:
+        fv = FleetVessel(tree, vd["frame_id"],
+                         elements_from_dict(vd["elements"]),
+                         vessel_from_dict(vd["vessel"], db),
+                         vd["name"], vd["vid"], crew=vd["crew"],
+                         t_now=save["t"])
+        fv.landed_at = vd["landed_at"]
+        fv.lss_used_days = vd["lss_used_days"]
+        vessels.append(fv)
     bases = []
     for bd in c["bases"]:
         net = ledger_from_dict(bd["ledger"])
@@ -119,10 +144,9 @@ def restore_campaign(save: dict):
         })
     return {
         "t": save["t"],
-        "craft_frame": c["craft"]["frame_id"],
-        "craft_elements": elements_from_dict(c["craft"]["elements"]),
-        "craft_dv": c["craft"]["dv_remaining"],
-        "craft_name": c["craft"]["name"],
+        "vessels": vessels,
+        "active_idx": c["active_idx"],
+        "next_vid": c["next_vid"],
         "program": program,
         "research": research,
         "crew": crew,
@@ -137,5 +161,5 @@ def write_campaign(path: str | Path, save: dict) -> None:
     write_save(path, save)
 
 
-def read_campaign(path: str | Path) -> dict:
-    return restore_campaign(read_save(path))
+def read_campaign(path: str | Path, db, tree) -> dict:
+    return restore_campaign(read_save(path), db, tree)

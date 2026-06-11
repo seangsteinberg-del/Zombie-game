@@ -1,10 +1,13 @@
-"""APHELION — playable orbital sandbox (Phases 0-2 engine, flyable).
+"""APHELION — the campaign game.
 
-You fly a craft starting in LEO-300. Burns are applied along your current
-velocity (prograde/retrograde) or radially; the predicted patched-conic
-trajectory — across up to 5 SOI transitions — is drawn live ahead of you.
-Warp through an encounter and the sim re-expresses your orbit in the new
-frame exactly as the planner predicted (same math, by construction).
+You run a space program: build rockets (B), fly them to orbit yourself
+(KSP-style pad ascent), and operate a persistent FLEET — every vessel
+keeps its real tanks, engines, stages, and crew. Burns spend actual
+propellant; the predicted patched-conic trajectory — across up to 5 SOI
+transitions — is drawn live ahead of the active vessel. V switches
+vessels; warp through an encounter and the sim re-expresses the orbit in
+the new frame exactly as the planner predicted (same math, by
+construction).
 
 Controls
   . / ,        warp up / down            space   pause
@@ -67,72 +70,7 @@ def _tech_order(db) -> list[str]:
                                           + db.tech[i].get("cost_ed", 0.0)))
 
 
-class Craft:
-    """A rails craft: elements in a frame, re-expressed at SOI crossings.
-    Burns spend a finite dv budget — the budget your launched design earned
-    (06: the builder's Tsiolkovsky readout is the law)."""
-
-    def __init__(self, tree, frame_id: str, elements,
-                 dv_budget: float = 5_000.0, name: str = "Pathfinder-0") -> None:
-        self.tree = tree
-        self.frame_id = frame_id
-        self.elements = elements
-        self.dv_remaining = dv_budget
-        self.name = name
-        self.legs = []
-        self._legs_t0 = -1.0
-
-    def state(self, t: float):
-        return elements_to_state(self.elements, t)
-
-    def burn(self, t: float, dv_prograde: float, dv_radial: float) -> bool:
-        cost = math.hypot(dv_prograde, dv_radial)
-        if cost > self.dv_remaining:
-            return False
-        rx, ry, vx, vy = self.state(t)
-        v = math.hypot(vx, vy)
-        r = math.hypot(rx, ry)
-        if v == 0.0 or r == 0.0:
-            return False
-        px, py = vx / v, vy / v
-        ux, uy = rx / r, ry / r
-        nvx = vx + dv_prograde * px + dv_radial * ux
-        nvy = vy + dv_prograde * py + dv_radial * uy
-        mu = self.tree.body(self.frame_id).mu
-        self.elements = state_to_elements(rx, ry, nvx, nvy, t, mu)
-        self.dv_remaining -= cost
-        self._legs_t0 = -1.0          # invalidate prediction
-        return True
-
-    def predict(self, t: float):
-        if self._legs_t0 < 0.0 or abs(t - self._legs_t0) > 600.0:
-            self.legs = predict_trajectory(
-                self.tree, self.frame_id, self.elements, t, _PREDICT_HORIZON)
-            self._legs_t0 = t
-        return self.legs
-
-    def advance_to(self, t: float) -> list[str]:
-        """Follow predicted legs through any SOI crossings up to time t."""
-        notes: list[str] = []
-        for _ in range(8):
-            legs = self.predict(max(self._legs_t0, 0.0) if self._legs_t0 >= 0 else t)
-            current = None
-            for leg in legs:
-                if leg.t_start <= t < leg.t_end or leg is legs[-1]:
-                    current = leg
-                    if leg.t_start <= t:
-                        break
-            if current is None:
-                break
-            if current.frame_id != self.frame_id or current.elements != self.elements:
-                if t >= current.t_start:
-                    self.frame_id = current.frame_id
-                    self.elements = current.elements
-                    notes.append(f"frame -> {current.frame_id.split(':')[1]}")
-                    self._legs_t0 = -1.0
-                    continue
-            break
-        return notes
+from aphelion.game.fleet import FleetVessel  # noqa: E402  (campaign vessel)
 
 
 class BaseSite:
@@ -210,7 +148,7 @@ class Builder:
         self.research = research
         self.catalog = sorted(
             [pid for pid, p in db.parts.items()
-             if p["type"] in ("engine", "tank", "structure")])
+             if p["type"] in ("engine", "tank", "structure", "crew")])
         self.cursor = 0
         self.stack: list[list[str]] = [[]]    # stages, bottom first
         self.message = "assemble a vessel from the catalog, then L to launch it"
@@ -321,16 +259,13 @@ def run(argv: list[str] | None = None) -> int:
     qs_path = default_save_dir() / "quicksave.aph"
 
     def fresh_campaign() -> dict:
-        """A brand-new 2049 campaign (12 §3: the Act 1 opening state)."""
-        mu_e = tree.body("core:earth").mu
-        r_leo = 6.678e6
-        craft = Craft(tree, "core:earth",
-                      state_to_elements(r_leo, 0.0, 0.0,
-                                        tr.circular_speed(mu_e, r_leo),
-                                        0.0, mu_e))
+        """A brand-new 2049 campaign (12 §3: Act 1 opens with money, two
+        astronauts, an empty pad — and no rocket. Build one."""
         program = Program(funds=150_000_000.0)
+        program.offer(Contract("c_orbit", "Put a vessel in orbit",
+                               payout=100_000_000.0, deadline_s=60 * 86_400.0))
         program.offer(Contract("c_moon", "Reach the Moon's SOI",
-                               payout=80_000_000.0, deadline_s=120 * 86_400.0))
+                               payout=80_000_000.0, deadline_s=180 * 86_400.0))
         program.offer(Contract("c_helio", "Achieve heliocentric orbit",
                                payout=120_000_000.0, deadline_s=365 * 86_400.0))
         program.offer(Contract("c_base", "Found a lunar surface base (G in Moon SOI)",
@@ -341,23 +276,23 @@ def run(argv: list[str] | None = None) -> int:
                                payout=300_000_000.0, deadline_s=6 * 365 * 86_400.0))
         program.offer(Contract("c_venus", "Reach the Venus SOI",
                                payout=250_000_000.0, deadline_s=6 * 365 * 86_400.0))
-        return dict(clock=SimClock(t0=0.0), craft=craft, program=program,
+        return dict(clock=SimClock(t0=0.0), vessels=[], active_idx=0,
+                    next_vid=1, program=program,
                     rng=RngRegistry(20490101), bases=[],
                     crew={"V. Ainsworth": CrewDose(), "J. Okafor": CrewDose()},
                     research=ResearchState(), visited={"core:earth"},
                     tutorial=first_flight_tutorial())
 
     def loaded_campaign() -> dict:
-        got = read_campaign(qs_path)
-        craft = Craft(tree, got["craft_frame"], got["craft_elements"],
-                      dv_budget=got["craft_dv"], name=got["craft_name"])
+        got = read_campaign(qs_path, db, tree)
         tut = first_flight_tutorial()
         tut.completed = got["tutorial_done"]
         rng = (RngRegistry.from_state(got["rng_state"]) if got["rng_state"]
                else RngRegistry(20490101))
         for b in got["bases"]:
             b["net"].rng = rng      # resume the SAME failure streams
-        return dict(clock=SimClock(t0=got["t"]), craft=craft,
+        return dict(clock=SimClock(t0=got["t"]), vessels=got["vessels"],
+                    active_idx=got["active_idx"], next_vid=got["next_vid"],
                     program=got["program"], rng=rng,
                     bases=[BaseSite.from_restore(b["name"], b["last_t"],
                                                  b["pending_repairs"], b["net"])
@@ -367,21 +302,21 @@ def run(argv: list[str] | None = None) -> int:
 
     def campaign_tuple(st: dict):
         """One unpack shape for new game, quickload, and startup."""
-        return (st["clock"], st["craft"], st["program"], st["rng"],
-                st["bases"], st["crew"], st["research"], st["visited"],
-                st["tutorial"], Builder(db, st["research"]),
+        return (st["clock"], st["vessels"], st["active_idx"], st["next_vid"],
+                st["program"], st["rng"], st["bases"], st["crew"],
+                st["research"], st["visited"], st["tutorial"],
+                Builder(db, st["research"]),
                 None, 0, False, False, False, False, False, 0.0, "", 0.0)
 
-    (clock, craft, program, campaign_rng, bases, crew, research, visited,
-     tutorial, builder, node, warp_idx, paused, base_screen, builder_open,
-     research_open, crew_warned, last_dose_t, toast, toast_until) = \
-        campaign_tuple(fresh_campaign())
+    (clock, vessels, active_idx, next_vid, program, campaign_rng, bases,
+     crew, research, visited, tutorial, builder, node, warp_idx, paused,
+     base_screen, builder_open, research_open, crew_warned, last_dose_t,
+     toast, toast_until) = campaign_tuple(fresh_campaign())
 
     def do_quicksave() -> str:
         snap = snapshot_campaign(
-            t=clock.t, craft_frame=craft.frame_id,
-            craft_elements=craft.elements, craft_dv=craft.dv_remaining,
-            craft_name=craft.name, program=program, research=research,
+            t=clock.t, vessels=vessels, active_idx=active_idx,
+            next_vid=next_vid, program=program, research=research,
             crew=crew, visited=visited, bases=bases,
             tutorial_done=tutorial.completed, rng=campaign_rng)
         write_campaign(qs_path, snap)
@@ -406,6 +341,7 @@ def run(argv: list[str] | None = None) -> int:
     pause_cursor = 0
     research_cursor = 0
     body_click_pts: list = []
+    vessel_click_pts: list = []
     burn_glow = 0.0
 
     # ascent scene state (KSP-style flown launch)
@@ -657,7 +593,8 @@ def run(argv: list[str] | None = None) -> int:
                         node["t_node"] += 600.0 if shift else 60.0
                     elif event.key == pygame.K_RETURN:
                         need = math.hypot(node["dvp"], node["dvr"])
-                        if need > craft.dv_remaining:
+                        av0 = vessels[active_idx % len(vessels)] if vessels else None
+                        if av0 is None or need > av0.dv_remaining:
                             toast, toast_until = "node exceeds dv budget", t + 5
                             audio.play("alarm")
                         else:
@@ -667,22 +604,34 @@ def run(argv: list[str] | None = None) -> int:
                             audio.play("blip")
                 elif event.key == pygame.K_F2:
                     base_screen = not base_screen
+                elif event.key == pygame.K_v and vessels:
+                    active_idx = (active_idx + 1) % len(vessels)
+                    node = None
+                    av0 = vessels[active_idx]
+                    toast, toast_until = f"ACTIVE: {av0.name}", t + 4
+                    audio.play("blip")
                 elif event.key == pygame.K_g:
-                    if craft.frame_id != "core:moon":
-                        toast, toast_until = "Base founding needs the Moon SOI", t + 5
+                    av0 = vessels[active_idx % len(vessels)] if vessels else None
+                    if av0 is None or av0.frame_id != "core:moon":
+                        toast, toast_until = "Base founding needs a vessel in the Moon SOI", t + 5
                         audio.play("alarm")
                     elif bases:
                         toast, toast_until = "Base already founded (F2 to view)", t + 5
-                    elif not craft.burn(t, -1_900.0, 0.0):
-                        toast, toast_until = ("Landing needs 1,900 m/s of dv "
-                                              "budget"), t + 6
+                    elif not av0.burn(t, -1_900.0, 0.0):
+                        toast, toast_until = ("Landing needs 1,900 m/s of "
+                                              "remaining dv"), t + 6
                         audio.play("alarm")
                     else:
                         bases.append(BaseSite("Peary Base", t, campaign_rng))
+                        # the lander IS the base seed — its hardware stays
+                        vessels.pop(active_idx % len(vessels))
+                        active_idx = 0
+                        node = None
                         if program.complete(t, "c_base"):
-                            toast = "PEARY BASE FOUNDED — CONTRACT PAID +$150M (F2 to view)"
+                            toast = ("PEARY BASE FOUNDED — vessel converted to "
+                                     "base hardware  |  CONTRACT PAID +$150M")
                         else:
-                            toast = "PEARY BASE FOUNDED (F2 to view)"
+                            toast = "PEARY BASE FOUNDED — vessel converted to base hardware"
                         toast_until = t + 10
                         audio.play("paid")
                 elif event.key == pygame.K_SPACE:
@@ -698,11 +647,16 @@ def run(argv: list[str] | None = None) -> int:
                 elif event.key == pygame.K_F1:
                     tutorial.visible = not tutorial.visible
                 elif event.key in (pygame.K_x, pygame.K_z, pygame.K_a, pygame.K_d):
+                    av0 = vessels[active_idx % len(vessels)] if vessels else None
+                    if av0 is None:
+                        toast, toast_until = "no vessel — build one (B)", t + 5
+                        audio.play("alarm")
+                        continue
                     dvp = {pygame.K_x: (+step, 0.0), pygame.K_z: (-step, 0.0),
                            pygame.K_a: (0.0, +step), pygame.K_d: (0.0, -step)}[event.key]
-                    crx0, cry0, cvx0, cvy0 = craft.state(t)
-                    if not craft.burn(t, *dvp):
-                        toast = "INSUFFICIENT dv — build a new vessel (B)"
+                    crx0, cry0, cvx0, cvy0 = av0.state(t)
+                    if not av0.burn(t, *dvp):
+                        toast = "INSUFFICIENT PROPELLANT — build a new vessel (B)"
                         toast_until = t + 6
                         audio.play("alarm")
                         continue
@@ -712,7 +666,7 @@ def run(argv: list[str] | None = None) -> int:
                     toast_until = t + 5
                     burn_glow = 0.6
                     audio.play("burn")
-                    frx0, fry0, _, _ = tree.state_in_root(craft.frame_id, t)
+                    frx0, fry0, _, _ = tree.state_in_root(av0.frame_id, t)
                     px0 = cam.world_to_screen(frx0 + crx0, fry0 + cry0)
                     v0n = math.hypot(cvx0, cvy0) or 1.0
                     # exhaust plume opposes the dv direction (screen y flips)
@@ -722,15 +676,28 @@ def run(argv: list[str] | None = None) -> int:
             elif (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
                   and not (pause_open or builder_open or research_open)):
                 mx, my = event.pos
-                best = None
-                best_d = 18.0 ** 2
-                for px, py, fi in body_click_pts:
+                best_v = None
+                best_d = 16.0 ** 2
+                for px, py, vi in vessel_click_pts:
                     d = (px - mx) ** 2 + (py - my) ** 2
                     if d < best_d:
-                        best, best_d = fi, d
-                if best is not None:
-                    focus_idx = best
+                        best_v, best_d = vi, d
+                if best_v is not None:
+                    active_idx = best_v
+                    node = None
+                    focus_idx = 0
+                    toast, toast_until = f"ACTIVE: {vessels[best_v].name}", t + 4
                     audio.play("blip")
+                else:
+                    best = None
+                    best_d = 18.0 ** 2
+                    for px, py, fi in body_click_pts:
+                        d = (px - mx) ** 2 + (py - my) ** 2
+                        if d < best_d:
+                            best, best_d = fi, d
+                    if best is not None:
+                        focus_idx = best
+                        audio.play("blip")
             elif event.type == pygame.MOUSEWHEEL:
                 if event.y > 0:
                     cam.zoom_in(event.y)
@@ -739,20 +706,25 @@ def run(argv: list[str] | None = None) -> int:
 
         # scene transitions decided during event handling
         if start_new:
-            (clock, craft, program, campaign_rng, bases, crew, research,
-             visited, tutorial, builder, node, warp_idx, paused, base_screen,
-             builder_open, research_open, crew_warned, last_dose_t, toast,
-             toast_until) = campaign_tuple(fresh_campaign())
+            (clock, vessels, active_idx, next_vid, program, campaign_rng,
+             bases, crew, research, visited, tutorial, builder, node,
+             warp_idx, paused, base_screen, builder_open, research_open,
+             crew_warned, last_dose_t, toast, toast_until) = \
+                campaign_tuple(fresh_campaign())
             scene, pause_open, focus_idx = "flight", False, 0
         if load_save:
             if qs_path.exists():
-                (clock, craft, program, campaign_rng, bases, crew, research,
-                 visited, tutorial, builder, node, warp_idx, paused,
-                 base_screen, builder_open, research_open, crew_warned,
-                 last_dose_t, toast, toast_until) = \
-                    campaign_tuple(loaded_campaign())
-                scene, pause_open, focus_idx = "flight", False, 0
-                toast, toast_until = "QUICKSAVE LOADED", clock.t + 5.0
+                try:
+                    (clock, vessels, active_idx, next_vid, program,
+                     campaign_rng, bases, crew, research, visited, tutorial,
+                     builder, node, warp_idx, paused, base_screen,
+                     builder_open, research_open, crew_warned, last_dose_t,
+                     toast, toast_until) = campaign_tuple(loaded_campaign())
+                    scene, pause_open, focus_idx = "flight", False, 0
+                    toast, toast_until = "QUICKSAVE LOADED", clock.t + 5.0
+                except Exception as exc:
+                    toast, toast_until = f"load failed: {exc}", t + 8.0
+                    audio.play("alarm")
             else:
                 toast, toast_until = "no quicksave found", t + 4.0
 
@@ -768,13 +740,23 @@ def run(argv: list[str] | None = None) -> int:
                 clock.advance_analytic(t + live.t)
                 t = clock.t
                 mu_e = tree.body("core:earth").mu
-                craft = Craft(tree, "core:earth",
-                              state_to_elements(live.x, live.y, live.vx,
-                                                live.vy, t, mu_e),
-                              dv_budget=live.dv_remaining,
-                              name=f"Vessel-{len(program.history)}")
-                toast = (f"ORBIT {live.peri_km:,.0f} km — "
-                         f"{live.dv_remaining:,.0f} m/s on-orbit budget")
+                fv = FleetVessel(tree, "core:earth",
+                                 state_to_elements(live.x, live.y, live.vx,
+                                                   live.vy, t, mu_e),
+                                 live.vessel, f"Vessel-{next_vid}",
+                                 next_vid, t_now=t)
+                next_vid += 1
+                # crew board up to capacity (those not already flying)
+                aboard_elsewhere = {n for v in vessels for n in v.crew}
+                free = [n for n in crew if n not in aboard_elsewhere]
+                fv.crew = free[:fv.crew_capacity]
+                vessels.append(fv)
+                active_idx = len(vessels) - 1
+                if program.complete(t, "c_orbit"):
+                    audio.play("paid")
+                crewed = f" — crew: {', '.join(fv.crew)}" if fv.crew else ""
+                toast = (f"{fv.name} IN ORBIT — "
+                         f"{fv.dv_remaining:,.0f} m/s remaining{crewed}")
                 toast_until = t + 10.0
                 focus_idx = 0
                 audio.play("paid")
@@ -977,63 +959,78 @@ def run(argv: list[str] | None = None) -> int:
         if not paused and not pause_open:
             clock.advance_analytic(clock.t + _WARP_LADDER[warp_idx] * real_dt)
         t = clock.t
+        av = vessels[active_idx % len(vessels)] if vessels else None
         # node execution at its instant (the plan IS the burn at rails fidelity)
         if node is not None and node["armed"] and t >= node["t_node"]:
-            if craft.burn(node["t_node"], node["dvp"], node["dvr"]):
+            if av is not None and av.burn(node["t_node"], node["dvp"],
+                                          node["dvr"]):
                 toast = (f"NODE EXECUTED: {math.hypot(node['dvp'], node['dvr']):,.0f}"
                          f" m/s")
                 burn_glow = 0.8
                 audio.play("burn")
             else:
-                toast = "NODE FAILED: insufficient dv"
+                toast = "NODE FAILED: insufficient propellant"
                 audio.play("alarm")
             toast_until = t + 6
             node = None
-        for note in craft.advance_to(t):
-            toast, toast_until = f"SOI {note}", t + 8
-        # campaign hooks: first-entry science + contract completion
-        if craft.frame_id not in visited:
-            visited.add(craft.frame_id)
-            sci = _FIRST_ENTRY_SCIENCE.get(craft.frame_id, 200.0)
-            research.earn_science(sci)
-            research.earn_eng_data(sci * 0.25)
-            toast = f"FIRST ENTRY: {craft.frame_id.split(':')[1]} +{sci:.0f} science"
-            toast_until = t + 10
-            audio.play("soi")
-            if craft.frame_id == "core:moon" and program.complete(t, "c_moon"):
-                toast += "  |  CONTRACT PAID +$80M"
-                audio.play("paid")
-            if craft.frame_id == "core:sun" and program.complete(t, "c_helio"):
-                toast += "  |  CONTRACT PAID +$120M"
-                audio.play("paid")
+        # the whole fleet flies: SOI handoffs + campaign hooks per vessel
+        for fv in vessels:
+            for note in fv.advance_to(t):
+                toast, toast_until = f"SOI {note}", t + 8
+            if fv.frame_id not in visited:
+                visited.add(fv.frame_id)
+                sci = _FIRST_ENTRY_SCIENCE.get(fv.frame_id, 200.0)
+                research.earn_science(sci)
+                research.earn_eng_data(sci * 0.25)
+                toast = (f"FIRST ENTRY: {fv.frame_id.split(':')[1]} "
+                         f"+{sci:.0f} science ({fv.name})")
+                toast_until = t + 10
+                audio.play("soi")
+            for cid, frame_need, label in (
+                    ("c_moon", "core:moon", "+$80M"),
+                    ("c_helio", "core:sun", "+$120M"),
+                    ("c_mars", "core:mars", "+$300M"),
+                    ("c_venus", "core:venus", "+$250M")):
+                if fv.frame_id == frame_need and program.complete(t, cid):
+                    toast = (f"CONTRACT PAID {label} — "
+                             f"{frame_need.split(':')[1]} reached")
+                    toast_until = t + 10
+                    audio.play("paid")
         program.expire_overdue(t)
 
-        # crew dose accrual (08): real location rates; 20 g/cm2 hull water-
-        # equivalent shielding assumed for the crewed craft
+        # crew dose + vessel life support (08): hourly bookkeeping
         if t - last_dose_t > 3_600.0:
             days = (t - last_dose_t) / 86_400.0
-            loc = craft.frame_id if craft.frame_id in AMBIENT_MSV_DAY else "deep_space"
-            for member in crew.values():
-                member.accrue(loc, days, areal_g_cm2=20.0, material="water")
+            aboard: dict[str, str] = {}
+            for fv in vessels:
+                for n in fv.crew:
+                    aboard[n] = fv.frame_id
+            for cname, member in crew.items():
+                loc = aboard.get(cname, "core:earth")
+                if loc not in AMBIENT_MSV_DAY:
+                    loc = "deep_space"
+                shield = 20.0 if cname in aboard else 1_000.0
+                member.accrue(loc, days, areal_g_cm2=shield, material="water")
             # operating bases generate engineering data (11: ops currency)
             if bases:
                 research.earn_eng_data(2.0 * days * len(bases))
             last_dose_t = t
-            worst = max(crew.values(), key=lambda c: c.career_fraction)
-            if worst.career_fraction > 0.8 and not crew_warned:
-                crew_warned = True
-                toast = (f"CREW DOSE WARNING: {worst.career_fraction:.0%} of "
-                         f"career limit — get them home")
-                toast_until = t + 10
-                audio.play("alarm")
-
-        # contract sweep for the planetary arcs
-        if craft.frame_id == "core:mars" and program.complete(t, "c_mars"):
-            toast, toast_until = "MARS SOI — CONTRACT PAID +$300M", t + 10
-            audio.play("paid")
-        if craft.frame_id == "core:venus" and program.complete(t, "c_venus"):
-            toast, toast_until = "VENUS SOI — CONTRACT PAID +$250M", t + 10
-            audio.play("paid")
+            for fv in vessels:
+                for ev_txt in fv.tick_lss(t):
+                    toast, toast_until = ev_txt, t + 10
+                    audio.play("alarm")
+                    if "EXHAUSTED" in ev_txt:
+                        for cname in list(crew):
+                            if cname in ev_txt:
+                                del crew[cname]
+            if crew:
+                worst = max(crew.values(), key=lambda c: c.career_fraction)
+                if worst.career_fraction > 0.8 and not crew_warned:
+                    crew_warned = True
+                    toast = (f"CREW DOSE WARNING: {worst.career_fraction:.0%}"
+                             f" of career limit — get them home")
+                    toast_until = t + 10
+                    audio.play("alarm")
 
         # bases tick on the ledger (warp-exact); LOX contract watches stores
         for site in bases:
@@ -1051,14 +1048,15 @@ def run(argv: list[str] | None = None) -> int:
                 audio.play("paid")
 
         # tutorial rail (12 §5.8): completes from real state
-        legs_now = craft.predict(t)
+        legs_now = av.predict(t) if av is not None else []
         if tutorial.update({
+            "builder_open": builder_open,
+            "in_orbit": av is not None,
             "warp_idx": warp_idx,
-            "apo_m": (craft.elements.apoapsis
-                      - tree.body(craft.frame_id).radius
-                      if craft.elements.alpha > 0 else 0.0),
+            "apo_m": ((av.elements.apoapsis - tree.body(av.frame_id).radius)
+                      if av is not None and av.elements.alpha > 0 else 0.0),
             "moon_leg": any(leg.frame_id == "core:moon" for leg in legs_now),
-            "frame": craft.frame_id,
+            "frame": av.frame_id if av is not None else "",
         }):
             audio.play("blip")
 
@@ -1069,9 +1067,12 @@ def run(argv: list[str] | None = None) -> int:
 
         focus = focus_order[focus_idx]
         if focus == "craft":
-            frx, fry = body_root(craft.frame_id)
-            crx, cry, _, _ = craft.state(t)
-            cam.follow(frx + crx, fry + cry)
+            if av is not None:
+                frx, fry = body_root(av.frame_id)
+                crx, cry, _, _ = av.state(t)
+                cam.follow(frx + crx, fry + cry)
+            else:
+                cam.follow(*body_root("core:earth"))
         elif focus == "core:sun":
             cam.follow(0.0, 0.0)
         else:
@@ -1127,26 +1128,27 @@ def run(argv: list[str] | None = None) -> int:
                                 (mpx[0] + 7, mpx[1] - 7))
                     body_click_pts.append((mpx[0], mpx[1], focus_of_body[mid]))
 
-        # SOI boundary of the craft's current frame (faint dashed cyan)
-        soi_m = tree.body(craft.frame_id).soi_radius
-        if math.isfinite(soi_m):
-            soi_px = int(soi_m * cam.zoom)
-            if 24 < soi_px <= 2000:
-                ring = soi_ring(soi_px)
-                if ring is not None:
-                    frx_s, fry_s = body_root(craft.frame_id)
-                    fpx = cam.world_to_screen(frx_s, fry_s)
-                    screen.blit(ring, (fpx[0] - ring.get_width() // 2,
-                                       fpx[1] - ring.get_height() // 2))
+        # SOI boundary of the active vessel's frame (faint dashed cyan)
+        if av is not None:
+            soi_m = tree.body(av.frame_id).soi_radius
+            if math.isfinite(soi_m):
+                soi_px = int(soi_m * cam.zoom)
+                if 24 < soi_px <= 2000:
+                    ring = soi_ring(soi_px)
+                    if ring is not None:
+                        frx_s, fry_s = body_root(av.frame_id)
+                        fpx = cam.world_to_screen(frx_s, fry_s)
+                        screen.blit(ring, (fpx[0] - ring.get_width() // 2,
+                                           fpx[1] - ring.get_height() // 2))
 
         # node preview: post-burn legs in magenta + node marker
-        if node is not None:
+        if node is not None and av is not None:
             from aphelion.sim.flight.node_exec import ManeuverNode, apply_node_impulsive
             try:
                 post = apply_node_impulsive(
-                    craft.elements,
+                    av.elements,
                     ManeuverNode(node["t_node"], node["dvp"], node["dvr"]))
-                node_legs = predict_trajectory(tree, craft.frame_id, post,
+                node_legs = predict_trajectory(tree, av.frame_id, post,
                                                node["t_node"], _PREDICT_HORIZON)
                 for leg in node_legs:
                     lfx, lfy = body_root(leg.frame_id)
@@ -1154,8 +1156,8 @@ def run(argv: list[str] | None = None) -> int:
                     draw_conic(screen, leg.elements, cam, (255, 120, 220),
                                r_max=r_soi_l if math.isfinite(r_soi_l) else None,
                                origin=(lfx, lfy))
-                nfx, nfy = body_root(craft.frame_id)
-                nx, ny, _, _ = elements_to_state(craft.elements, node["t_node"])
+                nfx, nfy = body_root(av.frame_id)
+                nx, ny, _, _ = elements_to_state(av.elements, node["t_node"])
                 npx = cam.world_to_screen(nfx + nx, nfy + ny)
                 if (math.isfinite(npx[0]) and math.isfinite(npx[1])
                         and -100 < npx[0] < size[0] + 100
@@ -1171,38 +1173,58 @@ def run(argv: list[str] | None = None) -> int:
                 f"({math.hypot(node['dvp'], node['dvr']):,.0f} m/s)",
                 True, (255, 120, 220)), (10, size[1] - 48))
 
-        # craft: predicted legs + marker
-        for i, leg in enumerate(craft.predict(t)):
-            frx, fry = body_root(leg.frame_id)
-            r_soi = tree.body(leg.frame_id).soi_radius
-            r_max = r_soi if math.isfinite(r_soi) else None
-            draw_conic(screen, leg.elements, cam,
-                       _LEG_COLORS[i % len(_LEG_COLORS)],
-                       r_max=r_max, origin=(frx, fry))
-        frx, fry = body_root(craft.frame_id)
-        crx, cry, cvx, cvy = craft.state(t)
-        cpx = cam.world_to_screen(frx + crx, fry + cry)
-        if (math.isfinite(cpx[0]) and math.isfinite(cpx[1])
-                and -200 < cpx[0] < size[0] + 200
-                and -200 < cpx[1] < size[1] + 200):
-            heading = math.atan2(-cvy, cvx)    # nose along velocity, y-down
-            cspr = craft_icon(heading, size=14, burning=burn_glow > 0.0)
-            screen.blit(cspr, (cpx[0] - cspr.get_width() // 2,
-                               cpx[1] - cspr.get_height() // 2))
-            body_click_pts.append((cpx[0], cpx[1], 0))
+        # the fleet: active vessel gets trajectory legs + big icon; the
+        # rest draw as dim markers with names (click to take command)
+        vessel_click_pts = []
+        if av is not None:
+            for i, leg in enumerate(av.predict(t)):
+                frx, fry = body_root(leg.frame_id)
+                r_soi = tree.body(leg.frame_id).soi_radius
+                r_max = r_soi if math.isfinite(r_soi) else None
+                draw_conic(screen, leg.elements, cam,
+                           _LEG_COLORS[i % len(_LEG_COLORS)],
+                           r_max=r_max, origin=(frx, fry))
+        for vi, fv in enumerate(vessels):
+            vfx, vfy = body_root(fv.frame_id)
+            vrx, vry, vvx, vvy = fv.state(t)
+            vpx = cam.world_to_screen(vfx + vrx, vfy + vry)
+            if not (math.isfinite(vpx[0]) and math.isfinite(vpx[1])
+                    and -200 < vpx[0] < size[0] + 200
+                    and -200 < vpx[1] < size[1] + 200):
+                continue
+            is_active = fv is av
+            heading = math.atan2(-vvy, vvx)
+            cspr = craft_icon(heading, size=14 if is_active else 9,
+                              burning=is_active and burn_glow > 0.0)
+            if not is_active:
+                cspr = cspr.copy()
+                cspr.set_alpha(140)
+                screen.blit(font.render(fv.name, True, (110, 122, 140)),
+                            (vpx[0] + 10, vpx[1] - 10))
+            screen.blit(cspr, (vpx[0] - cspr.get_width() // 2,
+                               vpx[1] - cspr.get_height() // 2))
+            vessel_click_pts.append((vpx[0], vpx[1], vi))
         burn_glow = max(0.0, burn_glow - real_dt)
 
-        el = craft.elements
-        body = tree.body(craft.frame_id)
-        alt = math.hypot(crx, cry) - body.radius
         hud1 = (f"t {t / SECONDS_PER_DAY:9.3f} d   warp {_WARP_LADDER[warp_idx]:>9,.0f}x"
-                f"{'  [PAUSED]' if paused else ''}   focus: {focus.split(':')[-1]}")
-        peri = el.periapsis - body.radius
-        apo = (el.apoapsis - body.radius) if el.alpha > 0 else float("inf")
-        hud2 = (f"{craft.name} @ {craft.frame_id.split(':')[1]}   "
-                f"alt {alt/1e3:,.0f} km   v {math.hypot(cvx, cvy):,.0f} m/s   "
-                f"peri {peri/1e3:,.0f} km   apo {apo/1e3:,.0f} km   "
-                f"dv {craft.dv_remaining:,.0f} m/s")
+                f"{'  [PAUSED]' if paused else ''}   focus: {focus.split(':')[-1]}"
+                f"   fleet: {len(vessels)}")
+        if av is not None:
+            el = av.elements
+            body = tree.body(av.frame_id)
+            crx, cry, cvx, cvy = av.state(t)
+            alt = math.hypot(crx, cry) - body.radius
+            peri = el.periapsis - body.radius
+            apo = (el.apoapsis - body.radius) if el.alpha > 0 else float("inf")
+            lss = (f"   LSS {av.lss_margin_days:,.0f} d"
+                   if av.crew else "")
+            hud2 = (f"{av.name} @ {av.frame_id.split(':')[1]}   "
+                    f"alt {alt/1e3:,.0f} km   v {math.hypot(cvx, cvy):,.0f} m/s   "
+                    f"peri {peri/1e3:,.0f} km   apo {apo/1e3:,.0f} km   "
+                    f"dv {av.dv_remaining:,.0f} m/s   "
+                    f"stages {len(av.vessel.stage_plan)}{lss}")
+        else:
+            hud2 = "NO VESSEL — press B to build and launch your first rocket"
         open_contracts = [c for c in program.contracts
                           if c.completed_t is None and not c.failed]
         worst_dose = max(crew.values(), key=lambda c: c.career_fraction)

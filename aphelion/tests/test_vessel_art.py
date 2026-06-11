@@ -26,7 +26,7 @@ def db():
 
 
 def test_every_part_renders_sprite_and_thumb(db):
-    assert len(db.parts) == 30           # 14 engines + 15 tanks + payload
+    assert len(db.parts) >= 33     # engines + tanks + payload + crew parts
     for pid, part in db.parts.items():
         spr = part_sprite(part, pid)
         assert isinstance(spr, pygame.Surface)

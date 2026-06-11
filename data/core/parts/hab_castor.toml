@@ -1,0 +1,9 @@
+id     = "core:hab_castor"
+type   = "crew"
+tier   = "T1"
+name   = "CS-4 Castor transit habitat"
+mass_t = 9.5
+
+[crew]
+capacity       = 4
+endurance_days = 200.0

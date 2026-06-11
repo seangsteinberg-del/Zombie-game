@@ -44,8 +44,14 @@ class Tutorial:
 
 def first_flight_tutorial() -> Tutorial:
     return Tutorial(steps=[
+        Step("Press B and assemble a rocket — 2 boosters + XL tank, new "
+             "stage (S), vacuum engine + M tank + capsule. Then L to launch",
+             lambda s: s["builder_open"]),
+        Step("Fly it to orbit: SPACE ignites, the autopilot flies the "
+             "program — stage when called, C to circularize",
+             lambda s: s["in_orbit"]),
         Step("Press . (period) to engage time warp",
-             lambda s: s["warp_idx"] > 0),
+             lambda s: s["in_orbit"] and s["warp_idx"] > 0),
         Step("Press X to burn prograde — raise your apoapsis past 1,000 km",
              lambda s: s["apo_m"] > 1.0e6),
         Step("Keep raising apoapsis until a MOON leg appears in your "
@@ -53,7 +59,7 @@ def first_flight_tutorial() -> Tutorial:
              lambda s: s["moon_leg"]),
         Step("Warp ahead and ride the handoff into the Moon's SOI",
              lambda s: s["frame"] == "core:moon"),
-        Step("Contract paid! Burn retrograde at periapsis if you want to "
-             "stay; TAB tours the system. Fly safe, Director.",
+        Step("Contract paid! G founds a base; V switches vessels; TAB "
+             "tours the system. Fly safe, Director.",
              lambda s: False),
     ])

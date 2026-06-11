@@ -1,0 +1,9 @@
+id     = "core:capsule_vela"
+type   = "crew"
+tier   = "T0"
+name   = "VL-2 Vela crew capsule (Dragon-class)"
+mass_t = 4.2
+
+[crew]
+capacity       = 2
+endurance_days = 40.0
