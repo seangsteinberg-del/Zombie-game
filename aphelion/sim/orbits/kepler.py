@@ -34,8 +34,15 @@ _PARABOLIC_XI = 1e-12
 _ECC_CLAMP_ELLIPTIC = 0.999999
 _ECC_CLAMP_HYPERBOLIC = 1.000001
 
-_NEWTON_TOL = 1e-8      # convergence: |F|/sqrt(mu) < 1e-8 s
+_NEWTON_TOL = 1e-8      # convergence: |F|/sqrt(mu) < 1e-8 s (01 §3.3)
 _NEWTON_MAX = 100
+
+
+def _kepler_tol(dt: float) -> float:
+    """Convergence tolerance in seconds. The spec's 1e-8 s plus a float64
+    floor: F is evaluated through ~|sqrt(mu)*dt|-magnitude cancellations, so
+    residuals below ~|dt|*1e-13 are rounding noise, not non-convergence."""
+    return _NEWTON_TOL + 1e-13 * abs(dt)
 
 
 def _kepler_f(chi: float, r0: float, vr0: float, alpha: float,
@@ -92,6 +99,7 @@ def propagate(r0x: float, r0y: float, v0x: float, v0y: float,
     sqrt_mu = math.sqrt(mu)
 
     chi = _initial_chi(r0x, r0y, v0x, v0y, r0, rv, alpha, mu, dt)
+    tol = _kepler_tol(dt)
 
     converged = False
     for _ in range(_NEWTON_MAX):
@@ -101,7 +109,7 @@ def propagate(r0x: float, r0y: float, v0x: float, v0y: float,
         f_val = ((r0 * vr0 / sqrt_mu) * chi * chi * c
                  + (1.0 - alpha * r0) * chi * chi * chi * s
                  + r0 * chi - sqrt_mu * dt)
-        if abs(f_val) / sqrt_mu < _NEWTON_TOL:
+        if abs(f_val) / sqrt_mu < tol:
             converged = True
             break
         fp = ((r0 * vr0 / sqrt_mu) * chi * (1.0 - z * s)
@@ -121,7 +129,7 @@ def propagate(r0x: float, r0y: float, v0x: float, v0y: float,
             step *= 2.0
             lo -= step
             hi += step
-        chi = bisect(f, lo, hi, tol=_NEWTON_TOL * sqrt_mu)
+        chi = bisect(f, lo, hi, tol=tol * sqrt_mu)
 
     z = alpha * chi * chi
     c = stumpff_c(z)
@@ -182,6 +190,7 @@ def propagate_batch(r0: np.ndarray, v0: np.ndarray, dt: np.ndarray | float,
     b_coef = 1.0 - alpha * r0n
     sqrt_mu_dt = sqrt_mu * dt
 
+    tol = _NEWTON_TOL + 1e-13 * np.abs(dt)
     active = dt != 0.0
     for _ in range(60):
         z = alpha * chi * chi
@@ -189,7 +198,7 @@ def propagate_batch(r0: np.ndarray, v0: np.ndarray, dt: np.ndarray | float,
         s = stumpff_s_np(z)
         chi2 = chi * chi
         f_val = a_coef * chi2 * c + b_coef * chi2 * chi * s + r0n * chi - sqrt_mu_dt
-        conv = np.abs(f_val) < _NEWTON_TOL * sqrt_mu
+        conv = np.abs(f_val) < tol * sqrt_mu
         active = active & ~conv
         if not np.any(active):
             break
@@ -220,7 +229,7 @@ def propagate_batch(r0: np.ndarray, v0: np.ndarray, dt: np.ndarray | float,
     f_chk = ((r0n * vr0 / sqrt_mu) * chi * chi * c
              + (1.0 - alpha * r0n) * chi ** 3 * s
              + r0n * chi - sqrt_mu * dt)
-    bad = (np.abs(f_chk) / sqrt_mu >= _NEWTON_TOL) & (dt != 0.0)
+    bad = (np.abs(f_chk) / sqrt_mu >= tol) & (dt != 0.0)
     bad |= ~np.isfinite(rx) | ~np.isfinite(ry) | ~np.isfinite(vx) | ~np.isfinite(vy)
     for i in np.nonzero(bad)[0]:
         rx[i], ry[i], vx[i], vy[i] = propagate(

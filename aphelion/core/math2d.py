@@ -12,6 +12,9 @@ from typing import Callable
 import numpy as np
 
 _STUMPFF_GUARD = 1e-6
+# cosh/sinh overflow past sqrt(-z) ~ 710; clamping keeps root-finder probes
+# finite with correct sign/monotonicity (values there are ~1e298 anyway).
+_STUMPFF_NEG_CLAMP = 4.9e5
 
 
 def stumpff_c(z: float) -> float:
@@ -19,7 +22,7 @@ def stumpff_c(z: float) -> float:
         return 0.5 - z / 24.0 + z * z / 720.0 - z * z * z / 40_320.0
     if z > 0.0:
         return (1.0 - math.cos(math.sqrt(z))) / z
-    nz = -z
+    nz = min(-z, _STUMPFF_NEG_CLAMP)
     return (math.cosh(math.sqrt(nz)) - 1.0) / nz
 
 
@@ -29,7 +32,7 @@ def stumpff_s(z: float) -> float:
     if z > 0.0:
         sz = math.sqrt(z)
         return (sz - math.sin(sz)) / (sz * z)
-    nz = -z
+    nz = min(-z, _STUMPFF_NEG_CLAMP)
     snz = math.sqrt(nz)
     return (math.sinh(snz) - snz) / (snz * nz)
 
@@ -43,7 +46,7 @@ def stumpff_c_np(z: np.ndarray) -> np.ndarray:
     out[small] = 0.5 - zs / 24.0 + zs * zs / 720.0 - zs * zs * zs / 40_320.0
     zp = z[pos]
     out[pos] = (1.0 - np.cos(np.sqrt(zp))) / zp
-    zn = -z[neg]
+    zn = np.minimum(-z[neg], _STUMPFF_NEG_CLAMP)
     out[neg] = (np.cosh(np.sqrt(zn)) - 1.0) / zn
     return out
 
@@ -58,7 +61,7 @@ def stumpff_s_np(z: np.ndarray) -> np.ndarray:
     zp = z[pos]
     szp = np.sqrt(zp)
     out[pos] = (szp - np.sin(szp)) / (szp * zp)
-    zn = -z[neg]
+    zn = np.minimum(-z[neg], _STUMPFF_NEG_CLAMP)
     snzn = np.sqrt(zn)
     out[neg] = (np.sinh(snzn) - snzn) / (snzn * zn)
     return out
