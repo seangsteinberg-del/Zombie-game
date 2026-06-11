@@ -59,6 +59,12 @@ class Module:
     f_condition: float = 1.0
     f_labor: float = 1.0
     yield_y: float = 1.0
+    # failure pre-rolls (13 §3.9): None = never fails; failure_t is the
+    # pre-sampled absolute failure instant — drawn once when the module
+    # enters RUNNING, consumed from the module's named RNG substream, so
+    # warp can neither dodge nor farm risk and reloads do not reroll fate
+    mtbf_s: float | None = None
+    failure_t: float | None = None
 
 
 @dataclass(slots=True)
@@ -79,10 +85,30 @@ class LedgerEvent:
 
 
 class LedgerNetwork:
-    def __init__(self) -> None:
+    def __init__(self, rng=None) -> None:
         self.buffers: dict[str, Buffer] = {}
         self.modules: list[Module] = []
         self.sources: list[Source] = []
+        self.rng = rng                  # RngRegistry; None = failures off
+
+    # -- failure pre-rolls (13 §3.9) -------------------------------------------
+
+    def roll_failures(self, t: float) -> None:
+        """Pre-sample time-to-failure for every RUNNING module with an MTBF
+        and no live roll. Deterministic per (campaign seed, module id)."""
+        if self.rng is None:
+            return
+        for m in self.modules:
+            if (m.mtbf_s is not None and m.state == RUNNING
+                    and m.failure_t is None):
+                draw = self.rng.stream("failures", m.module_id).exponential(m.mtbf_s)
+                m.failure_t = t + draw
+
+    def repair(self, m: Module, t: float) -> None:
+        """Repair completes: back to RUNNING with a fresh pre-roll."""
+        m.state = RUNNING
+        m.failure_t = None
+        self.roll_failures(t)
 
     # -- construction ---------------------------------------------------------
 
@@ -236,6 +262,7 @@ class LedgerNetwork:
         events: list[LedgerEvent] = []
         t = t0
         guard = 0
+        self.roll_failures(t0)
         while t < t1 - _EPS_T:
             guard += 1
             if guard > 10_000:
@@ -243,10 +270,15 @@ class LedgerNetwork:
                 break
             module_rates, rates, f_power = self.solve_rates()
 
-            # next boundary: buffer hit or deposit exhaustion
+            # next boundary: buffer hit, deposit exhaustion, or pre-rolled
+            # module failure (class-c scheduled boundary)
             t_next = t1
             subject = None
             kind = None
+            for m in self.modules:
+                if (m.failure_t is not None and m.state == RUNNING
+                        and t < m.failure_t < t_next):
+                    t_next, kind, subject = m.failure_t, "module_failed", m.module_id
             for res, buf in self.buffers.items():
                 r = rates.get(res, 0.0)
                 if r > _FIXED_POINT_TOL and buf.capacity - buf.level > 1e-9:
@@ -280,6 +312,11 @@ class LedgerNetwork:
 
     def _apply_boundary(self, kind: str, subject: str) -> None:
         """State-machine transitions at boundaries; rates re-solve next loop."""
+        if kind == "module_failed":
+            for m in self.modules:
+                if m.module_id == subject:
+                    m.state = FAILED
+                    m.failure_t = None
         if kind == "buffer_empty":
             for m in self.modules:
                 if m.state == RUNNING and subject in m.inputs:
