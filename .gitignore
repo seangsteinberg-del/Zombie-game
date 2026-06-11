@@ -11,3 +11,6 @@ saves/
 demo_*.png
 shot_*.png
 demo_*.png
+dist/
+build/
+shot_exe.png

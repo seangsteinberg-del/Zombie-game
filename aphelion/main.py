@@ -150,11 +150,17 @@ class BaseSite:
         from aphelion.sim.ledger.network import LedgerEvent
         new_events = []
         guard = 0
-        while self.last_t < t - 1e-6 and guard < 200:
+        while self.last_t < t - 1e-6 and guard < 600:
             guard += 1
             self.net.roll_failures(self.last_t)
             t_rep = min((r[0] for r in self.pending_repairs), default=float("inf"))
-            t_stop = min(t, t_rep)
+            # clamp at the next PRE-ROLLED failure too (13 §3.9: fates are
+            # knowable) — else a long span strands its repairs forever
+            t_fail = min((m.failure_t for m in self.net.modules
+                          if m.failure_t is not None
+                          and m.failure_t > self.last_t + 1e-6),
+                         default=float("inf"))
+            t_stop = min(t, t_rep, t_fail + 1.0)
             evs = self.net.advance(self.last_t, t_stop)
             new_events.extend(evs)
             for e in evs:
