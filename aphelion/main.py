@@ -264,18 +264,21 @@ def run(argv: list[str] | None = None) -> int:
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("--scene", type=str, default="auto",
                         choices=["auto", "menu", "flight", "builder", "base",
-                                 "research"])
+                                 "research", "ascent"])
     args = parser.parse_args(argv)
     if args.headless:
         os.environ["SDL_VIDEODRIVER"] = "dummy"
         os.environ["SDL_AUDIODRIVER"] = "dummy"
 
+    import numpy as np
     import pygame
     from aphelion.render.body_art import body_sprite, marker_dot, sun_sprite
     from aphelion.render.draw_conics import draw_conic
     from aphelion.render.postfx import Bloom, Nebula, soi_ring, vignette
     from aphelion.render.vessel_art import (
         app_icon, craft_icon, part_thumb, vessel_sprite)
+    from aphelion.sim.environment.atmosphere import density as atmo_density
+    from aphelion.sim.flight.ascent_live import LiveAscent
     from aphelion.ui import theme
     from aphelion.ui.audio import AudioCues
     from aphelion.ui.effects import Particles, Starfield
@@ -395,6 +398,7 @@ def run(argv: list[str] | None = None) -> int:
     elif want == "base":
         bases.append(BaseSite("Peary Base", 0.0, campaign_rng))
         base_screen = True
+    boot_ascent = want == "ascent"
 
     menu_cursor = 0
     menu_rects: list = []
@@ -404,6 +408,44 @@ def run(argv: list[str] | None = None) -> int:
     body_click_pts: list = []
     burn_glow = 0.0
 
+    # ascent scene state (KSP-style flown launch)
+    live: LiveAscent | None = None
+    live_stack: list[list[str]] = []
+    launch_cost = 0.0
+    ascent_warp = 1.0
+    ascent_acc = 0.0
+    rot_cache: dict = {}
+    # cached sky gradient, alpha-faded by local air density during ascent
+    sky_grad = pygame.Surface(size)
+    _g = np.linspace(0.0, 1.0, size[1])[:, None]
+    _sky = ((1.0 - _g) * np.array([88.0, 146.0, 212.0])
+            + _g * np.array([148.0, 192.0, 238.0]))
+    pygame.surfarray.blit_array(sky_grad,
+                                np.repeat(_sky[None, :, :], size[0],
+                                          axis=0).astype("uint8"))
+    if boot_ascent:                      # --scene ascent: QA flight
+        from aphelion.sim.vessels.vessel import Vessel
+        _rows, _plan = [], []
+        for _stage in (["core:engine_m733", "core:engine_m733",
+                        "core:tank_ml_xl"],
+                       ["core:engine_mv815", "core:tank_ml_m",
+                        "core:payload_2t"]):
+            _idxs = []
+            for _pid in _stage:
+                _idxs.append(len(_rows))
+                _rows.append(Vessel.fueled_row(db, _pid))
+            _plan.append(_idxs)
+        live = LiveAscent.from_pad(
+            Vessel(db, _rows, stage_plan=_plan, cd_a_m2=3.2), "core:earth",
+            tree.body("core:earth").mu, tree.body("core:earth").radius,
+            86_164.1)
+        live_stack = [["core:engine_m733", "core:engine_m733",
+                       "core:tank_ml_xl"],
+                      ["core:engine_mv815", "core:tank_ml_m",
+                       "core:payload_2t"]]
+        live.ignite()
+        scene = "ascent"
+
     frame_count = 0
     running = True
     while running:
@@ -411,6 +453,8 @@ def run(argv: list[str] | None = None) -> int:
         t = clock.t
         start_new = False
         load_save = False
+        ascent_done = False
+        ascent_abort = False
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -459,6 +503,39 @@ def run(argv: list[str] | None = None) -> int:
                                 load_save = True
                             else:
                                 running = False
+            elif scene == "ascent":
+                if event.type == pygame.KEYDOWN and live is not None:
+                    if event.key == pygame.K_SPACE:
+                        if not live.ignited:
+                            live.ignite()
+                            audio.play("burn")
+                        elif live.stage():
+                            audio.play("blip")
+                    elif event.key == pygame.K_z:
+                        live.throttle_cmd = 1.0
+                    elif event.key == pygame.K_x:
+                        live.throttle_cmd = 0.0
+                    elif event.key == pygame.K_p:
+                        live.prog = not live.prog
+                        if not live.prog:
+                            live.pitch_manual_deg = live.gamma_deg
+                    elif event.key == pygame.K_c:
+                        if live.arm_circularize():
+                            audio.play("blip")
+                    elif event.key in (pygame.K_LEFT, pygame.K_RIGHT,
+                                       pygame.K_a, pygame.K_d):
+                        if live.prog:
+                            live.prog = False
+                            live.pitch_manual_deg = live.gamma_deg
+                    elif event.key == pygame.K_PERIOD:
+                        ascent_warp = min(ascent_warp * 2.0, 64.0)
+                    elif event.key == pygame.K_COMMA:
+                        ascent_warp = max(ascent_warp / 2.0, 1.0)
+                    elif (event.key == pygame.K_RETURN
+                          and live.outcome is not None):
+                        ascent_done = True
+                    elif event.key == pygame.K_ESCAPE:
+                        ascent_abort = True
             elif event.type == pygame.KEYDOWN and pause_open:
                 if event.key == pygame.K_ESCAPE:
                     pause_open = False
@@ -523,30 +600,19 @@ def run(argv: list[str] | None = None) -> int:
                             builder.message = f"insufficient funds (${cost/1e6:,.0f}M)"
                             audio.play("alarm")
                         else:
-                            from aphelion.sim.flight.ascent import AscentParams, fly_ascent
-                            res = fly_ascent(vessel, "core:earth",
-                                             tree.body("core:earth").mu,
-                                             tree.body("core:earth").radius,
-                                             86_164.1, AscentParams())
-                            if res.reached_orbit:
-                                budget = sum(s["dv_vac"] for s in vessel.stage_stats())
-                                mu_e2 = tree.body("core:earth").mu
-                                r_orb = tree.body("core:earth").radius + res.periapsis_m
-                                craft = Craft(tree, "core:earth",
-                                              state_to_elements(
-                                                  r_orb, 0.0, 0.0,
-                                                  tr.circular_speed(mu_e2, r_orb),
-                                                  t, mu_e2),
-                                              dv_budget=budget,
-                                              name=f"Vessel-{len(program.history)}")
-                                builder.message = (f"ORBIT! {res.dv_integrated:,.0f} m/s spent; "
-                                                   f"{budget:,.0f} m/s on-orbit budget")
-                                toast, toast_until = builder.message, t + 10
-                                audio.play("paid")
-                                builder_open = False
-                            else:
-                                builder.message = "LOSS OF VEHICLE on ascent (see design TWR)"
-                                audio.play("alarm")
+                            # to the pad — the ascent is FLOWN (KSP-style),
+                            # not adjudicated
+                            live = LiveAscent.from_pad(
+                                vessel, "core:earth",
+                                tree.body("core:earth").mu,
+                                tree.body("core:earth").radius, 86_164.1)
+                            live_stack = [list(s) for s in builder.stack if s]
+                            launch_cost = cost
+                            ascent_warp, ascent_acc = 1.0, 0.0
+                            node = None
+                            builder_open = False
+                            scene = "ascent"
+                            audio.play("blip")
             elif event.type == pygame.KEYDOWN:
                 shift = event.mod & pygame.KMOD_SHIFT
                 step = 100.0 if shift else 10.0
@@ -689,6 +755,184 @@ def run(argv: list[str] | None = None) -> int:
                 toast, toast_until = "QUICKSAVE LOADED", clock.t + 5.0
             else:
                 toast, toast_until = "no quicksave found", t + 4.0
+
+        if ascent_abort and live is not None:
+            program.earn(t, launch_cost, "launch revert")
+            live = None
+            scene = "flight"
+            builder_open = True
+            builder.message = "launch reverted — funds refunded"
+            toast, toast_until = "LAUNCH REVERTED", t + 5.0
+        if ascent_done and live is not None:
+            if live.outcome == "orbit":
+                clock.advance_analytic(t + live.t)
+                t = clock.t
+                mu_e = tree.body("core:earth").mu
+                craft = Craft(tree, "core:earth",
+                              state_to_elements(live.x, live.y, live.vx,
+                                                live.vy, t, mu_e),
+                              dv_budget=live.dv_remaining,
+                              name=f"Vessel-{len(program.history)}")
+                toast = (f"ORBIT {live.peri_km:,.0f} km — "
+                         f"{live.dv_remaining:,.0f} m/s on-orbit budget")
+                toast_until = t + 10.0
+                focus_idx = 0
+                audio.play("paid")
+            else:
+                toast = "LOSS OF VEHICLE — funds spent, vessel destroyed"
+                toast_until = t + 8.0
+                audio.play("alarm")
+            live = None
+            scene = "flight"
+
+        if scene == "ascent" and live is not None:
+            # continuous stick: SHIFT/CTRL throttle, arrows pitch
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]:
+                live.throttle_cmd = min(1.0, live.throttle_cmd
+                                        + 0.8 * real_dt)
+            if keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL]:
+                live.throttle_cmd = max(0.0, live.throttle_cmd
+                                        - 0.8 * real_dt)
+            if not live.prog:
+                rate = 28.0 * real_dt
+                if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+                    live.pitch_manual_deg = min(90.0,
+                                                live.pitch_manual_deg + rate)
+                if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+                    live.pitch_manual_deg = max(-15.0,
+                                                live.pitch_manual_deg - rate)
+            if live.q > 1.0 and ascent_warp > 4.0:
+                ascent_warp = 4.0          # physics warp only out of atmo
+            if live.ignited and live.outcome is None:
+                ascent_acc += real_dt * ascent_warp
+                n_steps = min(int(ascent_acc / 0.02), 6000)
+                ascent_acc -= n_steps * 0.02
+                for _ in range(n_steps):
+                    live.step(0.02)
+                    if live.outcome is not None:
+                        audio.play("paid" if live.outcome == "orbit"
+                                   else "alarm")
+                        break
+
+            # ---- draw: sky fades to space with air density ----
+            screen.fill((6, 8, 14))
+            nebula.draw(screen, None)
+            rho_n = min(1.0, atmo_density("core:earth",
+                                          max(live.h, 0.0)) / 1.225)
+            sky_a = int(255.0 * rho_n ** 0.35)
+            if sky_a > 2:
+                sky_grad.set_alpha(sky_a)
+                screen.blit(sky_grad, (0, 0))
+
+            px_per_m = max(0.0022, 0.26 * 1500.0 / (1500.0 + live.h))
+            rocket_y = int(size[1] * 0.62)
+            ground_y = rocket_y + int(max(live.h, 0.0) * px_per_m)
+            theta = math.atan2(live.y, live.x)
+            pad_ang = (theta - live.omega * live.t + math.pi) % (
+                2.0 * math.pi) - math.pi
+            downrange = pad_ang * live.radius
+            pad_x = size[0] // 2 - int(downrange * px_per_m)
+            if ground_y < size[1] + 600:
+                pygame.draw.rect(screen, (28, 46, 34),
+                                 (0, min(ground_y, size[1]), size[0],
+                                  max(0, size[1] - ground_y) + 4))
+                if -300 < pad_x < size[0] + 300:
+                    pygame.draw.rect(screen, (70, 74, 82),
+                                     (pad_x - 52, ground_y - 6, 104, 8))
+                    pygame.draw.rect(screen, (96, 60, 48),
+                                     (pad_x + 58, ground_y - 70, 8, 66))
+
+            stack_now = live_stack[live.stages_spent:]
+            tilt = -(90.0 - live.gamma_deg)
+            rs = max(0.12, 1500.0 / (1500.0 + 1.2 * live.h))
+            rkey = (live.stages_spent, int(tilt // 4), round(rs, 2))
+            if rkey not in rot_cache:
+                if len(rot_cache) > 160:
+                    rot_cache.clear()
+                base = (vessel_sprite(db, stack_now) if stack_now
+                        else craft_icon(math.radians(live.gamma_deg), 16))
+                rot_cache[rkey] = pygame.transform.rotozoom(base, tilt, rs)
+            rspr = rot_cache[rkey]
+            rx = size[0] // 2 - rspr.get_width() // 2
+            ry = rocket_y - rspr.get_height() // 2 - int(
+                12 * rs) if live.h > 1.0 else ground_y - rspr.get_height()
+            screen.blit(rspr, (rx, ry))
+            if live.throttle_eff > 0.0:
+                ang = math.radians(live.gamma_deg)
+                ex = -math.cos(ang)
+                ey = math.sin(ang)              # exhaust dir, screen y-down
+                ccx = size[0] // 2
+                ccy = ry + rspr.get_height() // 2
+                hh = rspr.get_height() / 2.0 - 4.0
+                particles.emit_burn(ccx + ex * hh, ccy + ey * hh, ex, ey,
+                                    n=3)
+            particles.update_draw(screen, real_dt)
+
+            # ---- HUD ----
+            screen.blit(theme.panel(258, 308, "ASCENT"), (16, 16))
+            hx, hy = 32, 52
+            q_col = (theme.COLORS["danger"] if live.q > live.params.q_limit
+                     else theme.COLORS["text"])
+            rows = [
+                (f"ALT   {live.h/1e3:10,.2f} km", theme.COLORS["text"]),
+                (f"VEL   {live.v_air:10,.0f} m/s", theme.COLORS["text"]),
+                (f"APO   {live.apo_km:10,.0f} km", theme.COLORS["accent"]),
+                (f"PERI  {live.peri_km:10,.0f} km", theme.COLORS["accent"]),
+                (f"Q     {live.q/1e3:10,.1f} kPa", q_col),
+                (f"TWR   {live.twr:10,.2f}", theme.COLORS["text"]),
+                (f"STAGE {max(len(live.vessel.stage_plan), 0):>6d} left",
+                 theme.COLORS["text"]),
+                (f"dv    {live.dv_remaining:10,.0f} m/s",
+                 theme.COLORS["good"]),
+                (f"MODE  {'PROG' if live.prog else 'MANUAL':>10s}",
+                 theme.COLORS["gold"] if live.prog
+                 else theme.COLORS["warn"]),
+                (f"WARP  {ascent_warp:8.0f}x", theme.COLORS["text_dim"]),
+            ]
+            for txt, col in rows:
+                theme.draw_text(screen, hx, hy, txt, color=col, font="small")
+                hy += 21
+            theme.draw_text(screen, hx, hy + 2, "THROTTLE",
+                            color=theme.COLORS["text_dim"], font="small")
+            screen.blit(theme.bar(150, 10, live.throttle_cmd,
+                                  theme.COLORS["warn"]), (hx + 78, hy + 4))
+
+            for i, ev_txt in enumerate(live.events[-3:]):
+                theme.draw_text(screen, 16, size[1] - 96 + i * 20, ev_txt,
+                                color=theme.COLORS["accent"], font="small")
+            if not live.ignited:
+                msg = font_med.render("SPACE — IGNITION", True,
+                                      theme.COLORS["gold"])
+                screen.blit(msg, (size[0] // 2 - msg.get_width() // 2, 140))
+            if live.outcome is not None:
+                good = live.outcome == "orbit"
+                ttl = font_big.render(
+                    "ORBIT ACHIEVED" if good else "LOSS OF VEHICLE", True,
+                    theme.COLORS["good"] if good else theme.COLORS["danger"])
+                screen.blit(ttl, (size[0] // 2 - ttl.get_width() // 2, 200))
+                rep = (f"spent {live.dv_int:,.0f} m/s — gravity "
+                       f"{live.dv_grav:,.0f}, drag {live.dv_drag:,.0f}, "
+                       f"steering {live.dv_steer:,.0f}")
+                theme.draw_text(screen, size[0] // 2 - 230, 260, rep,
+                                color=theme.COLORS["text"])
+                theme.draw_text(screen, size[0] // 2 - 110, 286,
+                                "ENTER to continue",
+                                color=theme.COLORS["gold"])
+            screen.blit(theme.panel(size[0], 26), (0, size[1] - 26))
+            theme.draw_text(
+                screen, 10, size[1] - 21,
+                "SPACE ignite/stage   SHIFT/CTRL throttle   Z/X max/cut   "
+                "arrows pitch (manual)   P autopilot   C circularize   "
+                "./, warp   ESC revert",
+                color=theme.COLORS["text_dim"], font="small", shadow=False)
+            bloom.apply(screen)
+            screen.blit(vig, (0, 0))
+            pygame.display.flip()
+            frame_count += 1
+            if args.frames and frame_count >= args.frames:
+                running = False
+            continue
 
         if scene == "menu":
             screen.fill((6, 8, 14))
