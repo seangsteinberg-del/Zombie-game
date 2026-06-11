@@ -290,10 +290,20 @@ def run(argv: list[str] | None = None) -> int:
                            payout=150_000_000.0, deadline_s=2 * 365 * 86_400.0))
     program.offer(Contract("c_lox", "Bank 100 t of lunar LOX",
                            payout=200_000_000.0, deadline_s=4 * 365 * 86_400.0))
+    program.offer(Contract("c_mars", "Reach the Mars SOI",
+                           payout=300_000_000.0, deadline_s=6 * 365 * 86_400.0))
+    program.offer(Contract("c_venus", "Reach the Venus SOI",
+                           payout=250_000_000.0, deadline_s=6 * 365 * 86_400.0))
     from aphelion.core.rng import RngRegistry
     campaign_rng = RngRegistry(20490101)
     bases: list[BaseSite] = []
     base_screen = False
+
+    # crew (08): two named crew aboard; dose accrues from the REAL location
+    from aphelion.sim.habitat.dose import AMBIENT_MSV_DAY, CrewDose
+    crew = {"V. Ainsworth": CrewDose(), "J. Okafor": CrewDose()}
+    crew_warned = False
+    last_dose_t = 0.0
     research = ResearchState()
     visited = {"core:earth"}
 
@@ -503,6 +513,30 @@ def run(argv: list[str] | None = None) -> int:
                 audio.play("paid")
         program.expire_overdue(t)
 
+        # crew dose accrual (08): real location rates; 20 g/cm2 hull water-
+        # equivalent shielding assumed for the crewed craft
+        if t - last_dose_t > 3_600.0:
+            days = (t - last_dose_t) / 86_400.0
+            loc = craft.frame_id if craft.frame_id in AMBIENT_MSV_DAY else "deep_space"
+            for member in crew.values():
+                member.accrue(loc, days, areal_g_cm2=20.0, material="water")
+            last_dose_t = t
+            worst = max(crew.values(), key=lambda c: c.career_fraction)
+            if worst.career_fraction > 0.8 and not crew_warned:
+                crew_warned = True
+                toast = (f"CREW DOSE WARNING: {worst.career_fraction:.0%} of "
+                         f"career limit — get them home")
+                toast_until = t + 10
+                audio.play("alarm")
+
+        # contract sweep for the planetary arcs
+        if craft.frame_id == "core:mars" and program.complete(t, "c_mars"):
+            toast, toast_until = "MARS SOI — CONTRACT PAID +$300M", t + 10
+            audio.play("paid")
+        if craft.frame_id == "core:venus" and program.complete(t, "c_venus"):
+            toast, toast_until = "VENUS SOI — CONTRACT PAID +$250M", t + 10
+            audio.play("paid")
+
         # bases tick on the ledger (warp-exact); LOX contract watches stores
         for site in bases:
             for ev in site.advance(t):
@@ -628,9 +662,11 @@ def run(argv: list[str] | None = None) -> int:
         screen.blit(font.render(hud2, True, _CRAFT_COLOR), (10, 28))
         open_contracts = [c for c in program.contracts
                           if c.completed_t is None and not c.failed]
+        worst_dose = max(crew.values(), key=lambda c: c.career_fraction)
         hud3 = (f"PROGRAM  ${program.funds/1e6:,.0f}M   science {research.science:,.0f}"
-                f"   contracts open: "
-                + (" | ".join(c.description for c in open_contracts) or "none"))
+                f"   crew dose {worst_dose.career_fraction:.0%}   contracts: "
+                + (" | ".join(c.description[:28] for c in open_contracts[:3])
+                   or "none"))
         screen.blit(font.render(hud3, True, (255, 215, 130)), (10, 48))
         if t < toast_until and toast:
             screen.blit(font.render(toast, True, (255, 230, 140)), (10, 68))
