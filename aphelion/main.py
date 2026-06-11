@@ -615,9 +615,10 @@ def run(argv: list[str] | None = None) -> int:
                                      vsync=0 if args.headless else 1)
     pygame.display.set_caption("APHELION")
     pygame_clock = pygame.time.Clock()
-    font = pygame.font.SysFont("consolas", 14)
-    font_med = pygame.font.SysFont("consolas", 18, bold=True)
-    font_big = pygame.font.SysFont("consolas", 44, bold=True)
+    _thf = theme.init_fonts()
+    font = _thf["ui_small"]             # single labels / annotations
+    font_med = _thf["ui_title"]         # banners, menu rows
+    font_big = pygame.font.SysFont(theme._UI_FACE, 44, bold=True)
     nebula = Nebula(size)
     bloom = Bloom(size)
     vig = vignette(size)
@@ -2500,13 +2501,12 @@ def run(argv: list[str] | None = None) -> int:
                 theme.draw_text(screen, size[0] // 2 - 110, 286,
                                 "ENTER to continue",
                                 color=theme.COLORS["gold"])
-            screen.blit(theme.panel(size[0], 26), (0, size[1] - 26))
-            theme.draw_text(
-                screen, 10, size[1] - 21,
+            screen.blit(theme.footer(
+                size[0],
                 "SPACE ignite/stage   SHIFT/CTRL throttle   X/Z max/cut   "
                 "arrows pitch (manual)   P autopilot   C circularize   "
-                "./, warp   ESC revert (T+20s)",
-                color=theme.COLORS["text_dim"], font="small", shadow=False)
+                "./, warp   ESC revert (T+20s)"),
+                (0, size[1] - theme.FOOTER_H))
             screen.blit(vig, (0, 0))
             apply_flash()
             apply_fade()
@@ -2672,12 +2672,11 @@ def run(argv: list[str] | None = None) -> int:
                 theme.draw_text(screen, size[0] // 2 - 110, 260,
                                 "ENTER to continue",
                                 color=theme.COLORS["gold"])
-            screen.blit(theme.panel(size[0], 26), (0, size[1] - 26))
-            theme.draw_text(
-                screen, 10, size[1] - 21,
+            screen.blit(theme.footer(
+                size[0],
                 "SHIFT/CTRL throttle   X/Z max/cut   A autoland (pilot)   "
-                "SPACE stage   ./, warp   keep contact under 3 m/s",
-                color=theme.COLORS["text_dim"], font="small", shadow=False)
+                "SPACE stage   ./, warp   ⚠ keep contact under 3 m/s"),
+                (0, size[1] - theme.FOOTER_H))
             screen.blit(vig, (0, 0))
             apply_flash()
             apply_fade()
@@ -2778,13 +2777,11 @@ def run(argv: list[str] | None = None) -> int:
                 theme.draw_text(screen, size[0] // 2 - 110, 210,
                                 "ENTER — hard dock",
                                 color=theme.COLORS["gold"])
-            screen.blit(theme.panel(size[0], 26), (0, size[1] - 26))
-            theme.draw_text(
-                screen, 10, size[1] - 21,
+            screen.blit(theme.footer(
+                size[0],
                 "arrows RCS pulses (SHIFT = 2 m/s)   A approach autopilot "
-                "(pilot)   capture: inside the circle under 2 m/s   "
-                "ESC abort", color=theme.COLORS["text_dim"], font="small",
-                shadow=False)
+                "(pilot)   ◎ capture: inside the circle under 2 m/s   "
+                "ESC abort"), (0, size[1] - theme.FOOTER_H))
             screen.blit(vig, (0, 0))
             apply_fade()
             pygame.display.flip()
@@ -3499,13 +3496,12 @@ def run(argv: list[str] | None = None) -> int:
                 theme.draw_text(screen, nx0 + 12, ny0 + 30 + li * 20, txt2,
                                 color=col2, font="small")
 
-        screen.blit(theme.panel(size[0], 26), (0, size[1] - 26))
-        theme.draw_text(
-            screen, 10, size[1] - 21,
-            "X/Z A/D burn  B build  N node  P planner  O contracts  V ship  "
-            "E dock  U undock  T xfeed  G surface  F2 colony  R research  "
-            "K crew  SPACE pause  ./, warp  F1 help  ESC menu",
-            color=theme.COLORS["text_dim"], font="small", shadow=False)
+        screen.blit(theme.footer(
+            size[0],
+            "X/Z burn   B build   N node   P planner   O contracts   "
+            "V ship   E dock   G surface   F2 colony   R research   "
+            "K crew   SPACE pause   ./, warp   F1 help   ESC menu"),
+            (0, size[1] - theme.FOOTER_H))
 
         # one shared dimmer under any content overlay (kills HUD bleed-through)
         if (base_screen and bases) or research_open or crew_open or (
@@ -3851,12 +3847,11 @@ def run(argv: list[str] | None = None) -> int:
             theme.draw_text(screen, cx, cy + rows_fit_b * 24 + 6,
                             f"needs: {need_line}",
                             color=theme.COLORS["text_dim"], font="small")
-            screen.blit(theme.panel(size[0], 26), (0, size[1] - 26))
-            theme.draw_text(
-                screen, 14, size[1] - 21,
-                "◄► select module  ENTER toggle/build  TAB focus  "
-                "UP/DOWN catalog  L log  N next base  F2/ESC close",
-                color=theme.COLORS["text_dim"], font="small", shadow=False)
+            screen.blit(theme.footer(
+                size[0],
+                "◄► select module   ENTER toggle/build   TAB focus   "
+                "UP/DOWN catalog   L log   N next base   F2/ESC close"),
+                (0, size[1] - theme.FOOTER_H))
 
         if builder_open:
             dimmer = pygame.Surface(size, pygame.SRCALPHA)
@@ -4040,12 +4035,11 @@ def run(argv: list[str] | None = None) -> int:
                                     font="small")
             theme.draw_text(screen, 24, size[1] - 52, builder.message,
                             color=theme.COLORS["accent"])
-            theme.draw_text(
-                screen, 24, size[1] - 30,
-                "TAB stack  ◄► filter  ENTER add  BKSP del  [/] reorder  "
-                "S stage  ⇧S split  1-6 blueprints (CTRL saves)  L launch  "
-                "ESC close", color=theme.COLORS["text_dim"],
-                font="small", shadow=False)
+            screen.blit(theme.footer(
+                size[0],
+                "TAB stack   ◄► filter   ENTER add   BKSP del   "
+                "[/] reorder   S stage   ⇧S split   1-6 blueprints   "
+                "L launch   ESC close"), (0, size[1] - theme.FOOTER_H))
 
             # crew assignment (L with seats aboard): pick who flies
             if builder.assign_open:

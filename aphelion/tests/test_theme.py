@@ -36,7 +36,8 @@ def test_palette_exact():
 
 def test_fonts_lazy_and_cached():
     fonts = theme.init_fonts()
-    assert set(fonts) == {"small", "body", "title", "big"}
+    assert {"small", "body", "title", "big", "ui_small", "ui",
+            "ui_title", "ui_big", "ui_huge"} <= set(fonts)
     again = theme.init_fonts()
     assert again is fonts
     assert all(again[k] is fonts[k] for k in fonts)

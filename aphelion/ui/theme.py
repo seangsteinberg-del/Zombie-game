@@ -58,22 +58,60 @@ def _seed(s: str) -> int:
     return int.from_bytes(hashlib.blake2b(s.encode(), digest_size=8).digest(), "little")
 
 
+# UI text wears a modern grotesk (Bahnschrift is a DIN; ships with Win10+),
+# while data columns stay monospace on purpose — padded f-string rows align
+# only in a fixed-pitch face. SysFont takes a fallback chain.
+_UI_FACE = "bahnschrift,segoeuisemibold,segoeui,notosans,dejavusans"
+_MONO_FACE = "consolas,cascadiamono,dejavusansmono"
+
+
 def init_fonts() -> dict[str, pygame.font.Font]:
-    """Lazy, cached monospace font set; safe to call every frame."""
+    """Lazy, cached font set; safe to call every frame. ``small``/``body``
+    are monospace (column data); the ``ui*`` faces are proportional and
+    carry every header, menu, banner, footer and label."""
     if not _FONTS:
         pygame.font.init()
-        _FONTS["small"] = pygame.font.SysFont("consolas", 13)
-        _FONTS["body"] = pygame.font.SysFont("consolas", 14)
-        _FONTS["title"] = pygame.font.SysFont("consolas", 17, bold=True)
-        _FONTS["big"] = pygame.font.SysFont("consolas", 22, bold=True)
+        _FONTS["small"] = pygame.font.SysFont(_MONO_FACE, 13)
+        _FONTS["body"] = pygame.font.SysFont(_MONO_FACE, 14)
+        _FONTS["title"] = pygame.font.SysFont(_UI_FACE, 17, bold=True)
+        _FONTS["big"] = pygame.font.SysFont(_UI_FACE, 22, bold=True)
+        _FONTS["ui_small"] = pygame.font.SysFont(_UI_FACE, 14)
+        _FONTS["ui"] = pygame.font.SysFont(_UI_FACE, 16)
+        _FONTS["ui_title"] = pygame.font.SysFont(_UI_FACE, 20, bold=True)
+        _FONTS["ui_big"] = pygame.font.SysFont(_UI_FACE, 30, bold=True)
+        _FONTS["ui_huge"] = pygame.font.SysFont(_UI_FACE, 48, bold=True)
     return _FONTS
+
+
+_TRACKED_CACHE: dict[tuple, pygame.Surface] = {}
+
+
+def tracked(text: str, font: str = "ui_title", color: tuple = TEXT,
+            tracking: int = 2) -> pygame.Surface:
+    """Letterspaced text (modern display-caps look), cached per key."""
+    key = (text, font, tuple(color[:3]), tracking)
+    cached = _TRACKED_CACHE.get(key)
+    if cached is not None:
+        return cached
+    f = init_fonts()[font]
+    imgs = [f.render(ch, True, color[:3]) for ch in text]
+    w = sum(i.get_width() for i in imgs) + tracking * max(0, len(imgs) - 1)
+    h = max((i.get_height() for i in imgs), default=1)
+    surf = pygame.Surface((max(1, w), h), pygame.SRCALPHA)
+    x = 0
+    for i in imgs:
+        surf.blit(i, (x, 0))
+        x += i.get_width() + tracking
+    _TRACKED_CACHE[key] = surf
+    return surf
 
 
 # -- panel chrome -------------------------------------------------------------
 
 def panel(w: int, h: int, title: str | None = None) -> pygame.Surface:
-    """Sci-fi panel plate: translucent rounded body, bright top strip,
-    clipped corner notches, optional gold small-caps header band."""
+    """Glass panel plate: vertical-gradient translucent body, hairline
+    edge with a soft inner top sheen, clipped TL/BR corner notches, and an
+    optional letterspaced header band with an accent underline."""
     key = (w, h, title)
     cached = _PANEL_CACHE.get(key)
     if cached is not None:
@@ -81,23 +119,49 @@ def panel(w: int, h: int, title: str | None = None) -> pygame.Surface:
     surf = pygame.Surface((w, h), pygame.SRCALPHA)
     body = pygame.Rect(0, 0, w, h)
     notch = max(6, min(12, w // 6, h // 6))
-    pygame.draw.rect(surf, PANEL_FILL, body, border_radius=6)
+    # body: subtle vertical gradient, lighter glass at the top
+    top = (16, 24, 42, 232)
+    bot = (7, 11, 20, 222)
+    grad = pygame.Surface((1, max(2, h)), pygame.SRCALPHA)
+    for yy in range(h):
+        t = yy / max(1, h - 1)
+        grad.set_at((0, yy), tuple(int(top[i] + (bot[i] - top[i]) * t)
+                                   for i in range(4)))
+    grad = pygame.transform.scale(grad, (w, h))
+    mask = pygame.Surface((w, h), pygame.SRCALPHA)
+    pygame.draw.rect(mask, (255, 255, 255, 255), body, border_radius=7)
+    grad.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+    surf.blit(grad, (0, 0))
     if title is not None:
-        band_h = 24
-        pygame.draw.rect(surf, (20, 30, 48, 235), pygame.Rect(1, 1, w - 2, band_h),
-                         border_top_left_radius=6, border_top_right_radius=6)
-        pygame.draw.line(surf, PANEL_EDGE, (1, band_h), (w - 2, band_h))
-        img = init_fonts()["small"].render(title.upper(), True, GOLD)
-        surf.blit(img, (notch + 4, 1 + (band_h - img.get_height()) // 2))
-    # brighter 2px top edge strip, inset past the notch and corner radius
-    pygame.draw.rect(surf, _mix(PANEL_EDGE, ACCENT, 0.35),
-                     pygame.Rect(notch + 1, 0, w - notch - 8, 2))
-    pygame.draw.rect(surf, PANEL_EDGE, body, width=1, border_radius=6)
+        band_h = 26
+        band = pygame.Surface((w - 2, band_h), pygame.SRCALPHA)
+        for yy in range(band_h):
+            t = yy / max(1, band_h - 1)
+            band.fill((int(24 + 8 * (1 - t)), int(36 + 10 * (1 - t)),
+                       int(58 + 14 * (1 - t)), 236),
+                      pygame.Rect(0, yy, w - 2, 1))
+        bmask = pygame.Surface((w - 2, band_h), pygame.SRCALPHA)
+        pygame.draw.rect(bmask, (255, 255, 255, 255),
+                         pygame.Rect(0, 0, w - 2, band_h),
+                         border_top_left_radius=7, border_top_right_radius=7)
+        band.blit(bmask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        surf.blit(band, (1, 1))
+        pygame.draw.line(surf, _mix(PANEL_EDGE, ACCENT, 0.18),
+                         (1, band_h), (w - 2, band_h))
+        img = tracked(title.upper(), "ui_small", GOLD, 2)
+        tx = notch + 6
+        surf.blit(img, (tx, 1 + (band_h - img.get_height()) // 2))
+        pygame.draw.line(surf, (*ACCENT, 140),
+                         (tx, band_h - 3), (tx + img.get_width(), band_h - 3))
+    # inner top sheen + hairline edge
+    pygame.draw.line(surf, (255, 255, 255, 26), (notch + 2, 1), (w - 9, 1))
+    pygame.draw.rect(surf, _mix(PANEL_EDGE, ACCENT, 0.12), body,
+                     width=1, border_radius=7)
     # clipped corner notches (TL / BR); pygame.draw writes alpha directly
     pygame.draw.polygon(surf, (0, 0, 0, 0), [(0, 0), (notch, 0), (0, notch)])
     pygame.draw.polygon(surf, (0, 0, 0, 0),
                         [(w, h), (w - notch - 1, h), (w, h - notch - 1)])
-    pygame.draw.line(surf, PANEL_EDGE, (notch, 0), (0, notch))
+    pygame.draw.line(surf, _mix(PANEL_EDGE, ACCENT, 0.30), (notch, 0), (0, notch))
     pygame.draw.line(surf, PANEL_EDGE, (w - 1 - notch, h - 1), (w - 1, h - 1 - notch))
     _PANEL_CACHE[key] = surf
     return surf
@@ -113,26 +177,34 @@ def bar(w: int, h: int, frac: float, color: tuple,
     if cached is not None:
         return cached
     surf = pygame.Surface((w, h), pygame.SRCALPHA)
-    pygame.draw.rect(surf, back[:3], pygame.Rect(1, 1, w - 2, h - 2))
-    # inset bevel: dark top, light bottom
-    pygame.draw.line(surf, _mix(back, (0, 0, 0), 0.35), (1, 1), (w - 2, 1))
-    pygame.draw.line(surf, _mix(back, (255, 255, 255), 0.18), (1, h - 2), (w - 2, h - 2))
+    rad = max(2, h // 2 - 1)
+    track = pygame.Rect(0, 0, w, h)
+    pygame.draw.rect(surf, (*_mix(back, (0, 0, 0), 0.45), 235), track,
+                     border_radius=rad)
+    pygame.draw.rect(surf, (*_mix(back, (255, 255, 255), 0.10), 255), track,
+                     width=1, border_radius=rad)
     fill_w = round((w - 2) * f)
-    if fill_w > 0:
-        for yy in range(1, h - 1):
-            t = (yy - 1) / max(1, h - 3)
-            shade = _mix(_mix(color, (255, 255, 255), 0.35 * (1.0 - t)),
-                         (0, 0, 0), 0.25 * t)
-            pygame.draw.line(surf, shade, (1, yy), (fill_w, yy))
-        pygame.draw.line(surf, _mix(color, (255, 255, 255), 0.75),
-                         (fill_w, 1), (fill_w, h - 2))
-    if fill_w < w - 2:                                  # diagonal hatch, empty part
-        surf.set_clip(pygame.Rect(1 + fill_w, 1, w - 2 - fill_w, h - 2))
-        hatch = _mix(back, (255, 255, 255), 0.12)
-        for x0 in range(1 + fill_w - h, w, 5):
-            pygame.draw.line(surf, hatch, (x0, h), (x0 + h, 0))
-        surf.set_clip(None)
-    pygame.draw.rect(surf, _mix(back, (0, 0, 0), 0.5), pygame.Rect(0, 0, w, h), width=1)
+    if fill_w > 2:
+        fill = pygame.Surface((fill_w, h - 2), pygame.SRCALPHA)
+        for yy in range(h - 2):                  # vertical sheen on the fill
+            t = yy / max(1, h - 3)
+            shade = _mix(_mix(color, (255, 255, 255), 0.38 * (1.0 - t)),
+                         (0, 0, 0), 0.22 * t)
+            fill.fill((*shade, 255), pygame.Rect(0, yy, fill_w, 1))
+        fmask = pygame.Surface((fill_w, h - 2), pygame.SRCALPHA)
+        pygame.draw.rect(fmask, (255, 255, 255, 255),
+                         pygame.Rect(0, 0, fill_w, h - 2),
+                         border_radius=max(1, rad - 1))
+        fill.blit(fmask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        surf.blit(fill, (1, 1))
+        # luminous cap at the leading edge
+        cap = _mix(color, (255, 255, 255), 0.8)
+        pygame.draw.rect(surf, (*cap, 230),
+                         pygame.Rect(max(1, fill_w - 1), 1, 2, h - 2),
+                         border_radius=1)
+        pygame.draw.rect(surf, (*color[:3], 60),
+                         pygame.Rect(max(0, fill_w - 4), 0, 8, h),
+                         border_radius=2)
     _BAR_CACHE[key] = surf
     return surf
 
@@ -143,7 +215,7 @@ def chip(text: str, color: tuple, font: pygame.font.Font | None = None) -> pygam
     cached = _CHIP_CACHE.get(key)
     if cached is not None:
         return cached
-    f = font if font is not None else init_fonts()["small"]
+    f = font if font is not None else init_fonts()["ui_small"]
     img = f.render(text, True, color[:3])
     w, h = img.get_width() + 12, img.get_height() + 4
     surf = pygame.Surface((w, h), pygame.SRCALPHA)
@@ -478,6 +550,69 @@ def row_glow(w: int, h: int, color: tuple = ACCENT) -> pygame.Surface:
     return surf
 
 
+# -- key-hint footer ----------------------------------------------------------
+
+_KEYCAP_CACHE: dict[str, pygame.Surface] = {}
+_FOOTER_CACHE: dict[tuple, pygame.Surface] = {}
+FOOTER_H = 30
+
+
+def keycap(label: str) -> pygame.Surface:
+    """Keyboard-key cap: rounded plate, hairline edge, accent label."""
+    cached = _KEYCAP_CACHE.get(label)
+    if cached is not None:
+        return cached
+    img = init_fonts()["ui_small"].render(label, True, _mix(ACCENT, TEXT, 0.35))
+    w, h = img.get_width() + 10, img.get_height() + 4
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    pygame.draw.rect(surf, (30, 42, 64, 235), pygame.Rect(0, 0, w, h),
+                     border_radius=4)
+    pygame.draw.rect(surf, (82, 104, 138), pygame.Rect(0, 0, w, h),
+                     width=1, border_radius=4)
+    pygame.draw.line(surf, (255, 255, 255, 30), (3, 1), (w - 4, 1))
+    surf.blit(img, (5, 2))
+    _KEYCAP_CACHE[label] = surf
+    return surf
+
+
+def footer(w: int, hints: str) -> pygame.Surface:
+    """Bottom hint strip: gradient glass band of keycap + action pairs.
+    ``hints`` is the legacy text format — groups separated by runs of 3+
+    spaces, each group "KEY action words"."""
+    key = (w, hints)
+    cached = _FOOTER_CACHE.get(key)
+    if cached is not None:
+        return cached
+    h = FOOTER_H
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    for yy in range(h):
+        t = yy / max(1, h - 1)
+        surf.fill((int(10 + 6 * t), int(15 + 8 * t), int(26 + 12 * t),
+                   int(205 + 40 * t)), pygame.Rect(0, yy, w, 1))
+    pygame.draw.line(surf, (*_mix(PANEL_EDGE, ACCENT, 0.20), 180),
+                     (0, 0), (w, 0))
+    f = init_fonts()["ui_small"]
+    x = 12
+    groups = [g.strip() for g in hints.split("   ") if g.strip()]
+    for g in groups:
+        parts = g.split(" ", 1)
+        cap = keycap(parts[0])
+        cy = (h - cap.get_height()) // 2
+        if x + cap.get_width() > w - 8:
+            break
+        surf.blit(cap, (x, cy))
+        x += cap.get_width() + 5
+        if len(parts) > 1:
+            img = f.render(parts[1], True, TEXT_DIM)
+            if x + img.get_width() > w - 4:
+                break
+            surf.blit(img, (x, (h - img.get_height()) // 2))
+            x += img.get_width()
+        x += 18
+    _FOOTER_CACHE[key] = surf
+    return surf
+
+
 # -- toasts & text ------------------------------------------------------------
 
 def toast_surface(text: str, kind: str = "info") -> pygame.Surface:
@@ -493,7 +628,7 @@ def toast_surface(text: str, kind: str = "info") -> pygame.Surface:
     else:                                                # info: accent dot
         ic = pygame.Surface((16, 16), pygame.SRCALPHA)
         pygame.draw.circle(ic, ACCENT, (8, 8), 4)
-    img = init_fonts()["body"].render(text, True, color)
+    img = init_fonts()["ui"].render(text, True, color)
     h = max(16, img.get_height()) + 12
     w = 14 + 16 + 8 + img.get_width() + 14
     surf = pygame.Surface((w, h), pygame.SRCALPHA)
