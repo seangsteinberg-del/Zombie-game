@@ -566,7 +566,8 @@ def run(argv: list[str] | None = None) -> int:
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("--scene", type=str, default="auto",
                         choices=["auto", "menu", "flight", "builder", "base",
-                                 "research", "ascent", "descent"])
+                                 "research", "ascent", "descent", "help",
+                                 "contracts", "crew", "pause", "planner"])
     args = parser.parse_args(argv)
     if args.headless:
         os.environ["SDL_VIDEODRIVER"] = "dummy"
@@ -776,6 +777,16 @@ def run(argv: list[str] | None = None) -> int:
     prox_seen = False
     contracts_open = False
     contracts_scroll = 0
+    if want == "help":                  # QA hooks: overlay screenshots
+        help_open = True
+    elif want == "contracts":
+        contracts_open = True
+    elif want == "crew":
+        crew_open = True
+    elif want == "planner":
+        planner_open = True
+    elif want == "pause":
+        pause_open = True
     autosave_acc = 0.0
     gold_flash = 0.0
     ascent_event_count = 0
@@ -4342,14 +4353,41 @@ def run(argv: list[str] | None = None) -> int:
                             color=theme.COLORS["text"], font="ui_small")
 
         # tutorial rail draws ABOVE every content overlay so guidance is
-        # never hidden by the very screen it is teaching
-        if tutorial.visible and tutorial.current_text:
-            tut = font.render(tutorial.current_text, True, (140, 235, 255))
-            tbg = pygame.Surface((tut.get_width() + 20, 24), pygame.SRCALPHA)
-            tbg.fill((10, 16, 28, 200))
-            tx = size[0] // 2 - tut.get_width() // 2
-            screen.blit(tbg, (tx - 10, 116))
-            screen.blit(tut, (tx, 120))
+        # never hidden by the very screen it is teaching. Overlays whose
+        # content starts high (research/ledger/crew/planner) get the rail
+        # docked into the free lane above the footer instead; the builder
+        # docks it right of its own message line; help/pause hide it.
+        if (tutorial.visible and tutorial.current_text
+                and not help_open and not pause_open):
+            docked = (research_open or contracts_open or crew_open
+                      or planner_open or builder_open)
+            rail_txt = tutorial.current_text + ("" if docked
+                                                else "   ·  H hides")
+            max_w = 580 if builder_open else 920
+            rail_lines, cur = [], ""
+            for wd in rail_txt.split(" "):      # measured greedy wrap
+                trial = (cur + " " + wd).strip()
+                if cur and font.size(trial)[0] > max_w:
+                    rail_lines.append(cur)
+                    cur = wd
+                else:
+                    cur = trial
+            rail_lines.append(cur)
+            imgs = [font.render(ln, True, (140, 235, 255))
+                    for ln in rail_lines]
+            pw_r = max(i.get_width() for i in imgs) + 20
+            ph_r = 8 + 19 * len(imgs)
+            ty = (size[1] - theme.FOOTER_H - ph_r - 8 if docked else 116)
+            tx = (size[0] - pw_r - 16 if builder_open
+                  else size[0] // 2 - pw_r // 2)
+            tbg = pygame.Surface((pw_r, ph_r), pygame.SRCALPHA)
+            pygame.draw.rect(tbg, (10, 16, 28, 215), tbg.get_rect(),
+                             border_radius=11)
+            pygame.draw.rect(tbg, (60, 86, 116, 220), tbg.get_rect(),
+                             width=1, border_radius=11)
+            screen.blit(tbg, (tx, ty))
+            for li_r, img in enumerate(imgs):
+                screen.blit(img, (tx + 10, ty + 4 + li_r * 19))
 
         if pause_open:
             dim = pygame.Surface(size, pygame.SRCALPHA)
