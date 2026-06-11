@@ -87,3 +87,80 @@ def test_surface_matches_walk_terrain():
 def test_world_size_is_terraria_scale():
     assert W_TILES * TILE_M == 2_048.0          # a real afternoon of walking
     assert (H_TILES - SKY_ROWS) * TILE_M == 160.0
+
+
+# ---- the walker in the tile world (W part 3b) -----------------------------
+
+def test_walker_falls_into_shafts_and_walls_block():
+    import pytest
+
+    from aphelion.game.eva import EvaState
+    w = TileWorld("core:sec_moon_10", 8.0, "psr_ice")
+    e = EvaState("core:sec_moon_10", 8.0, 1.62, "V", tiles=w)
+    assert e.y == pytest.approx(w.surface_y(e.x), abs=0.01)
+    # dig a 2.5 m shaft one column wide, two metres ahead
+    x_sh = e.x + 2.0
+    for _ in range(5):
+        w.dig(x_sh, w.surface_y(x_sh) - 0.25)
+    fell = False
+    for _ in range(1_000):                       # walk right, drop in
+        e.step(0.02, 1, False, False)
+        if e.airborne:
+            fell = True
+            break
+    assert fell
+    for _ in range(2_000):                       # settle on the floor
+        e.step(0.01, 0, False, False)
+        if not e.airborne:
+            break
+    assert not e.airborne
+    # a 2.5 m face is not walkable: the wall blocks
+    x_before = e.x
+    for _ in range(60):
+        e.step(0.02, 1, False, False)
+    assert abs(e.x - x_before) < 0.6
+
+
+def test_roof_stops_the_jump():
+    from aphelion.game.eva import EvaState
+    w = TileWorld("core:sec_moon_01", 2.0, "regolith")
+    e = EvaState("core:sec_moon_01", 2.0, 1.62, "V", tiles=w)
+    w.grid[w.col(e.x), w.row(e.y + 2.4)] = ROCK  # a slab overhead
+    y0 = e.y
+    e.step(0.0, 0, False, True)
+    top = e.y
+    for _ in range(800):
+        e.step(0.01, 0, False, False)
+        top = max(top, e.y)
+        if not e.airborne:
+            break
+    assert top - y0 < 1.0                        # vs a 3+ m lunar apex
+    assert not e.airborne
+
+
+def test_dig_target_and_dig_down_drops_one_tile():
+    import pytest
+
+    from aphelion.game.eva import EvaState
+    w = TileWorld("core:sec_moon_10", 8.0, "psr_ice")
+    e = EvaState("core:sec_moon_10", 8.0, 1.62, "V", tiles=w)
+    assert e.dig_target(False) is None           # graded pad: open ground
+    tx, ty = e.dig_target(True)                  # underfoot, always
+    assert w.solid(tx, ty)
+    y0 = e.y
+    t1, s1 = w.dig(tx, ty)
+    assert s1 > 0.0
+    e.step(0.02, 0, False, False)
+    assert e.y == pytest.approx(y0 - TILE_M, abs=0.01)
+
+
+def test_walker_traverses_natural_terrain():
+    """Risers ≤ 2 tiles are walked; the hills don't trap the suit."""
+    from aphelion.game.eva import EvaState
+    w = TileWorld("core:sec_moon_10", 8.0, "psr_ice")
+    e = EvaState("core:sec_moon_10", 8.0, 1.62, "V", tiles=w)
+    for i in range(4_000):
+        jump = (not e.airborne) and i % 400 == 0  # hop the odd tall step
+        e.step(0.02, 1, True, jump)
+    assert e.x > 80.0
+    assert e.dist_walked > 60.0

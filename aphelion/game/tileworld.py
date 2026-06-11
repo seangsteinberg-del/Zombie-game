@@ -70,12 +70,12 @@ def generate(sector_id: str, slope_sigma: float,
     grid[:, H_TILES - 6:] = BEDROCK              # absolute floor seal
 
     # ice lenses on icy worlds: shallow ellipses you can SEE in a cliff
-    n_lens = 14 if site_kind in _ICY_KINDS else 3
+    n_lens = 18 if site_kind in _ICY_KINDS else 3
     for _ in range(n_lens):
         cx = int(rng.uniform(0, W_TILES))
         cd = rng.uniform(2.0, 60.0)                  # lens depth, m
-        ax = rng.uniform(8.0, 60.0) / TILE_M         # semi-axes in tiles
-        ay = rng.uniform(2.0, 10.0) / TILE_M
+        ax = rng.uniform(5.0, 26.0) / TILE_M         # semi-axes in tiles
+        ay = rng.uniform(1.5, 7.0) / TILE_M
         cy = int(surf_row[cx] + cd / TILE_M)
         x0, x1 = int(cx - ax), int(cx + ax + 1)
         for gx in range(x0, x1):

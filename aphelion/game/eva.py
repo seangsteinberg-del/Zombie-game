@@ -21,6 +21,10 @@ JUMP_MS = 3.2                 # vertical leap speed in the suit
 SUIT_O2_S = 6.0 * 3_600.0     # surface EVA suit endurance (08 ls03)
 INTERACT_RANGE_M = 4.0
 SCOOPS_PER_EVA = 3
+STEP_UP_M = 1.05              # max riser a suited walker climbs (2 tiles)
+BODY_LO_M = 0.3               # wall probes: shin and chest heights
+BODY_HI_M = 1.3
+HELMET_M = 1.7
 
 _TERRAIN_N = 4_096            # heightline samples
 _TERRAIN_SPAN_M = 2_048.0     # metres covered; wraps beyond
@@ -60,17 +64,18 @@ class EvaState:
     """One astronaut on the surface. step() is fixed-dt friendly."""
 
     def __init__(self, sector_id: str, slope_sigma: float, g: float,
-                 member: str) -> None:
+                 member: str, tiles=None) -> None:
         self.sector_id = sector_id
         self.g = max(0.03, g)          # dock-mode worlds still settle
         self.member = member
         self.terrain = terrain_line(sector_id, slope_sigma)
+        self.tiles = tiles             # TileWorld (duck-typed) or None
         rng = np.random.default_rng(_seed("rocks:" + sector_id))
         self.rocks = [(float(rng.uniform(-900.0, 900.0)),
                        float(rng.uniform(0.2, 1.1)))
                       for _ in range(70)]
         self.x = 6.0                   # metres; lander pad at origin
-        self.y = self.ground_at(6.0)
+        self.y = tiles.surface_y(6.0) if tiles else self.ground_at(6.0)
         self.vy = 0.0
         self.facing = 1
         self.airborne = False
@@ -91,6 +96,10 @@ class EvaState:
     # -- physics ----------------------------------------------------------
     def step(self, dt: float, move: int, run: bool, jump: bool) -> None:
         """move in {-1,0,1}; returns nothing — read state after."""
+        if self.tiles is not None:
+            self._step_tiles(dt, move, run, jump)
+            self.o2_s = max(0.0, self.o2_s - dt)
+            return
         speed = RUN_MS if run else WALK_MS
         if move:
             self.facing = move
@@ -114,6 +123,55 @@ class EvaState:
             self.y = self.ground_at(self.x)
         self.o2_s = max(0.0, self.o2_s - dt)
 
+    def _step_tiles(self, dt: float, move: int, run: bool,
+                    jump: bool) -> None:
+        """Tile-world physics: walls block, risers ≤ 2 tiles are walked,
+        shafts and ledges drop you, roofs stop your jump. The body is one
+        column wide with shin/chest probes ahead of the facing edge."""
+        w = self.tiles
+        speed = RUN_MS if run else WALK_MS
+        if move:
+            self.facing = move
+            nx = self.x + move * speed * dt * (0.5 if self.airborne else 1.0)
+            lead = nx + move * 0.35
+            if self.airborne:
+                if not (w.solid(lead, self.y + BODY_LO_M)
+                        or w.solid(lead, self.y + BODY_HI_M)):
+                    self.x = nx
+            else:
+                floor_new = w.ground_below(lead, self.y + STEP_UP_M)
+                rise = floor_new - self.y
+                if rise <= STEP_UP_M \
+                        and not w.solid(lead, floor_new + 0.4) \
+                        and not w.solid(lead, floor_new + 1.4):
+                    self.x = nx
+                    if floor_new > self.y:        # climb the riser
+                        self.y = floor_new
+                    self.dist_walked += speed * dt
+                    self.frame += dt * (9.0 if run else 6.0)
+        if jump and not self.airborne:
+            self.vy = JUMP_MS
+            self.airborne = True
+        if self.airborne:
+            self.vy -= self.g * dt
+            ny = self.y + self.vy * dt
+            if self.vy > 0.0 and w.solid(self.x, ny + HELMET_M):
+                self.vy = 0.0                     # helmet meets the roof
+                ny = self.y
+            floor = w.ground_below(self.x, self.y + 0.05)
+            if ny <= floor and self.vy <= 0.0:
+                self.y = floor
+                self.vy = 0.0
+                self.airborne = False
+            else:
+                self.y = ny
+        else:
+            floor = w.ground_below(self.x, self.y + 0.05)
+            if self.y - floor > STEP_UP_M:        # ledge / your own shaft
+                self.airborne = True
+            else:
+                self.y = floor
+
     @property
     def o2_frac(self) -> float:
         return self.o2_s / SUIT_O2_S
@@ -125,6 +183,27 @@ class EvaState:
     # -- interactions -------------------------------------------------------
     def near(self, x_m: float, rng: float = INTERACT_RANGE_M) -> bool:
         return abs(self.x - x_m) <= rng
+
+    # -- digging (tile worlds) ----------------------------------------------
+    def dig_target(self, down: bool) -> tuple[float, float] | None:
+        """World point the held tool attacks: the lowest blocking tile
+        ahead of the facing edge (X), or the tile underfoot (C). None when
+        airborne, tile-less, or facing open ground."""
+        if self.tiles is None or self.airborne:
+            return None
+        if down:
+            return self.x, self.y - 0.25
+        lead = self.x + self.facing * 0.8
+        for h in (BODY_LO_M, 0.8, BODY_HI_M):
+            if self.tiles.solid(lead, self.y + h):
+                return lead, self.y + h
+        return None
+
+    def depth_m(self) -> float:
+        """Metres below the open-sky surface (0 above ground)."""
+        if self.tiles is None:
+            return 0.0
+        return max(0.0, self.tiles.surface_y(self.x) - self.y)
 
 
 def module_positions(built: list[str]) -> dict[int, float]:

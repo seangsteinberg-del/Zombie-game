@@ -191,7 +191,9 @@ from aphelion.game.sites import SITES, sites_for_body  # noqa: E402
 from aphelion.game.sectors import (  # noqa: E402
     BODY_OPS, landable, sector_site)
 from aphelion.game import eva as eva_sim  # noqa: E402
+from aphelion.game import tileworld  # noqa: E402
 from aphelion.render import eva_art  # noqa: E402
+from aphelion.render.tile_art import TileRenderer  # noqa: E402
 from aphelion.sim.environment.mars_climate import (  # noqa: E402
     MarsWeather, f_dust as mars_f_dust)
 from aphelion.sim.environment.space_env import (  # noqa: E402
@@ -671,7 +673,7 @@ def run(argv: list[str] | None = None) -> int:
     parser.add_argument("--scene", type=str, default="auto",
                         choices=["auto", "menu", "flight", "builder", "base",
                                  "research", "research_ed", "research_codex",
-                                 "ascent", "descent", "eva", "help",
+                                 "ascent", "descent", "eva", "mine", "help",
                                  "contracts", "crew", "pause", "planner"])
     args = parser.parse_args(argv)
     if args.headless:
@@ -782,7 +784,8 @@ def run(argv: list[str] | None = None) -> int:
                     visited_surface=set(), milestones=set(),
                     tutorial=first_flight_tutorial(),
                     explore={"investigated": set(), "surveydata_gb": 0.0,
-                             "survey_progress": {}})
+                             "survey_progress": {}, "flags": [],
+                             "dug": {}, "deposits": {}})
 
     def loaded_campaign(path=None) -> dict:
         got = read_campaign(path or latest_save() or qs_path, db, tree)
@@ -803,7 +806,11 @@ def run(argv: list[str] | None = None) -> int:
                     explore={"investigated": set(ex.get("investigated", [])),
                              "surveydata_gb": ex.get("surveydata_gb", 0.0),
                              "survey_progress": dict(
-                                 ex.get("survey_progress", {}))},
+                                 ex.get("survey_progress", {})),
+                             "flags": list(ex.get("flags", [])),
+                             "dug": {k: [list(p) for p in v] for k, v
+                                     in (ex.get("dug") or {}).items()},
+                             "deposits": dict(ex.get("deposits", {}))},
                     active_idx=got["active_idx"], next_vid=got["next_vid"],
                     program=got["program"], rng=rng,
                     bases=[BaseSite.from_restore(b["name"], b["last_t"],
@@ -832,7 +839,8 @@ def run(argv: list[str] | None = None) -> int:
                 st.get("difficulty", "DIRECTOR"),
                 st.get("explore") or {"investigated": set(),
                                       "surveydata_gb": 0.0,
-                                      "survey_progress": {}},
+                                      "survey_progress": {}, "flags": [],
+                                      "dug": {}, "deposits": {}},
                 None, 0, False, False, False, False, False, 0.0, "", 0.0)
 
     (clock, vessels, active_idx, next_vid, program, campaign_rng, bases,
@@ -892,7 +900,10 @@ def run(argv: list[str] | None = None) -> int:
                             "done": sorted(tutorial.done_rails)},
             explore={"investigated": sorted(explore["investigated"]),
                      "surveydata_gb": explore["surveydata_gb"],
-                     "survey_progress": dict(explore["survey_progress"])})
+                     "survey_progress": dict(explore["survey_progress"]),
+                     "flags": list(explore.get("flags", [])),
+                     "dug": explore.get("dug", {}),
+                     "deposits": explore.get("deposits", {})})
         write_campaign(path or qs_path, snap)
         return label
 
@@ -918,6 +929,10 @@ def run(argv: list[str] | None = None) -> int:
     research_view = "tree"            # tree | ed (data dashboard) | codex
     eva_state = None                  # EvaState while walking the surface
     eva_av = None                     # the landed vessel the walker left
+    eva_tiles = None                  # the sector's TileWorld (S-7c)
+    eva_tr = None                     # its chunk renderer
+    eva_dig = None                    # held-dig progress {tile, left, total}
+    eva_camy = 0.0                    # vertical camera follow, metres
     EVA_TIME_FACTOR = 30.0            # EVA ops run at 30x sim time
     interior_x = 2.0                  # walker x inside the hab strip, m
     interior_home = None              # the BaseSite whose interior we walk
@@ -961,7 +976,7 @@ def run(argv: list[str] | None = None) -> int:
         research_open, research_view = True, "ed"
     elif want == "research_codex":
         research_open, research_view = True, "codex"
-    elif want == "eva":                 # QA: a walker on the lunar pole
+    elif want in ("eva", "mine"):       # QA: a walker on the lunar pole
         from aphelion.sim.vessels.vessel import Vessel as _V
         _rows = [_V.fueled_row(db, "core:engine_ml111"),
                  _V.fueled_row(db, "core:tank_ml_s"),
@@ -977,9 +992,27 @@ def run(argv: list[str] | None = None) -> int:
         _fvq.land_at("site:peary", SITES["site:peary"], 0.0)
         vessels.append(_fvq)
         eva_av = _fvq
+        _secq = SITES["site:peary"].get("sector_id", "site:peary")
+        eva_tiles = tileworld.TileWorld(
+            _secq, 8.0, SITES["site:peary"].get("kind", "psr_ice"),
+            dug=explore.setdefault("dug", {}).get(_secq, []))
+        eva_tr = TileRenderer(eva_tiles,
+                              ground_palette(SITES["site:peary"]["body"]))
         eva_state = eva_sim.EvaState(
-            SITES["site:peary"].get("sector_id", "site:peary"), 8.0,
-            _bq.mu / _bq.radius ** 2, "V. Ainsworth")
+            _secq, 8.0, _bq.mu / _bq.radius ** 2, "V. Ainsworth",
+            tiles=eva_tiles)
+        if want == "mine":              # QA: a shaft + gallery, lamp on
+            _mx = 18.0
+            for _ in range(16):
+                eva_tiles.dig(_mx, eva_tiles.surface_y(_mx) - 0.25)
+            _fy = eva_tiles.surface_y(_mx)
+            for _k in range(1, 9):
+                for _h in (0.3, 0.8, 1.3, 1.8):
+                    eva_tiles.dig(_mx + _k * 0.5, _fy + _h)
+            explore["dug"][_secq] = eva_tiles.dug_list()
+            eva_state.x = _mx + 2.5     # inside the gallery: lamp on
+            eva_state.y = eva_tiles.ground_below(_mx + 2.5, _fy + 1.0)
+            eva_camy = eva_state.y
         scene = "eva"
     autosave_acc = 0.0
     gold_flash = 0.0
@@ -1387,13 +1420,18 @@ def run(argv: list[str] | None = None) -> int:
                             audio.play("tick")
                     elif event.key == pygame.K_e:
                         # nearest interactable in range wins
-                        if eva_state.near(0.0):           # the lander
+                        if eva_state.depth_m() > 2.5:
+                            toast = ("nothing to reach down here — climb "
+                                     "back to daylight first")
+                            toast_until = t + 4
+                        elif eva_state.near(0.0):         # the lander
                             scene = "flight"
                             toast = (f"{eva_state.member} ABOARD — EVA "
                                      f"complete: {eva_state.dist_walked:,.0f}"
                                      f" m walked")
                             toast_until = t + 8
-                            eva_state = None
+                            eva_state, eva_tiles, eva_tr = None, None, None
+                            eva_dig = None
                             audio.play("clunk")
                         else:
                             home_b = next(
@@ -1620,13 +1658,25 @@ def run(argv: list[str] | None = None) -> int:
                             "sector_id", av0.landed_at)
                         slope = db.by_type("sectors").get(
                             sec_id, {}).get("slope_sigma", 4.0)
+                        eva_tiles = tileworld.TileWorld(
+                            sec_id, slope,
+                            SITES[av0.landed_at].get("kind", "regolith"),
+                            dug=explore.setdefault("dug", {}).get(
+                                sec_id, []))
+                        eva_tr = TileRenderer(
+                            eva_tiles,
+                            ground_palette(SITES[av0.landed_at]["body"]))
                         eva_state = eva_sim.EvaState(
-                            sec_id, slope, g_loc, av0.crew[0])
+                            sec_id, slope, g_loc, av0.crew[0],
+                            tiles=eva_tiles)
                         eva_av = av0
+                        eva_camy = eva_state.y
+                        eva_dig = None
                         surface_open = False
                         scene = "eva"
                         toast = (f"{av0.crew[0]} ON EVA — E interact, "
-                                 f"F flag, R sample, board at the lander")
+                                 f"X/C dig, F flag, R sample, board at "
+                                 f"the lander")
                         toast_until = t + 8
                         audio.play("clunk")
                     elif action[0] == "investigate":
@@ -3375,14 +3425,79 @@ def run(argv: list[str] | None = None) -> int:
                 toast = f"{lost_w} DIED ON EVA — suit oxygen exhausted"
                 toast_until = t + 14
                 audio.play("alarm")
-                eva_state, scene = None, "flight"
+                eva_state, eva_tiles, eva_tr, eva_dig = None, None, None, None
+                scene = "flight"
                 continue
 
             site_e = SITES[eva_av.landed_at]
             body_e = site_e["body"]
+            if eva_tiles is None:       # safety: any path into the scene
+                eva_tiles = tileworld.TileWorld(
+                    eva_state.sector_id, 4.0,
+                    site_e.get("kind", "regolith"),
+                    dug=explore.setdefault("dug", {}).get(
+                        eva_state.sector_id, []))
+                eva_state.tiles = eva_tiles
+                eva_tr = TileRenderer(eva_tiles, ground_palette(body_e))
+
+            # held-tool digging: X carves the wall ahead, C the floor below
+            dig_down = bool(keys[pygame.K_c])
+            tgt_d = (eva_state.dig_target(dig_down)
+                     if (keys[pygame.K_x] or dig_down) else None)
+            if tgt_d is not None and eva_tiles.tile_at(
+                    *tgt_d) in tileworld.DIG_S:
+                c_t, r_t = eva_tiles.col(tgt_d[0]), eva_tiles.row(tgt_d[1])
+                tt_d = eva_tiles.tile_at(*tgt_d)
+                if eva_dig is None or eva_dig["tile"] != (c_t, r_t):
+                    eva_dig = {"tile": (c_t, r_t),
+                               "left": tileworld.DIG_S[tt_d],
+                               "total": tileworld.DIG_S[tt_d]}
+                eva_dig["left"] -= real_dt
+                if eva_dig["left"] <= 0.0:
+                    got_t, _secs = eva_tiles.dig(*tgt_d)
+                    eva_tr.invalidate(c_t, r_t)
+                    explore.setdefault("dug", {})[
+                        eva_state.sector_id] = eva_tiles.dug_list()
+                    # first strike logs the deposit (the I-chunk extraction
+                    # ladder feeds on these)
+                    dep_d = explore.setdefault("deposits", {}).setdefault(
+                        eva_state.sector_id, [])
+                    if got_t == tileworld.ICE and "ice" not in dep_d:
+                        dep_d.append("ice")
+                        research.earn_science(15.0)
+                        toast = ("ICE LENS CONFIRMED — deposit logged "
+                                 "for extraction (+15 sci)")
+                        toast_until = t + 10
+                        audio.play("paid")
+                    elif got_t == tileworld.ORE and "ore" not in dep_d:
+                        dep_d.append("ore")
+                        research.earn_science(15.0)
+                        toast = ("METAL VEIN STRUCK — deposit logged "
+                                 "for extraction (+15 sci)")
+                        toast_until = t + 10
+                        audio.play("paid")
+                    # spoil goes to the colony stores if one is here
+                    home_d = next((b for b in bases
+                                   if b.site_id == eva_av.landed_at), None)
+                    if home_d is not None:
+                        res_d = ("Water" if got_t == tileworld.ICE
+                                 else "Regolith")
+                        buf_d = home_d.net.buffers.get(res_d)
+                        if buf_d is not None:
+                            kg_d = tileworld.TILE_KG[got_t] * (
+                                0.9 if got_t == tileworld.ICE else 1.0)
+                            buf_d.level = min(buf_d.capacity,
+                                              buf_d.level + kg_d)
+                    eva_dig = None
+                    audio.play("tick")
+            else:
+                eva_dig = None
+
             ppm = 16.0
             h_ground = 470
             camx = eva_state.x
+            eva_camy += (eva_state.y - eva_camy) * min(1.0, 6.0 * real_dt)
+            camy = eva_camy
 
             screen.fill((4, 6, 12))
             if site_e.get("aero") or body_e in _ATMO_BODIES:
@@ -3397,24 +3512,22 @@ def run(argv: list[str] | None = None) -> int:
             for ridge_s, fac in ridge_layers(body_e, size[0]):
                 rx = -((camx * ppm * fac * 0.25) % RIDGE_PAD)
                 screen.blit(ridge_s,
-                            (rx, h_ground - ridge_s.get_height() - 36))
+                            (rx, h_ground + camy * ppm
+                             - ridge_s.get_height() - 36))
 
             gp = ground_palette(body_e)
 
+            def _syv(wy: float) -> float:
+                return h_ground - (wy - camy) * ppm
+
             def _sy(wx: float) -> float:
-                return h_ground - eva_state.ground_at(wx) * ppm
+                return _syv(eva_tiles.surface_y(wx))
 
             def _sx(wx: float) -> float:
                 return size[0] / 2.0 + (wx - camx) * ppm
 
-            pts = []
-            for px_col in range(-8, size[0] + 9, 8):
-                wx = camx + (px_col - size[0] / 2.0) / ppm
-                pts.append((px_col, _sy(wx)))
-            pygame.draw.polygon(
-                screen, gp.base,
-                pts + [(size[0] + 8, size[1] + 4), (-8, size[1] + 4)])
-            pygame.draw.lines(screen, gp.speck, False, pts, 2)
+            # the site cross-section: strata, lenses, veins, your tunnels
+            eva_tr.draw(screen, camx, camy, size, ppm, h_ground)
             for rwx, rr in eva_state.rocks:
                 rsx = _sx(rwx)
                 if -20 < rsx < size[0] + 20:
@@ -3455,13 +3568,30 @@ def run(argv: list[str] | None = None) -> int:
 
             aspr = eva_art.astronaut(int(eva_state.frame),
                                      eva_state.facing, eva_state.airborne)
+            walker_top = _syv(eva_state.y) - aspr.get_height()
             screen.blit(aspr, (size[0] / 2 - aspr.get_width() / 2,
-                               h_ground - eva_state.y * ppm
-                               - aspr.get_height()))
+                               walker_top))
+
+            # underground: the sky stops helping, the suit lamp takes over
+            depth_e = eva_state.depth_m()
+            eva_tr.darkness(screen,
+                            (int(size[0] / 2),
+                             int(walker_top + aspr.get_height() * 0.4)),
+                            depth_e)
+            if eva_dig is not None:     # the tool bites: progress bar
+                frac_d = 1.0 - max(0.0, eva_dig["left"]) / eva_dig["total"]
+                pygame.draw.rect(screen, (38, 40, 50),
+                                 (size[0] / 2 - 24, walker_top - 12, 48, 6))
+                pygame.draw.rect(screen, theme.COLORS["gold"],
+                                 (size[0] / 2 - 24, walker_top - 12,
+                                  int(48 * min(1.0, frac_d)), 6))
 
             # interaction prompt above the helmet
             prompt = ""
-            if eva_state.near(0.0):
+            if depth_e > 2.5:
+                if eva_state.dig_target(False) is not None:
+                    prompt = "X — DIG"
+            elif eva_state.near(0.0):
                 prompt = "E — BOARD THE LANDER"
             elif pend_e and eva_state.near(eva_sim.ANOMALY_X_M, 6.0):
                 prompt = "E — INVESTIGATE"
@@ -3469,10 +3599,11 @@ def run(argv: list[str] | None = None) -> int:
                     eva_state.near(bx) for bx in
                     eva_sim.module_positions(home_b.built).values()):
                 prompt = "E — MODULE CONSOLE"
+            elif eva_state.dig_target(False) is not None:
+                prompt = "X — DIG"
             if prompt:
                 theme.draw_text(screen, size[0] / 2 - 60,
-                                h_ground - eva_state.y * ppm
-                                - aspr.get_height() - 24,
+                                walker_top - 24,
                                 prompt, color=theme.COLORS["gold"],
                                 font="ui_small")
 
@@ -3480,16 +3611,20 @@ def run(argv: list[str] | None = None) -> int:
             chx_e = 10
             o2c = (theme.COLORS["danger"] if eva_state.o2_frac < 0.25
                    else theme.COLORS["accent"])
-            for chip_txt, chip_col in (
-                    (f"EVA  {eva_state.member}", theme.COLORS["text"]),
-                    (site_e["name"], theme.COLORS["text_dim"]),
-                    (f"g {eva_state.g:.2f} m/s²", theme.COLORS["accent"]),
-                    (f"jump {eva_state.jump_apex_m():.1f} m",
-                     theme.COLORS["text_dim"]),
-                    (f"bags {eva_state.scoops_left}",
-                     theme.COLORS["text_dim"]),
-                    (f"walked {eva_state.dist_walked:,.0f} m",
-                     theme.COLORS["text_dim"])):
+            chips_e = [
+                (f"EVA  {eva_state.member}", theme.COLORS["text"]),
+                (site_e["name"], theme.COLORS["text_dim"]),
+                (f"g {eva_state.g:.2f} m/s²", theme.COLORS["accent"]),
+                (f"jump {eva_state.jump_apex_m():.1f} m",
+                 theme.COLORS["text_dim"]),
+                (f"bags {eva_state.scoops_left}",
+                 theme.COLORS["text_dim"]),
+                (f"walked {eva_state.dist_walked:,.0f} m",
+                 theme.COLORS["text_dim"])]
+            if depth_e > 1.0:
+                chips_e.append((f"depth {depth_e:.1f} m",
+                                theme.COLORS["gold"]))
+            for chip_txt, chip_col in chips_e:
                 cs = theme.chip(chip_txt, chip_col)
                 screen.blit(cs, (chx_e, 8))
                 chx_e += cs.get_width() + 8
@@ -3504,8 +3639,8 @@ def run(argv: list[str] | None = None) -> int:
                                 font="ui_small")
             screen.blit(theme.footer(
                 size[0],
-                "A/D walk   SHIFT run   SPACE jump   E interact   "
-                "F plant flag   R scoop sample"),
+                "A/D walk   SHIFT run   SPACE jump   X dig ahead   "
+                "C dig down   E interact   F flag   R sample"),
                 (0, size[1] - theme.FOOTER_H))
             screen.blit(vig, (0, 0))
             apply_fade()
