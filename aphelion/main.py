@@ -60,6 +60,14 @@ _DEFAULT_COLOR = (130, 135, 145)
 _ORBIT_COLOR = (40, 50, 70)
 _MOON_ORBIT_COLOR = (55, 65, 85)
 _CRAFT_COLOR = (120, 255, 170)
+_GROUND_COLORS = {
+    "core:earth": (28, 46, 34), "core:moon": (68, 70, 76),
+    "core:mars": (112, 60, 38), "core:titan": (92, 74, 48),
+    "core:europa": (148, 158, 174), "core:venus": (118, 88, 48),
+}
+_CAPSULE_HEAT_W_M2 = 2.5e6     # ablative-protected stack survives this
+_BARE_HEAT_W_M2 = 0.9e6        # bare tankage does not
+_ENTRY_G_LIMIT = 8.0           # crewed sustained-g ceiling (08)
 _LEG_COLORS = [(120, 255, 170), (255, 200, 60), (255, 120, 200),
                (140, 200, 255), (255, 160, 90), (200, 140, 255)]
 _WARP_LADDER = (1.0,) + RAILS_RATES
@@ -132,13 +140,20 @@ def _surface_options(av, bases) -> list[tuple[tuple, str]]:
             opts.append((("found",),
                          "FOUND A BASE here (vessel becomes base hardware)"))
     else:
+        body = av.tree.body(av.frame_id)
+        g_local = body.mu / (body.radius ** 2)
+        m_now = av.vessel.total_mass_kg()
+        twr_local = (av.vessel.active_thrust_n() / (m_now * g_local)
+                     if m_now > 0.0 else 0.0)
         for sid, s in sites_for_body(av.frame_id):
             need = s.get("requires_part")
             missing = (need and not any(r.part_id == need
                                         for r in av.vessel.rows))
-            label = f"LAND: {s['name']}   ({s['land_dv']:,.0f} m/s)"
+            label = f"LAND: {s['name']}   (~{s['land_dv']:,.0f} m/s, flown)"
             if missing:
                 label += f"   [needs {need.split(':')[1]}]"
+            elif not s.get("aero") and twr_local < 2.0:
+                label += f"   [TWR {twr_local:.1f} — braking may not stop you]"
             opts.append((("land", sid), label))
     return opts
 
@@ -426,7 +441,7 @@ def run(argv: list[str] | None = None) -> int:
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("--scene", type=str, default="auto",
                         choices=["auto", "menu", "flight", "builder", "base",
-                                 "research", "ascent"])
+                                 "research", "ascent", "descent"])
     args = parser.parse_args(argv)
     if args.headless:
         os.environ["SDL_VIDEODRIVER"] = "dummy"
@@ -441,6 +456,10 @@ def run(argv: list[str] | None = None) -> int:
         app_icon, craft_icon, part_thumb, vessel_metrics, vessel_sprite)
     from aphelion.sim.environment.atmosphere import density as atmo_density
     from aphelion.sim.flight.ascent_live import LiveAscent
+    from aphelion.sim.flight.descent_live import LiveDescent
+    from aphelion.sim.flight.entry import fly_entry
+    from aphelion.sim.flight.proxops_live import (
+        CAPTURE_RANGE_M, CAPTURE_SPEED_MS, ProxOps)
     from aphelion.ui import theme
     from aphelion.ui.audio import AudioCues
     from aphelion.ui.effects import Particles, Starfield
@@ -448,8 +467,8 @@ def run(argv: list[str] | None = None) -> int:
 
     from aphelion.core.rng import RngRegistry
     from aphelion.game.crew import (
-        CrewMember, apply_crew_bonuses, candidates, reap_over_limit,
-        science_multiplier)
+        CrewMember, apply_crew_bonuses, best_skill, candidates,
+        reap_over_limit, science_multiplier)
     from aphelion.save.campaign import (
         default_save_dir, read_campaign, snapshot_campaign, write_campaign)
     from aphelion.sim.habitat.dose import AMBIENT_MSV_DAY
@@ -677,6 +696,20 @@ def run(argv: list[str] | None = None) -> int:
     launch_cost = 0.0
     pending_crew: list[str] = []
     pending_assigned = False
+    ascent_av = None               # FleetVessel being RELAUNCHED (None = pad)
+    ascent_body_id = "core:earth"
+
+    # descent scene state (the landing, FLOWN)
+    descent: LiveDescent | None = None
+    descent_av = None
+    descent_warp = 1.0
+    descent_acc = 0.0
+
+    # prox-ops scene state (docking, FLOWN)
+    prox: ProxOps | None = None
+    prox_chaser = None
+    prox_target = None
+    prox_trail: list[tuple[float, float]] = []
 
     # blueprint slots (designs.json beside the saves)
     bp_path = save_dir / "designs.json"
@@ -725,6 +758,19 @@ def run(argv: list[str] | None = None) -> int:
                        "core:payload_2t"]]
         live.ignite()
         scene = "ascent"
+    if want == "descent":               # --scene descent: QA moon landing
+        from aphelion.sim.vessels.vessel import Vessel
+        _rows = [Vessel.fueled_row(db, p) for p in
+                 ("core:engine_ml111", "core:tank_ml_s", "core:payload_2t")]
+        _v = Vessel(db, _rows, stage_plan=[[0, 1, 2]], cd_a_m2=0.0)
+        moon_b = tree.body("core:moon")
+        _r0 = moon_b.radius + 100e3
+        descent = LiveDescent.from_orbit(
+            _v, moon_b.mu, moon_b.radius, "site:peary", _r0, 0.0, 0.0,
+            tr.circular_speed(moon_b.mu, _r0), 0.0)
+        descent.engage_autoland()
+        descent_warp = 8.0
+        scene = "descent"
 
     frame_count = 0
     running = True
@@ -735,6 +781,8 @@ def run(argv: list[str] | None = None) -> int:
         load_save = False
         ascent_done = False
         ascent_abort = False
+        descent_done = False
+        prox_done = False
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -821,6 +869,18 @@ def run(argv: list[str] | None = None) -> int:
                         # is cleared (or the die is cast) the money is spent
                         if live.outcome is not None:
                             ascent_done = True
+                        elif ascent_av is not None:
+                            if not live.ignited:
+                                live = None
+                                ascent_av = None
+                                scene = "flight"
+                                toast, toast_until = ("relaunch stood down",
+                                                      t + 4)
+                            else:
+                                toast = ("committed — no revert on a "
+                                         "field relaunch")
+                                toast_until = t + 4
+                                audio.play("warn")
                         elif live.t < _REVERT_WINDOW_S:
                             ascent_abort = True
                         else:
@@ -828,6 +888,68 @@ def run(argv: list[str] | None = None) -> int:
                                      f"(T+{_REVERT_WINDOW_S:.0f}s) — fly it out")
                             toast_until = t + 4
                             audio.play("warn")
+            elif scene == "descent":
+                if event.type == pygame.KEYDOWN and descent is not None:
+                    if event.key == pygame.K_x:
+                        descent.throttle_cmd = 1.0
+                        descent.auto = False
+                    elif event.key == pygame.K_z:
+                        descent.throttle_cmd = 0.0
+                        descent.auto = False
+                    elif event.key == pygame.K_SPACE:
+                        if descent.stage():
+                            audio.play("blip")
+                    elif event.key == pygame.K_a:
+                        if (descent_av is not None
+                                and best_skill(descent_av, crew,
+                                               "pilot") >= 2):
+                            descent.engage_autoland()
+                            audio.play("blip")
+                        else:
+                            toast = ("autoland needs a skill-2 pilot "
+                                     "aboard — you fly it")
+                            toast_until = t + 5
+                            audio.play("warn")
+                    elif event.key == pygame.K_PERIOD:
+                        descent_warp = min(descent_warp * 2.0, 8.0)
+                    elif event.key == pygame.K_COMMA:
+                        descent_warp = max(descent_warp / 2.0, 1.0)
+                    elif (event.key in (pygame.K_RETURN, pygame.K_ESCAPE)
+                          and descent.outcome is not None):
+                        descent_done = True
+                    elif event.key == pygame.K_ESCAPE:
+                        toast = ("committed to the descent — fly it down")
+                        toast_until = t + 4
+                        audio.play("warn")
+            elif scene == "proxops":
+                if event.type == pygame.KEYDOWN and prox is not None:
+                    mag = 2.0 if (event.mod & pygame.KMOD_SHIFT) else 0.5
+                    if event.key in (pygame.K_UP, pygame.K_DOWN,
+                                     pygame.K_LEFT, pygame.K_RIGHT):
+                        dx = {pygame.K_UP: 1.0, pygame.K_DOWN: -1.0}.get(
+                            event.key, 0.0)
+                        dy = {pygame.K_RIGHT: 1.0, pygame.K_LEFT: -1.0}.get(
+                            event.key, 0.0)
+                        if prox.pulse(dx, dy, mag):
+                            audio.play("burn")
+                        else:
+                            audio.play("warn")
+                    elif event.key == pygame.K_a:
+                        if (prox_chaser is not None
+                                and best_skill(prox_chaser, crew,
+                                               "pilot") >= 1):
+                            prox.engage_auto()
+                            audio.play("blip")
+                        else:
+                            toast = "approach autopilot needs a pilot aboard"
+                            toast_until = t + 5
+                            audio.play("warn")
+                    elif (event.key == pygame.K_RETURN
+                          and prox.outcome == "captured"):
+                        prox_done = True
+                    elif event.key == pygame.K_ESCAPE:
+                        prox.outcome = "aborted"
+                        prox_done = True
             elif scene == "victory":
                 if event.type == pygame.KEYDOWN and event.key in (
                         pygame.K_RETURN, pygame.K_ESCAPE):
@@ -907,17 +1029,31 @@ def run(argv: list[str] | None = None) -> int:
                     action = opts[surface_cursor % len(opts)][0]
                     if action[0] == "relaunch":
                         site = SITES[av0.landed_at]
-                        if av0.relaunch(site, t):
-                            toast = (f"{av0.name} BACK IN ORBIT — "
-                                     f"{av0.dv_remaining:,.0f} m/s remains")
-                            toast_until = t + 8
-                            surface_open = False
-                            audio.play("burn")
-                        else:
-                            toast = (f"ascent needs {site['ascent_dv']:,.0f}"
+                        if av0.dv_remaining < site["ascent_dv"] * 0.8:
+                            toast = (f"ascent needs ~{site['ascent_dv']:,.0f}"
                                      f" m/s — not enough propellant")
                             toast_until = t + 6
                             audio.play("alarm")
+                        else:
+                            # the ascent is FLOWN here too — same integrator,
+                            # this body's gravity and (lack of) atmosphere
+                            body_r = tree.body(av0.frame_id)
+                            live = LiveAscent.from_pad(
+                                av0.vessel, av0.frame_id, body_r.mu,
+                                body_r.radius, 1.0e7)
+                            live_stack = [
+                                [av0.vessel.rows[i].part_id for i in st]
+                                for st in av0.vessel.stage_plan]
+                            launch_cost = 0.0
+                            ascent_av = av0
+                            ascent_body_id = av0.frame_id
+                            pending_assigned = False
+                            ascent_warp, ascent_acc = 1.0, 0.0
+                            ascent_event_count = 0
+                            node = None
+                            surface_open = False
+                            scene = "ascent"
+                            audio.play("blip")
                     elif action[0] == "found":
                         site_id = av0.landed_at
                         site = SITES[site_id]
@@ -934,24 +1070,92 @@ def run(argv: list[str] | None = None) -> int:
                     elif action[0] == "land":
                         sid = action[1]
                         site = SITES[sid]
-                        if av0.land_at(sid, site, t):
+                        ok_land, why = av0.can_land(site, t)
+                        if not ok_land:
+                            toast, toast_until = f"no descent: {why}", t + 6
+                            audio.play("warn")
+                        elif site.get("aero"):
+                            # the atmosphere adjudicates the entry first
+                            body_b = tree.body(av0.frame_id)
+                            rx0, ry0, vx0, vy0 = av0.state(t)
+                            r0 = math.hypot(rx0, ry0)
+                            r_pe = body_b.radius + 40e3
+                            a_d = 0.5 * (r0 + r_pe)
+                            r_int = min(r0, body_b.radius + 120e3)
+                            v_int = tr.visviva_speed(body_b.mu, r_int, a_d)
+                            v_pe = tr.visviva_speed(body_b.mu, r_pe, a_d)
+                            cosg = min(1.0, (r_pe * v_pe) / (r_int * v_int))
+                            beta = (av0.vessel.total_mass_kg()
+                                    / max(av0.vessel.cd_a_m2, 0.5))
+                            res = fly_entry(av0.frame_id, body_b.mu,
+                                            body_b.radius, r_int, v_int,
+                                            math.acos(cosg), beta)
+                            has_capsule = any(
+                                db.parts[r.part_id]["type"] == "crew"
+                                for r in av0.vessel.rows)
+                            rating = (_CAPSULE_HEAT_W_M2 if has_capsule
+                                      else _BARE_HEAT_W_M2)
+                            av0._pay_dv(80.0)        # deorbit targeting burn
                             surface_open = False
-                            burn_glow = 0.8
-                            msg = f"TOUCHDOWN: {site['name']}"
-                            if sid not in visited_surface:
-                                visited_surface.add(sid)
-                                sci = (site["science"]
-                                       * science_multiplier(av0, crew))
-                                research.earn_science(sci)
-                                research.earn_eng_data(sci * 0.3)
-                                msg += f"  +{sci:.0f} science"
-                            toast, toast_until = msg, t + 10
-                            audio.play("soi")
+                            if res.peak_heating_w_m2 > rating:
+                                for cn in list(av0.crew):
+                                    crew.pop(cn, None)
+                                vessels.remove(av0)
+                                active_idx = 0
+                                node = None
+                                toast = (f"{av0.name} BURNED UP ON ENTRY — "
+                                         f"{res.peak_heating_w_m2/1e6:,.1f} "
+                                         f"MW/m² vs {rating/1e6:,.1f} rated")
+                                toast_until = t + 12
+                                audio.play("alarm")
+                            else:
+                                if (res.peak_g > _ENTRY_G_LIMIT
+                                        and av0.crew):
+                                    lost = list(av0.crew)
+                                    for cn in lost:
+                                        crew.pop(cn, None)
+                                    av0.crew = []
+                                    toast = (f"{res.peak_g:,.0f} g ON ENTRY"
+                                             f" — crew lost: "
+                                             + ", ".join(lost))
+                                    toast_until = t + 12
+                                    audio.play("alarm")
+                                if sid == "site:venus_cloud":
+                                    # aerostat: balloon deploy, no descent
+                                    if av0.land_at(sid, site, t):
+                                        burn_glow = 0.8
+                                        msg = f"AEROSTAT DEPLOYED: {site['name']}"
+                                        if sid not in visited_surface:
+                                            visited_surface.add(sid)
+                                            sci = (site["science"]
+                                                   * science_multiplier(av0, crew))
+                                            research.earn_science(sci)
+                                            research.earn_eng_data(sci * 0.3)
+                                            msg += f"  +{sci:.0f} science"
+                                        toast, toast_until = msg, t + 10
+                                        audio.play("soi")
+                                else:
+                                    descent = LiveDescent.from_entry(
+                                        av0.vessel, body_b.mu, body_b.radius,
+                                        sid, h0=8e3,
+                                        v_h=max(80.0, res.v_final * 0.7),
+                                        v_v=-max(60.0, res.v_final * 0.5))
+                                    descent_av = av0
+                                    descent_warp, descent_acc = 1.0, 0.0
+                                    scene = "descent"
+                                    audio.play("blip")
                         else:
-                            toast = (f"landing needs {site['land_dv']:,.0f}"
-                                     f" m/s — not enough propellant")
-                            toast_until = t + 6
-                            audio.play("alarm")
+                            # vacuum world: deorbit, coast, FLY the braking
+                            body_b = tree.body(av0.frame_id)
+                            rx0, ry0, vx0, vy0 = av0.state(t)
+                            descent = LiveDescent.from_orbit(
+                                av0.vessel, body_b.mu, body_b.radius, sid,
+                                rx0, ry0, vx0, vy0, t)
+                            descent_av = av0
+                            descent_warp, descent_acc = 1.0, 0.0
+                            surface_open = False
+                            scene = "descent"
+                            audio.play("blip")
             elif event.type == pygame.KEYDOWN and crew_open:
                 cands = candidates(crew)
                 if event.key in (pygame.K_ESCAPE, pygame.K_k):
@@ -1250,32 +1454,42 @@ def run(argv: list[str] | None = None) -> int:
                     toast, toast_until = f"ACTIVE: {av0.name}", t + 4
                     audio.play("blip")
                 elif event.key == pygame.K_e and vessels:
-                    # dock: chaser = active vessel, target = nearest in envelope
+                    # rendezvous: pay the velocity match, then FLY the
+                    # terminal approach (prox-ops scene)
                     av0 = vessels[active_idx % len(vessels)]
                     best_tgt, best_cost = None, float("inf")
                     for other in vessels:
-                        c = av0.rendezvous_cost(other, t)
+                        c = av0.rendezvous_cost(other, t, include_prox=False)
                         if c is not None and c < best_cost:
                             best_tgt, best_cost = other, c
                     if best_tgt is None:
                         toast = ("no dock target within 100 km of "
-                                 f"{av0.name}")
+                                 f"{av0.name} — see NAV for range")
                         toast_until = t + 5
-                        audio.play("alarm")
-                    elif av0.dock_with(best_tgt, t):
-                        vessels.remove(av0)
-                        active_idx = vessels.index(best_tgt)
-                        node = None
-                        milestones.add("docked")
-                        toast = (f"DOCKED: {av0.name} -> {best_tgt.name} "
-                                 f"({best_cost:,.0f} m/s rendezvous)")
-                        toast_until = t + 8
-                        audio.play("paid")
-                    else:
-                        toast = (f"dock refused: {best_cost:,.0f} m/s "
-                                 f"rendezvous exceeds propellant")
+                        audio.play("warn")
+                    elif av0.dv_remaining < best_cost + 2.0:
+                        toast = (f"rendezvous needs {best_cost:,.0f} m/s "
+                                 f"— exceeds propellant")
                         toast_until = t + 6
                         audio.play("alarm")
+                    else:
+                        av0._pay_dv(best_cost)
+                        body_p = tree.body(av0.frame_id)
+                        a_t = max(abs(best_tgt.elements.a),
+                                  body_p.radius + 100e3)
+                        budget = min(3.0 * av0.prox_ops_dv,
+                                     max(2.0, av0.dv_remaining))
+                        prox = ProxOps(
+                            n=math.sqrt(body_p.mu / a_t ** 3),
+                            budget_dv=budget)
+                        prox_chaser, prox_target = av0, best_tgt
+                        prox_trail = []
+                        node = None
+                        scene = "proxops"
+                        toast = (f"rendezvous {best_cost:,.0f} m/s paid — "
+                                 f"fly the approach")
+                        toast_until = t + 6
+                        audio.play("burn")
                 elif event.key == pygame.K_u and vessels:
                     av0 = vessels[active_idx % len(vessels)]
                     split = av0.undock_last(t, next_vid)
@@ -1534,38 +1748,124 @@ def run(argv: list[str] | None = None) -> int:
             if live.outcome == "orbit":
                 clock.advance_analytic(t + live.t)
                 t = clock.t
-                mu_e = tree.body("core:earth").mu
-                fv = FleetVessel(tree, "core:earth",
-                                 state_to_elements(live.x, live.y, live.vx,
-                                                   live.vy, t, mu_e),
-                                 live.vessel, f"Vessel-{next_vid}",
-                                 next_vid, t_now=t)
-                next_vid += 1
-                # crew board: the pre-launch assignment when one was made,
-                # else auto-board whoever is free (legacy convenience)
-                aboard_elsewhere = {n for v in vessels for n in v.crew}
-                free = [n for n in crew if n not in aboard_elsewhere]
-                if pending_assigned:
-                    fv.crew = [n for n in pending_crew
-                               if n in free][:fv.crew_capacity]
+                body_a = tree.body(ascent_body_id)
+                el_new = state_to_elements(live.x, live.y, live.vx,
+                                           live.vy, t, body_a.mu)
+                if ascent_av is not None:
+                    # field relaunch: the SAME vessel returns to orbit
+                    ascent_av.elements = el_new
+                    ascent_av.landed_at = None
+                    ascent_av._legs_t0 = -1.0
+                    toast = (f"{ascent_av.name} BACK IN ORBIT — "
+                             f"{ascent_av.dv_remaining:,.0f} m/s remains")
+                    toast_until = t + 8.0
                 else:
-                    fv.crew = free[:fv.crew_capacity]
-                pending_crew, pending_assigned = [], False
-                vessels.append(fv)
-                active_idx = len(vessels) - 1
-                milestones.add("orbited")
-                apply_crew_bonuses(fv, crew)
-                crewed = f" — crew: {', '.join(fv.crew)}" if fv.crew else ""
-                toast = (f"{fv.name} IN ORBIT — "
-                         f"{fv.dv_remaining:,.0f} m/s remaining{crewed}")
-                toast_until = t + 10.0
-                focus_idx = 0
+                    fv = FleetVessel(tree, "core:earth", el_new,
+                                     live.vessel, f"Vessel-{next_vid}",
+                                     next_vid, t_now=t)
+                    next_vid += 1
+                    # crew board: the pre-launch assignment when one was
+                    # made, else auto-board whoever is free
+                    aboard_elsewhere = {n for v in vessels for n in v.crew}
+                    free = [n for n in crew if n not in aboard_elsewhere]
+                    if pending_assigned:
+                        fv.crew = [n for n in pending_crew
+                                   if n in free][:fv.crew_capacity]
+                    else:
+                        fv.crew = free[:fv.crew_capacity]
+                    pending_crew, pending_assigned = [], False
+                    vessels.append(fv)
+                    active_idx = len(vessels) - 1
+                    milestones.add("orbited")
+                    apply_crew_bonuses(fv, crew)
+                    crewed = (f" — crew: {', '.join(fv.crew)}"
+                              if fv.crew else "")
+                    toast = (f"{fv.name} IN ORBIT — "
+                             f"{fv.dv_remaining:,.0f} m/s remaining{crewed}")
+                    toast_until = t + 10.0
                 audio.play("paid")
+                focus_idx = 0
             else:
-                toast = "LOSS OF VEHICLE — funds spent, vessel destroyed"
+                if ascent_av is not None:
+                    for cn in list(ascent_av.crew):
+                        crew.pop(cn, None)
+                    if ascent_av in vessels:
+                        vessels.remove(ascent_av)
+                    active_idx = 0
+                    toast = (f"{ascent_av.name} LOST ON ASCENT — vehicle "
+                             f"and crew gone")
+                else:
+                    toast = "LOSS OF VEHICLE — funds spent, vessel destroyed"
                 toast_until = t + 8.0
                 audio.play("alarm")
             live = None
+            ascent_av = None
+            ascent_body_id = "core:earth"
+            scene = "flight"
+
+        if descent_done and descent is not None:
+            if descent.outcome == "landed" and descent_av is not None:
+                clock.advance_analytic(t + descent.coast_s + descent.t)
+                t = clock.t
+                sid = descent.site_id
+                site = SITES[sid]
+                descent_av.finalize_landing(sid)
+                burn_glow = 0.8
+                msg = (f"TOUCHDOWN: {site['name']} at "
+                       f"{descent.td_speed:,.1f} m/s")
+                if sid not in visited_surface:
+                    visited_surface.add(sid)
+                    sci = site["science"] * science_multiplier(descent_av,
+                                                               crew)
+                    research.earn_science(sci)
+                    research.earn_eng_data(sci * 0.3)
+                    msg += f"  +{sci:.0f} science"
+                toast, toast_until = msg, t + 10
+                audio.play("soi")
+            elif descent_av is not None:
+                lost_names = list(descent_av.crew)
+                for cn in lost_names:
+                    crew.pop(cn, None)
+                if descent_av in vessels:
+                    vessels.remove(descent_av)
+                active_idx = 0
+                node = None
+                toast = (f"{descent_av.name} DESTROYED ON THE SURFACE"
+                         + (f" — crew lost: {', '.join(lost_names)}"
+                            if lost_names else ""))
+                toast_until = t + 12
+                audio.play("alarm")
+            descent = None
+            descent_av = None
+            scene = "flight"
+
+        if prox_done and prox is not None:
+            if (prox.outcome == "captured" and prox_chaser is not None
+                    and prox_target is not None and prox_chaser in vessels
+                    and prox_target in vessels):
+                prox_chaser._pay_dv(min(prox.used_dv,
+                                        prox_chaser.dv_remaining))
+                cname = prox_chaser.name
+                prox_chaser.dock_join(prox_target)
+                vessels.remove(prox_chaser)
+                active_idx = vessels.index(prox_target)
+                node = None
+                milestones.add("docked")
+                toast = (f"DOCKED: {cname} -> {prox_target.name} "
+                         f"({prox.used_dv:,.1f} m/s RCS"
+                         + (f", {prox.bounces} bounce"
+                            + ("s" if prox.bounces != 1 else "")
+                            if prox.bounces else "") + ")")
+                toast_until = t + 8
+                audio.play("paid")
+            else:
+                if prox_chaser is not None:
+                    prox_chaser._pay_dv(min(prox.used_dv,
+                                            prox_chaser.dv_remaining))
+                toast = "approach aborted — vessels hold station"
+                toast_until = t + 6
+            prox = None
+            prox_chaser = prox_target = None
             scene = "flight"
 
         # cut-to-black fade-in on every scene change (no hard cuts)
@@ -1604,15 +1904,18 @@ def run(argv: list[str] | None = None) -> int:
                                    else "alarm")
                         break
 
-            # ---- draw: sky fades to space with air density ----
+            # ---- draw: sky fades to space with THIS body's air density ----
             screen.fill((6, 8, 14))
             nebula.draw(screen, None)
-            rho_n = min(1.0, atmo_density("core:earth",
-                                          max(live.h, 0.0)) / 1.225)
+            rho0 = atmo_density(live.body_id, 0.0)
+            rho_n = (min(1.0, atmo_density(live.body_id, max(live.h, 0.0))
+                         / rho0) if rho0 > 0.0 else 0.0)
             sky_a = int(255.0 * rho_n ** 0.35)
             if sky_a > 2:
                 sky_grad.set_alpha(sky_a)
                 screen.blit(sky_grad, (0, 0))
+            elif rho0 <= 0.0:
+                starfield.draw(screen, cam)
 
             px_per_m = max(0.0022, 0.26 * 1500.0 / (1500.0 + live.h))
             rocket_y = int(size[1] * 0.62)
@@ -1640,10 +1943,12 @@ def run(argv: list[str] | None = None) -> int:
             downrange = pad_ang * live.radius
             pad_x = size[0] // 2 - int(downrange * px_per_m)
             if ground_y < size[1] + 600:
-                pygame.draw.rect(screen, (28, 46, 34),
+                pygame.draw.rect(screen,
+                                 _GROUND_COLORS.get(live.body_id,
+                                                    (60, 62, 68)),
                                  (0, min(ground_y, size[1]), size[0],
                                   max(0, size[1] - ground_y) + 4))
-                if -300 < pad_x < size[0] + 300:
+                if ascent_av is None and -300 < pad_x < size[0] + 300:
                     pygame.draw.rect(screen, (70, 74, 82),
                                      (pad_x - 52, ground_y - 6, 104, 8))
                     pygame.draw.rect(screen, (96, 60, 48),
@@ -1729,6 +2034,262 @@ def run(argv: list[str] | None = None) -> int:
                 "arrows pitch (manual)   P autopilot   C circularize   "
                 "./, warp   ESC revert (T+20s)",
                 color=theme.COLORS["text_dim"], font="small", shadow=False)
+            screen.blit(vig, (0, 0))
+            apply_fade()
+            pygame.display.flip()
+            frame_count += 1
+            if args.frames and frame_count >= args.frames:
+                running = False
+            continue
+
+        if scene == "descent" and descent is not None:
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]:
+                descent.throttle_cmd = min(1.0, descent.throttle_cmd
+                                           + 0.9 * real_dt)
+                descent.auto = False
+            if keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL]:
+                descent.throttle_cmd = max(0.0, descent.throttle_cmd
+                                           - 0.9 * real_dt)
+                descent.auto = False
+            if descent.outcome is None:
+                descent_acc += real_dt * descent_warp
+                n_steps = min(int(descent_acc / 0.02), 4000)
+                descent_acc -= n_steps * 0.02
+                for _ in range(n_steps):
+                    descent.step(0.02)
+                    if descent.outcome is not None:
+                        audio.play("soi" if descent.outcome == "landed"
+                                   else "alarm")
+                        break
+
+            # ---- draw: this body's sky, seeded terrain, the lander ----
+            screen.fill((6, 8, 14))
+            nebula.draw(screen, None)
+            site_d = SITES[descent.site_id]
+            gcol = _GROUND_COLORS.get(site_d["body"], (60, 62, 68))
+            rho0 = atmo_density(site_d["body"], 0.0)
+            if rho0 > 0.0:
+                hz = pygame.Surface((size[0], size[1]), pygame.SRCALPHA)
+                a_sky = int(120.0 * min(
+                    1.0, atmo_density(site_d["body"],
+                                      max(descent.h, 0.0)) / rho0) ** 0.4)
+                hz.fill((gcol[0] + 60, gcol[1] + 50, gcol[2] + 40, a_sky))
+                screen.blit(hz, (0, 0))
+            else:
+                starfield.draw(screen, cam)
+
+            ppm_d = max(0.004, 0.30 * 900.0 / (900.0 + descent.h))
+            dstack = [[descent.vessel.rows[i].part_id for i in st]
+                      for st in descent.vessel.stage_plan]
+            dspr0 = vessel_sprite(db, dstack)
+            ds = max(0.30, 900.0 / (900.0 + 1.5 * descent.h))
+            dkey = (len(descent.vessel.stage_plan), round(ds, 2))
+            if dkey not in rot_cache:
+                if len(rot_cache) > 160:
+                    rot_cache.clear()
+                rot_cache[dkey] = pygame.transform.rotozoom(dspr0, 0.0, ds)
+            dspr = rot_cache[dkey]
+            drx = size[0] // 2 - dspr.get_width() // 2
+            dry = int(size[1] * 0.40) - dspr.get_height() // 2
+            ground_y = (dry + dspr.get_height()
+                        + int(max(descent.h, 0.0) * ppm_d))
+            if ground_y < size[1] + 800:
+                pygame.draw.rect(screen, gcol,
+                                 (0, min(ground_y, size[1]), size[0],
+                                  max(0, size[1] - ground_y) + 4))
+                # seeded ridge line scrolls with downrange drift
+                seed_d = sum(ord(c) for c in descent.site_id)
+                off = int(descent.downrange * ppm_d)
+                if ground_y < size[1] + 40:
+                    pts = []
+                    for sx in range(0, size[0] + 16, 16):
+                        k = (sx + off) // 16
+                        hgt = ((seed_d * 73 + k * 137) % 23) - 11
+                        pts.append((sx, ground_y - 4 + hgt // 2))
+                    pygame.draw.lines(screen, tuple(
+                        min(255, c + 24) for c in gcol), False, pts, 2)
+                # LZ beacon where the descent began (downrange zero)
+                lz_x = size[0] // 2 - off
+                if -200 < lz_x < size[0] + 200 and ground_y < size[1] + 30:
+                    pygame.draw.line(screen, theme.COLORS["gold"],
+                                     (lz_x, ground_y - 18),
+                                     (lz_x, ground_y - 2), 2)
+            screen.blit(dspr, (drx, dry))
+            if descent.throttle_eff > 0.0 and descent.outcome is None:
+                particles.emit_burn(size[0] // 2,
+                                    dry + dspr.get_height() - 2,
+                                    0.0, 1.0,
+                                    n=int(2 + 8 * descent.throttle_eff))
+            particles.update_draw(screen, real_dt)
+            bloom.apply(screen)
+
+            # ---- HUD ----
+            screen.blit(theme.panel(258, 296, "DESCENT"), (16, 16))
+            hx, hy = 32, 52
+            v_h_d = math.sqrt(max(descent.v ** 2 - descent.v_up ** 2, 0.0))
+            ratio = descent.burn_ratio
+            r_col = (theme.COLORS["danger"] if ratio >= 1.0
+                     else theme.COLORS["warn"] if ratio > 0.8
+                     else theme.COLORS["text"])
+            for txt, col in (
+                    (f"ALT   {descent.h:10,.0f} m", theme.COLORS["text"]),
+                    (f"VSPD  {descent.v_up:10,.1f} m/s",
+                     theme.COLORS["danger"] if descent.v_up < -60.0
+                     else theme.COLORS["text"]),
+                    (f"HSPD  {v_h_d:10,.1f} m/s", theme.COLORS["text"]),
+                    (f"TWR   {descent.twr:10,.2f}",
+                     theme.COLORS["danger"] if descent.twr < 1.0
+                     else theme.COLORS["text"]),
+                    (f"STOP  {descent.stop_dist:10,.0f} m", r_col),
+                    (f"PROP  {descent.vessel.active_propellant_kg():10,.0f} kg",
+                     theme.COLORS["good"]),
+                    (f"MODE  {'AUTO' if descent.auto else 'MANUAL':>10s}",
+                     theme.COLORS["gold"] if descent.auto
+                     else theme.COLORS["warn"]),
+                    (f"WARP  {descent_warp:8.0f}x",
+                     theme.COLORS["text_dim"])):
+                theme.draw_text(screen, hx, hy, txt, color=col, font="small")
+                hy += 21
+            theme.draw_text(screen, hx, hy + 2, "THROTTLE",
+                            color=theme.COLORS["text_dim"], font="small")
+            screen.blit(theme.bar(150, 10, descent.throttle_cmd,
+                                  theme.COLORS["warn"]), (hx + 78, hy + 4))
+            theme.draw_text(screen, hx, hy + 22, "BURN LADDER",
+                            color=theme.COLORS["text_dim"], font="small")
+            screen.blit(theme.bar(150, 10, min(1.0, ratio), r_col),
+                        (hx + 96, hy + 24))
+            if 0.85 <= ratio and descent.outcome is None:
+                flash = font_med.render("BURN NOW", True,
+                                        theme.COLORS["danger"])
+                if int(ui_t * 4) % 2 == 0:
+                    screen.blit(flash, (size[0] // 2 - flash.get_width() // 2,
+                                        150))
+            for i, ev_txt in enumerate(descent.events[-3:]):
+                theme.draw_text(screen, 16, size[1] - 96 + i * 20, ev_txt,
+                                color=theme.COLORS["accent"], font="small")
+            if descent.outcome is not None:
+                good_d = descent.outcome == "landed"
+                ttl = font_big.render(
+                    "THE EAGLE HAS LANDED" if good_d else "LOSS OF VEHICLE",
+                    True, theme.COLORS["good"] if good_d
+                    else theme.COLORS["danger"])
+                screen.blit(ttl, (size[0] // 2 - ttl.get_width() // 2, 200))
+                theme.draw_text(screen, size[0] // 2 - 110, 260,
+                                "ENTER to continue",
+                                color=theme.COLORS["gold"])
+            screen.blit(theme.panel(size[0], 26), (0, size[1] - 26))
+            theme.draw_text(
+                screen, 10, size[1] - 21,
+                "SHIFT/CTRL throttle   X/Z max/cut   A autoland (pilot)   "
+                "SPACE stage   ./, warp   keep contact under 3 m/s",
+                color=theme.COLORS["text_dim"], font="small", shadow=False)
+            screen.blit(vig, (0, 0))
+            apply_fade()
+            pygame.display.flip()
+            frame_count += 1
+            if args.frames and frame_count >= args.frames:
+                running = False
+            continue
+
+        if scene == "proxops" and prox is not None:
+            was_open = prox.outcome
+            if prox.outcome is None:
+                for _ in range(4):
+                    prox.step(real_dt / 4.0)
+                prox_trail.append((prox.x, prox.y))
+                if len(prox_trail) > 240:
+                    prox_trail.pop(0)
+                if prox.outcome == "captured" and was_open is None:
+                    audio.play("soi")
+
+            # ---- draw: LVLH radar — target centered, you fly the dot ----
+            screen.fill((4, 6, 12))
+            nebula.draw(screen, None)
+            starfield.draw(screen, cam)
+            cx0, cy0 = size[0] // 2, size[1] // 2 + 20
+            sc = 230.0 / max(prox.range_m, 90.0)
+            for ring_m, lbl in ((50.0, "50 m"), (100.0, ""),
+                                (200.0, "200 m"), (400.0, "")):
+                rp = int(ring_m * sc)
+                if 8 < rp < 520:
+                    pygame.draw.circle(screen, (40, 52, 74), (cx0, cy0), rp, 1)
+                    if lbl:
+                        theme.draw_text(screen, cx0 + rp + 4, cy0 - 8, lbl,
+                                        color=theme.COLORS["text_dim"],
+                                        font="small")
+            cap_ok = prox.speed_ms <= CAPTURE_SPEED_MS
+            cap_px = max(8, int(CAPTURE_RANGE_M * sc))
+            pygame.draw.circle(screen,
+                               theme.COLORS["good"] if cap_ok
+                               else theme.COLORS["danger"],
+                               (cx0, cy0), cap_px, 2)
+            tspr = craft_icon(math.pi / 2.0, 16)
+            screen.blit(tspr, (cx0 - tspr.get_width() // 2,
+                               cy0 - tspr.get_height() // 2))
+            if len(prox_trail) > 2:
+                tpts = [(cx0 + int(py * sc), cy0 - int(px * sc))
+                        for px, py in prox_trail]
+                pygame.draw.lines(screen, (60, 80, 110), False, tpts, 1)
+            chx = cx0 + int(prox.y * sc)
+            chy = cy0 - int(prox.x * sc)
+            cspr2 = craft_icon(math.atan2(-(prox.vx), prox.vy), 14,
+                               burning=False)
+            screen.blit(cspr2, (chx - cspr2.get_width() // 2,
+                                chy - cspr2.get_height() // 2))
+            pygame.draw.line(screen, theme.COLORS["accent"], (chx, chy),
+                             (chx + int(prox.vy * sc * 18),
+                              chy - int(prox.vx * sc * 18)), 1)
+            particles.update_draw(screen, real_dt)
+            bloom.apply(screen)
+
+            # ---- HUD ----
+            screen.blit(theme.panel(258, 236, "PROX-OPS"), (16, 16))
+            hx, hy = 32, 52
+            cl = prox.closing_ms
+            for txt, col in (
+                    (f"RANGE  {prox.range_m:9,.0f} m", theme.COLORS["text"]),
+                    (f"SPEED  {prox.speed_ms:9,.2f} m/s",
+                     theme.COLORS["good"] if cap_ok
+                     else theme.COLORS["danger"]),
+                    (f"CLOSE  {cl:9,.2f} m/s",
+                     theme.COLORS["good"] if cl > 0
+                     else theme.COLORS["warn"]),
+                    (f"TARGET {prox_target.name if prox_target else '?':>9s}",
+                     theme.COLORS["accent"]),
+                    (f"BOUNCE {prox.bounces:9d}",
+                     theme.COLORS["warn"] if prox.bounces
+                     else theme.COLORS["text_dim"]),
+                    (f"MODE   {'AUTO' if prox.auto else 'MANUAL':>9s}",
+                     theme.COLORS["gold"] if prox.auto
+                     else theme.COLORS["warn"])):
+                theme.draw_text(screen, hx, hy, txt, color=col, font="small")
+                hy += 21
+            theme.draw_text(screen, hx, hy + 2, "RCS",
+                            color=theme.COLORS["text_dim"], font="small")
+            screen.blit(theme.bar(170, 10,
+                                  prox.dv_left / max(prox.budget_dv, 0.1),
+                                  theme.COLORS["accent"]), (hx + 36, hy + 4))
+            theme.draw_text(screen, hx, hy + 22,
+                            f"{prox.dv_left:,.1f} / {prox.budget_dv:,.1f} m/s",
+                            color=theme.COLORS["text_dim"], font="small")
+            for i, ev_txt in enumerate(prox.events[-3:]):
+                theme.draw_text(screen, 16, size[1] - 96 + i * 20, ev_txt,
+                                color=theme.COLORS["accent"], font="small")
+            if prox.outcome == "captured":
+                ttl = font_big.render("SOFT CAPTURE", True,
+                                      theme.COLORS["good"])
+                screen.blit(ttl, (size[0] // 2 - ttl.get_width() // 2, 150))
+                theme.draw_text(screen, size[0] // 2 - 110, 210,
+                                "ENTER — hard dock",
+                                color=theme.COLORS["gold"])
+            screen.blit(theme.panel(size[0], 26), (0, size[1] - 26))
+            theme.draw_text(
+                screen, 10, size[1] - 21,
+                "arrows RCS pulses (SHIFT = 2 m/s)   A approach autopilot "
+                "(pilot)   capture: inside the circle under 2 m/s   "
+                "ESC abort", color=theme.COLORS["text_dim"], font="small",
+                shadow=False)
             screen.blit(vig, (0, 0))
             apply_fade()
             pygame.display.flip()

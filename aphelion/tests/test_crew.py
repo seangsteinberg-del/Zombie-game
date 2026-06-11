@@ -84,10 +84,19 @@ def test_reap_over_limit_removes_everywhere(world):
 def test_venus_demands_the_gondola(world):
     db, tree = world
     from aphelion.game.sites import SITES
+    from aphelion.sim.orbits import transfers as tr
+    from aphelion.sim.orbits.kepler import state_to_elements
     site = SITES["site:venus_cloud"]
     fv = _vessel_with_crew(db, tree, [])
     fv.frame_id = "core:venus"
+    venus = tree.body("core:venus")
+    r_park = venus.radius + 150e3          # the landing gate wants LOW orbit
+    fv.elements = state_to_elements(r_park, 0.0, 0.0,
+                                    tr.circular_speed(venus.mu, r_park),
+                                    0.0, venus.mu)
     assert fv.land_at("site:venus_cloud", site, 0.0) is False  # no gondola
+    ok, why = fv.can_land(site, 0.0)
+    assert not ok and "gondola" in why
     fv.vessel.rows.append(Vessel.fueled_row(db, "core:gondola_havoc"))
     fv.vessel.stage_plan[-1].append(len(fv.vessel.rows) - 1)
     assert fv.land_at("site:venus_cloud", site, 0.0) is True

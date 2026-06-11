@@ -169,14 +169,34 @@ class FleetVessel:
 
     # -- surface operations (01 Δv map: landing/ascent paid in propellant) ---
 
+    LANDING_GATE_PERI_M = 300e3   # must be in a LOW orbit to begin descent
+
+    def can_land(self, site: dict, t: float) -> tuple[bool, str]:
+        """Landing pre-flight: right body, right hardware, and a REAL
+        parking orbit (no more 'landing' off a hyperbolic flyby for the
+        same fixed dv — establish low orbit first)."""
+        if self.landed_at is not None:
+            return False, "already on the surface"
+        if self.frame_id != site["body"]:
+            return False, f"not in {site['body'].split(':')[1]} orbit"
+        need = site.get("requires_part")
+        if need and not any(r.part_id == need for r in self.vessel.rows):
+            return False, f"requires {need.split(':')[1]} aboard"
+        body = self.tree.body(self.frame_id)
+        if self.elements.alpha <= 0.0:
+            return False, "on an escape trajectory — capture first"
+        peri_alt = self.elements.periapsis - body.radius
+        if peri_alt > self.LANDING_GATE_PERI_M:
+            return False, (f"periapsis {peri_alt / 1e3:,.0f} km — lower it "
+                           f"below {self.LANDING_GATE_PERI_M / 1e3:,.0f} km")
+        return True, ""
+
     def land_at(self, site_id: str, site: dict, t: float) -> bool:
         """Descend to a surface site. Pays the site's REAL landing dv from
         the tanks (aero sites pay only the propulsive terminal phase).
         Exotic sites demand their hardware (07): no gondola, no Venus."""
-        if self.landed_at is not None or self.frame_id != site["body"]:
-            return False
-        need = site.get("requires_part")
-        if need and not any(r.part_id == need for r in self.vessel.rows):
+        ok, _ = self.can_land(site, t)
+        if not ok:
             return False
         if not self._pay_dv(site["land_dv"]):
             return False
@@ -184,6 +204,13 @@ class FleetVessel:
         self._legs_t0 = -1.0
         self.legs = []
         return True
+
+    def finalize_landing(self, site_id: str) -> None:
+        """Called by the FLOWN descent on touchdown: the propellant was
+        already drained by the live integrator, so just plant the flag."""
+        self.landed_at = site_id
+        self._legs_t0 = -1.0
+        self.legs = []
 
     def relaunch(self, site: dict, t: float) -> bool:
         """Ascend from the surface back to a 100 km circular parking orbit,
@@ -206,10 +233,13 @@ class FleetVessel:
     RENDEZVOUS_ENVELOPE_M = 100e3       # below rails resolution: prox-ops
     PROX_OPS_DV = 20.0                  # terminal docking budget, m/s
 
-    def rendezvous_cost(self, other: "FleetVessel", t: float) -> float | None:
+    def rendezvous_cost(self, other: "FleetVessel", t: float,
+                        include_prox: bool = True) -> float | None:
         """The dv this vessel (chaser) pays to match `other` and dock, or
         None when out of the rendezvous envelope (different frame, landed,
-        or farther than the prox-ops gameplay radius)."""
+        or farther than the prox-ops gameplay radius). With
+        include_prox=False, only the velocity-match part is quoted (the
+        FLOWN prox-ops approach pays its own terminal RCS)."""
         if (other is self or self.frame_id != other.frame_id
                 or self.landed_at is not None or other.landed_at is not None):
             return None
@@ -217,26 +247,36 @@ class FleetVessel:
         ox, oy, ovx, ovy = other.state(t)
         if math.hypot(rx - ox, ry - oy) > self.RENDEZVOUS_ENVELOPE_M:
             return None
-        return math.hypot(vx - ovx, vy - ovy) + self.prox_ops_dv
+        base = math.hypot(vx - ovx, vy - ovy)
+        return base + (self.prox_ops_dv if include_prox else 0.0)
 
-    def dock_with(self, other: "FleetVessel", t: float) -> bool:
-        """Chaser docks to `other` (the primary keeps name and orbit).
-        Pays the rendezvous dv from THIS vessel's tanks, then merges rows;
-        the caller removes the chaser from the fleet."""
+    def dock_join(self, other: "FleetVessel") -> None:
+        """Merge this (chaser) into `other` with no further dv charge —
+        the approach was already paid (instant dock or flown prox-ops).
+        The caller removes the chaser from the fleet."""
         from aphelion.sim.vessels.docking import dock
-        cost = self.rendezvous_cost(other, t)
-        if cost is None or not self._pay_dv(cost):
-            return False
         other.dock_joints.append(len(other.vessel.rows))
         dock(other.vessel, self.vessel)
         other.crew.extend(self.crew)
         self.crew = []
         other._legs_t0 = -1.0
+
+    def dock_with(self, other: "FleetVessel", t: float) -> bool:
+        """Chaser docks to `other` (the primary keeps name and orbit).
+        Pays the rendezvous dv from THIS vessel's tanks, then merges rows;
+        the caller removes the chaser from the fleet."""
+        cost = self.rendezvous_cost(other, t)
+        if cost is None or not self._pay_dv(cost):
+            return False
+        self.dock_join(other)
         return True
+
+    UNDOCK_SEP_MS = 1.5             # mechanical spring separation, m/s
 
     def undock_last(self, t: float, new_vid: int) -> "FleetVessel | None":
         """Split the most recent docked stack back off; returns the new
-        vessel (same orbit, slight phase) or None if nothing is docked."""
+        vessel on a VISIBLY diverging orbit (spring separation imparts a
+        real radial impulse — the two icons no longer overlap forever)."""
         from aphelion.sim.vessels.docking import undock
         if not self.dock_joints:
             return None
@@ -246,7 +286,14 @@ class FleetVessel:
             return None
         split = undock(self.vessel, going)
         self._legs_t0 = -1.0
-        return FleetVessel(self.tree, self.frame_id, self.elements, split,
+        rx, ry, vx, vy = self.state(t)
+        r = math.hypot(rx, ry) or 1.0
+        body = self.tree.body(self.frame_id)
+        el_split = state_to_elements(rx, ry,
+                                     vx + self.UNDOCK_SEP_MS * rx / r,
+                                     vy + self.UNDOCK_SEP_MS * ry / r,
+                                     t, body.mu)
+        return FleetVessel(self.tree, self.frame_id, el_split, split,
                            f"{self.name}-B", new_vid, t_now=t)
 
     def crossfeed(self) -> float:
