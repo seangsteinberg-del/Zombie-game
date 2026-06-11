@@ -2653,11 +2653,12 @@ def run(argv: list[str] | None = None) -> int:
             screen.blit(theme.bar(150, 10, min(1.0, ratio), r_col),
                         (hx + 96, hy + 24))
             if 0.85 <= ratio and descent.outcome is None:
-                flash = font_med.render("BURN NOW", True,
-                                        theme.COLORS["danger"])
+                burn_now = font_med.render("BURN NOW", True,
+                                           theme.COLORS["danger"])
                 if int(ui_t * 4) % 2 == 0:
-                    screen.blit(flash, (size[0] // 2 - flash.get_width() // 2,
-                                        150))
+                    screen.blit(burn_now,
+                                (size[0] // 2 - burn_now.get_width() // 2,
+                                 150))
             for i, ev_txt in enumerate(descent.events[-3:]):
                 theme.draw_text(screen, 16, size[1] - 96 + i * 20, ev_txt,
                                 color=theme.COLORS["accent"], font="small")
