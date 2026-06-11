@@ -36,22 +36,24 @@ def test_starter_network_shape():
 
 
 def test_peary_ice_to_lox_chain_runs():
-    """Drill + electrolyzer on lunar ice: water flows, oxygen banks, the
-    same ledger machinery the Phase-3 acceptance proved."""
+    """Tent miner + electrolyzer on lunar ice: water flows, oxygen banks,
+    the same ledger machinery the Phase-3 acceptance proved — at the
+    canonical 04 rates (tent 800 kg H2O/day, RX-01 222 kg O2/day)."""
     base = BaseSite("Peary Base", 0.0, RngRegistry(7), site_id="site:peary")
     program = Program(funds=500e6)
     research = ResearchState()
+    research.unlocked.update({"core:tech_is05_polar_ice_mining",
+                              "core:tech_is03_water_electrolysis"})
     ok, _ = base.build("drill_ice", 0.0, research, program)
     assert ok
     ok, _ = base.build("electrolyzer", 0.0, research, program)
     assert ok
-    ok, _ = base.build("solar_array", 0.0, research, program)   # power it
-    assert ok
-    ok, _ = base.build("solar_array", 0.0, research, program)
-    assert ok
-    base.advance(20.0 * DAY)
+    for _ in range(4):                       # 86+58 kW at 0.85 site solar
+        ok, _ = base.build("solar_array", 0.0, research, program)
+        assert ok
+    base.advance(30.0 * DAY)
     assert base.net.buffers["Oxygen"].level > 5_000.0
-    assert program.funds == pytest.approx(500e6 - 38e6)
+    assert program.funds == pytest.approx(500e6 - 50e6)
 
 
 def test_reactor_is_tech_gated():
@@ -68,7 +70,9 @@ def test_reactor_is_tech_gated():
 def test_insufficient_funds_refused():
     base = BaseSite("Peary Base", 0.0, RngRegistry(7))
     program = Program(funds=1e6)
-    ok, msg = base.build("drill_ice", 0.0, ResearchState(), program)
+    rs = ResearchState()
+    rs.unlocked.add("core:tech_is05_polar_ice_mining")
+    ok, msg = base.build("drill_ice", 0.0, rs, program)
     assert not ok and "funds" in msg
     assert program.funds == 1e6
 
@@ -87,9 +91,15 @@ def test_sabatier_chain_on_mars():
                     site_id="site:jezero")
     program = Program(funds=900e6)
     research = ResearchState()
+    research.unlocked.update({"core:tech_is05_polar_ice_mining",
+                              "core:tech_is03_water_electrolysis",
+                              "core:tech_is06_mars_atmo_processing",
+                              "core:tech_is04_sabatier"})
     for key in ("drill_ice", "electrolyzer", "co2_intake", "sabatier",
                 "solar_array", "solar_array", "solar_array", "solar_array",
-                "solar_array", "solar_array"):
+                "solar_array", "solar_array", "solar_array", "solar_array",
+                "solar_array", "solar_array", "battery_pack",
+                "battery_pack"):
         ok, msg = base.build(key, 0.0, research, program)
         assert ok, msg
     base.advance(30.0 * DAY)

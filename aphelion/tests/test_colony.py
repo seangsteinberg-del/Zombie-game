@@ -60,7 +60,9 @@ def test_resident_engineer_speeds_repairs_and_labor():
     b.crew = ["J"]
     assert b.engineer_skill(crew) == 2
     assert b.repair_turnaround(crew) < BaseSite.REPAIR_TURNAROUND
-    b.build("drill_ice", 0.0, ResearchState(), Program(funds=1e9))
+    rs = ResearchState()
+    rs.unlocked.add("core:tech_is05_polar_ice_mining")
+    b.build("drill_ice", 0.0, rs, Program(funds=1e9))
     b.apply_crew_effects(crew)
     drill = next(m for m in b.net.modules
                  if m.module_id.startswith("drill_ice"))
@@ -101,7 +103,9 @@ def test_battery_buffer_exists_and_pack_extends_it():
 
 def test_alert_reports_failures():
     b = _base()
-    b.build("drill_ice", 0.0, ResearchState(), Program(funds=1e9))
+    rs = ResearchState()
+    rs.unlocked.add("core:tech_is05_polar_ice_mining")
+    b.build("drill_ice", 0.0, rs, Program(funds=1e9))
     drill = next(m for m in b.net.modules
                  if m.module_id.startswith("drill_ice"))
     drill.state = "FAILED"

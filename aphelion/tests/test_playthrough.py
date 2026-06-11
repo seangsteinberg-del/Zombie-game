@@ -69,9 +69,14 @@ def test_campaign_is_completable_end_to_end():
     t += DAY
     sweep(program, S, t)
 
-    # industrialize: drill + electrolyzer + power, run a year, bank LOX
-    for key in ("drill_ice", "electrolyzer", "solar_array", "solar_array",
-                "solar_array", "tank_farm", "tank_farm"):
+    # industrialize: tent miner + 2 electrolyzers + power, run a year,
+    # bank LOX (canon rates: PEM 222 kg O2/day each, 04 RX-01)
+    research.unlocked.update({"core:tech_is05_polar_ice_mining",
+                              "core:tech_is03_water_electrolysis"})
+    for key in ("drill_ice", "electrolyzer", "electrolyzer",
+                "solar_array", "solar_array", "solar_array", "solar_array",
+                "solar_array", "solar_array", "solar_array",
+                "tank_farm", "tank_farm", "tank_farm"):
         ok, msg = base.build(key, t, research, program)
         assert ok, msg
     t += 365.0 * DAY
@@ -103,7 +108,7 @@ def test_campaign_is_completable_end_to_end():
     assert act_unlocked(4, program), "Act III should be complete"
 
     # -- Act IV: the torch and the stars --------------------------------------
-    research.unlocked.add("core:tech_fusion_torch")
+    research.unlocked.add("core:tech_pr22_fusion_torch")
     mu_s = tree.body("core:sun").mu
     r_s = 1.5e11
     v_esc = (2.0 * mu_s / r_s) ** 0.5
