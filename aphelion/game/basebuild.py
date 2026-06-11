@@ -49,7 +49,7 @@ CATALOG: dict[str, dict] = {
         "primary": ("Methane", 0.05), "inputs": {},
         "outputs": {"Methane": 1.0},
         "mtbf_d": 80.0, "kinds": ("methane_lake",),
-        "tech": "core:tech_titan_ops",
+        "tech": "core:tech_hb07_titan_outpost",
     },
     "solar_array": {
         "name": "Solar array wing", "price_m": 6.0, "power_kw": -40.0,
@@ -60,7 +60,7 @@ CATALOG: dict[str, dict] = {
     "reactor_100": {
         "name": "Fission reactor (100 kWe)", "price_m": 40.0,
         "power_kw": -100.0, "primary": None, "inputs": {}, "outputs": {},
-        "mtbf_d": None, "kinds": "*", "tech": "core:tech_fission_100kwe",
+        "mtbf_d": None, "kinds": "*", "tech": "core:tech_pw05_fission_surface",
         "heat_kw": 250.0,           # thermal waste (09 H-0)
     },
     "battery_pack": {

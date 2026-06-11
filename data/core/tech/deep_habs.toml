@@ -1,7 +1,0 @@
-id      = "core:tech_deep_habs"
-tier    = "T2"
-name    = "Deep-space habitats"
-prereqs = ["core:tech_transit_habs", "core:tech_closed_loop_eclss"]
-unlocks = ["core:hab_pollux"]
-cost_sci = 900.0
-cost_ed  = 700.0

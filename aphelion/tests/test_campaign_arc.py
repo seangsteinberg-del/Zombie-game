@@ -100,6 +100,6 @@ def test_all_contract_ids_unique_and_tech_refs_valid(world):
     db, _ = world
     ids = [s.cid for s in CONTRACTS]
     assert len(ids) == len(set(ids))
-    assert "core:tech_fusion_torch" in db.tech
+    assert "core:tech_pr22_fusion_torch" in db.tech
     assert "core:probe_longshot" in db.parts
-    assert "core:tech_precursor" in db.tech
+    assert "core:tech_sh09_interstellar_precursor" in db.tech

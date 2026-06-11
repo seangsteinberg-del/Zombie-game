@@ -29,15 +29,20 @@ def test_catalog_lists_full_parts_pack(db):
 
 def test_research_gating_in_builder(db):
     rs = ResearchState()
+    rs.bootstrap(db)
     b = Builder(db, rs)
-    assert b.locked("core:engine_ml111")          # gated by isru_large
+    assert b.locked("core:engine_ml111")          # gated by pr13
     assert not b.locked("core:engine_m733")
     assert b.select("core:engine_ml111")
     b.add()
     assert b.stack == [[]]                        # refused
     rs.earn_science(10_000.0)
     rs.earn_eng_data(10_000.0)
-    rs.unlock(db, "core:tech_isru_large")
+    for nid in ("core:tech_pr02_reusable_methalox",
+                "core:tech_is03_water_electrolysis",
+                "core:tech_is04_sabatier",
+                "core:tech_pr13_isru_refuelable_landers"):
+        assert rs.unlock(db, nid), nid
     b.add()
     assert b.stack == [["core:engine_ml111"]]
 

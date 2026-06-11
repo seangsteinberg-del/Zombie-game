@@ -60,7 +60,7 @@ def test_reactor_is_tech_gated():
     research = ResearchState()
     ok, msg = base.build("reactor_100", 0.0, research, program)
     assert not ok and "research" in msg
-    research.unlocked.add("core:tech_fission_100kwe")
+    research.unlocked.add("core:tech_pw05_fission_surface")
     ok, _ = base.build("reactor_100", 0.0, research, program)
     assert ok
 

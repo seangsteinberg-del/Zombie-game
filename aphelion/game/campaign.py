@@ -92,7 +92,7 @@ CONTRACTS: tuple[Spec, ...] = (
          lambda S: _base_at(S, "site:titan_shore")),
     # -- Act IV: the way out --------------------------------------------------
     Spec("c_torch", "Research the fusion torch", 400.0, 20.0, 4,
-         lambda S: "core:tech_fusion_torch" in S["research"].unlocked),
+         lambda S: "core:tech_pr22_fusion_torch" in S["research"].unlocked),
     Spec("c_precursor", "LAUNCH THE INTERSTELLAR PRECURSOR", 2_000.0, 30.0, 4,
          _carrying_precursor_hyperbolic),
 )

@@ -1,9 +1,0 @@
-id      = "core:tech_autonomous_factories"
-tier    = "T3"
-name    = "Autonomous factory complexes (A3/A4)"
-prereqs = ["core:tech_wafer_fab"]
-unlocks = []
-cost_sci = 1500.0
-cost_ed  = 1800.0
-
-

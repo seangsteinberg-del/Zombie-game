@@ -85,8 +85,16 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
                 } for c in program.contracts],
             },
             "research": {
-                "science": research.science, "eng_data": research.eng_data,
+                "science": research.science,
+                "ed": dict(research.ed),
+                "ed_novel": dict(research.ed_novel),
                 "unlocked": sorted(research.unlocked),
+                "discoveries": sorted(research.discoveries),
+                "tranches": dict(research.tranches),
+                "pools": dict(research.pools),
+                "sci_milestones": sorted(research.milestones),
+                "type_proven": sorted(research.type_proven),
+                "type_built": sorted(research.type_built),
                 "history": [list(h) for h in research.history],
             },
             "crew": {name: {"msv": m.dose.accumulated_msv, "role": m.role,
@@ -131,10 +139,29 @@ def restore_campaign(save: dict, db, tree):
     program.history = [tuple(h) for h in c["program"]["history"]]
     for cd in c["program"]["contracts"]:
         program.offer(Contract(**cd))
-    research = ResearchState(
-        science=c["research"]["science"], eng_data=c["research"]["eng_data"],
-        unlocked=set(c["research"]["unlocked"]),
-        history=[tuple(h) for h in c["research"]["history"]])
+    r = c["research"]
+    if "ed" in r:
+        research = ResearchState(
+            science=r["science"], ed=dict(r["ed"]),
+            ed_novel=dict(r.get("ed_novel", {})),
+            unlocked=set(r["unlocked"]),
+            discoveries=set(r.get("discoveries", [])),
+            tranches=dict(r.get("tranches", {})),
+            pools=dict(r.get("pools", {})),
+            milestones=set(r.get("sci_milestones", [])),
+            type_proven=set(r.get("type_proven", [])),
+            type_built=set(r.get("type_built", [])),
+            history=[tuple(h) for h in r["history"]])
+    else:
+        # legacy scalar-ED save: migrate ids via LEGACY_TECH_MAP and seed
+        # every family at the old scalar (generous, but old values were small)
+        from aphelion.sim.research import FAMILIES, LEGACY_TECH_MAP
+        research = ResearchState(
+            science=r["science"],
+            ed={f: float(r.get("eng_data", 0.0)) for f in FAMILIES},
+            unlocked={LEGACY_TECH_MAP.get(u, u) for u in r["unlocked"]},
+            history=[tuple(h) for h in r["history"]])
+    research.bootstrap(db)      # T0 start nodes are always unlocked
     crew = {}
     for name, cd in c["crew"].items():
         if isinstance(cd, dict):

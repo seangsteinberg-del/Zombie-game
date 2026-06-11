@@ -61,39 +61,59 @@ def test_physics_forces_local_autonomy_at_mars(system):
 
 def test_tech_tree_loads_and_gates(db):
     rs = ResearchState()
-    assert not rs.can_unlock(db, "core:tech_ntr")        # no funds, no prereqs
+    rs.bootstrap(db)
+    ntr = "core:tech_pr09_ntr"
+    assert not rs.can_unlock(db, ntr)            # no funds, no prereqs
     rs.earn_science(5_000.0)
     rs.earn_eng_data(5_000.0)
-    assert not rs.can_unlock(db, "core:tech_ntr")        # prereqs missing
-    assert rs.unlock(db, "core:tech_cryo_depots")
-    assert rs.unlock(db, "core:tech_fission_100kwe")
-    assert rs.can_unlock(db, "core:tech_ntr")
-    assert rs.unlock(db, "core:tech_ntr")
-    assert rs.science == pytest.approx(5_000.0 - 150.0 - 400.0 - 1_200.0)
+    assert not rs.can_unlock(db, ntr)            # prereqs missing
+    assert rs.unlock(db, "core:tech_pr04_cryo_fluid_mgmt")
+    assert rs.unlock(db, "core:tech_pw04_kilopower")
+    assert rs.can_unlock(db, ntr)
+    assert rs.unlock(db, ntr)
+    assert rs.science == pytest.approx(5_000.0 - 150.0 - 450.0 - 700.0)
 
 
 def test_part_gating(db):
     rs = ResearchState()
-    # ML-111 is gated behind large-scale ISRU in the core pack
+    rs.bootstrap(db)
+    # ML-111 is gated behind ISRU-refuelable landers (pr13) in the core pack
     assert not rs.part_available(db, "core:engine_ml111")
     assert rs.part_available(db, "core:engine_m733")     # ungated T1 base
     rs.earn_science(10_000.0)
     rs.earn_eng_data(10_000.0)
-    assert rs.unlock(db, "core:tech_isru_large")
+    for nid in ("core:tech_pr02_reusable_methalox",
+                "core:tech_is03_water_electrolysis", "core:tech_is04_sabatier",
+                "core:tech_pr13_isru_refuelable_landers"):
+        assert rs.unlock(db, nid), nid
     assert rs.part_available(db, "core:engine_ml111")
 
 
 def test_speculative_t4_is_deep(db):
-    """The fusion torch demands the full chain — five unlocks deep."""
+    """The fusion torch demands the full chain — a dozen unlocks and two
+    Discoveries deep, with T4 fog requiring a researched in-category T3
+    node (11 §1.5)."""
     rs = ResearchState()
+    rs.bootstrap(db)
     rs.earn_science(50_000.0)
     rs.earn_eng_data(50_000.0)
-    order = ["core:tech_cryo_depots", "core:tech_fission_100kwe",
-             "core:tech_ntr", "core:tech_isru_large", "core:tech_wafer_fab",
-             "core:tech_autonomous_factories", "core:tech_fusion_torch"]
+    torch = "core:tech_pr22_fusion_torch"
+    order = ["core:tech_pr07_hall_clusters", "core:tech_pw04_kilopower",
+             "core:tech_pw05_fission_surface", "core:tech_pw09_brayton",
+             "core:tech_pw08_megawatt_reactors",
+             "core:tech_pr16_nested_hall",          # T3 PR: reveals T4 PR
+             "core:tech_is01_surface_survey_coring",
+             "core:tech_is10_nea_volatile_capture",
+             "core:tech_is17_strip_optical_mining",
+             "core:tech_is20_he3_kiln", "core:tech_pw12_fusion_plant"]
+    # discovery gates: NEA assay for is10, mare volatiles for is20
+    rs.discoveries.add("core:dsc15_c_type_nea_assay")
+    rs.discoveries.add("core:dsc02_mare_volatile_assay")
     for node in order:
         assert rs.unlock(db, node), node
-    assert db.tech["core:tech_fusion_torch"]["tier"] == "T4"
+    assert rs.unlock(db, torch)
+    assert db.tech[torch]["tier"] == "T4"
+    assert db.tech[torch].get("speculative") is True
 
 
 # ---- the self-sufficiency audit (12 / Foundation) -------------------------------

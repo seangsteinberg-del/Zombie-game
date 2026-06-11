@@ -81,12 +81,53 @@ RECIPE_SCHEMA: dict[str, tuple[bool, Check]] = {
     "energy_kWh_per_t": (True, _num(lo=0.0)),
 }
 
+def _prereq_list(v: Any) -> bool:
+    """Prereq grammar (11 §1): list of AND terms; a nested list is an OR
+    group. Every leaf is an id string."""
+    if not isinstance(v, list):
+        return False
+    for term in v:
+        if isinstance(term, list):
+            if not term or not all(_is_id(x) for x in term):
+                return False
+        elif not _is_id(term):
+            return False
+    return True
+
+
+def _ed_thresholds(v: Any) -> bool:
+    if not isinstance(v, list):
+        return False
+    return all(isinstance(t, dict) and isinstance(t.get("family"), str)
+               and isinstance(t.get("value"), (int, float)) for t in v)
+
+
 TECH_SCHEMA: dict[str, tuple[bool, Check]] = {
     "id": (True, _is_id),
     "tier": (True, lambda v: v in TIERS),
     "name": (True, _string),
-    "prereqs": (True, lambda v: isinstance(v, list)),
+    "category": (False, _string),
+    "prereqs": (True, _prereq_list),
     "unlocks": (True, lambda v: isinstance(v, list)),
+    "grants": (False, lambda v: isinstance(v, list)),
+    "cost_sci": (False, _num(lo=0.0)),
+    "ed_thresholds": (False, _ed_thresholds),
+    "discovery_prereqs": (False, lambda v: isinstance(v, list)),
+    "era": (False, lambda v: isinstance(v, bool)),
+    "speculative": (False, lambda v: isinstance(v, bool)),
+    "anchor": (False, _string),
+}
+
+DISCOVERY_SCHEMA: dict[str, tuple[bool, Check]] = {
+    "id": (True, _is_id),
+    "name": (True, _string),
+    "sci": (True, _num(lo=0.0)),
+    "staged": (True, lambda v: isinstance(v, bool)),
+    "gates": (True, lambda v: isinstance(v, list)),
+    "discounts": (False, lambda v: isinstance(v, list)),
+    "trigger_kind": (True, _string),
+    "body": (True, _is_id),
+    "requirement": (True, _string),
 }
 
 # content-type directory name -> schema
@@ -95,6 +136,7 @@ TYPE_SCHEMAS: dict[str, dict[str, tuple[bool, Check]]] = {
     "parts": PART_SCHEMA,
     "recipes": RECIPE_SCHEMA,
     "tech": TECH_SCHEMA,
+    "discoveries": DISCOVERY_SCHEMA,
 }
 
 RECIPE_MASS_BALANCE_TOL = 0.005     # 0.5 % (05 §3.2 rule)

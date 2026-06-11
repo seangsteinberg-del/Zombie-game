@@ -1,7 +1,0 @@
-id      = "core:tech_transit_habs"
-tier    = "T1"
-name    = "Transit habitats"
-prereqs = []
-unlocks = ["core:hab_castor"]
-cost_sci = 350.0
-cost_ed  = 250.0

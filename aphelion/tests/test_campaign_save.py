@@ -56,7 +56,10 @@ def _campaign(db, tree):
     program = Program(funds=88_000_000.0)
     program.offer(Contract("c1", "Test contract", 1e6, 1e7))
     program.complete(0.0, "c1")
-    research = ResearchState(science=512.0, eng_data=64.0)
+    research = ResearchState(science=512.0,
+                             ed={"Avionics": 64.0, "NTRCores": 12.5},
+                             discoveries={"core:dsc01_lunar_psr_ice"},
+                             pools={"regolith_scoop|moon_nearside": 2})
     crew = {"A": CrewMember("A", "scientist", 3, CrewDose(123.4)),
             "B": CrewMember("B", "engineer", 1, CrewDose(0.5))}
     rng = RngRegistry(99)
@@ -90,6 +93,12 @@ def test_round_trip_exact(tmp_path, world):
         assert row_a.fill == row_b.fill
     assert got["program"].funds == program.funds
     assert got["research"].science == 512.0
+    assert got["research"].ed["Avionics"] == 64.0
+    assert got["research"].ed["NTRCores"] == 12.5
+    assert "core:dsc01_lunar_psr_ice" in got["research"].discoveries
+    assert got["research"].pools["regolith_scoop|moon_nearside"] == 2
+    # T0 start nodes always present after restore
+    assert "core:tech_pr00_flight_proven_stack" in got["research"].unlocked
     assert got["crew"]["A"].dose.accumulated_msv == 123.4
     assert got["crew"]["A"].role == "scientist"
     assert got["crew"]["A"].skill == 3

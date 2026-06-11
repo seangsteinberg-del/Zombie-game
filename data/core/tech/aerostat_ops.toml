@@ -1,7 +1,0 @@
-id      = "core:tech_aerostat_ops"
-tier    = "T2"
-name    = "Aerostat operations (HAVOC)"
-prereqs = ["core:tech_transit_habs"]
-unlocks = ["core:gondola_havoc"]
-cost_sci = 1_100.0
-cost_ed  = 800.0

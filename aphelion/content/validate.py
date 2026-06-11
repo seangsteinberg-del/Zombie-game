@@ -118,17 +118,44 @@ def _validate_parts(db: ContentDB) -> None:
 
 
 def _validate_tech(db: ContentDB) -> None:
+    from aphelion.sim.research import FAMILIES   # canonical family list
+
     tech = db.tech
+    discoveries = db.by_type("discoveries")
     known_ids = set(db.parts) | set(db.recipes) | set(tech)
     for item_id, raw in tech.items():
         src = db.sources[item_id]
         _check_fields("tech", item_id, raw, src)
-        for ref in raw["prereqs"]:
-            if ref not in tech:
-                raise ContentError(f"{src}: {item_id}: unknown prereq {ref!r}")
+        for term in raw["prereqs"]:
+            refs = term if isinstance(term, list) else [term]
+            for ref in refs:
+                if ref not in tech:
+                    raise ContentError(f"{src}: {item_id}: unknown prereq {ref!r}")
         for ref in raw["unlocks"]:
             if ref not in known_ids:
                 raise ContentError(f"{src}: {item_id}: unlocks unknown id {ref!r}")
+        for th in raw.get("ed_thresholds", []):
+            if th["family"] not in FAMILIES:
+                raise ContentError(
+                    f"{src}: {item_id}: unknown ED family {th['family']!r}")
+        for ref in raw.get("discovery_prereqs", []):
+            if ref not in discoveries:
+                raise ContentError(
+                    f"{src}: {item_id}: unknown discovery {ref!r}")
+
+
+def _validate_discoveries(db: ContentDB) -> None:
+    tech = db.tech
+    for item_id, raw in db.by_type("discoveries").items():
+        src = db.sources[item_id]
+        _check_fields("discoveries", item_id, raw, src)
+        for ref in raw["gates"]:
+            if ref not in tech:
+                raise ContentError(f"{src}: {item_id}: gates unknown node {ref!r}")
+        for d in raw.get("discounts", []):
+            if not isinstance(d, dict) or d.get("node") not in tech \
+                    or not isinstance(d.get("frac"), (int, float)):
+                raise ContentError(f"{src}: {item_id}: bad discount {d!r}")
 
 
 def validate(db: ContentDB) -> None:
@@ -136,3 +163,4 @@ def validate(db: ContentDB) -> None:
     _validate_parts(db)
     _validate_recipes(db)
     _validate_tech(db)
+    _validate_discoveries(db)
