@@ -40,8 +40,8 @@ def density(body_id: str, altitude_m: float) -> float:
     bp = BREAKPOINTS.get(body_id)
     if bp is None:
         return 0.0
-    if altitude_m > bp[-1][0]:
-        return 0.0
+    if altitude_m >= bp[-1][0]:
+        return bp[-1][1] if altitude_m == bp[-1][0] else 0.0
     if altitude_m <= bp[0][0]:
         return bp[0][1]
     i = bisect_right([h for h, _ in bp], altitude_m) - 1
