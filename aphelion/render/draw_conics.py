@@ -136,10 +136,17 @@ def conic_screen_subtense_px(el: Elements, cam: Camera) -> float:
 def draw_conic(surface: pygame.Surface, el: Elements, cam: Camera,
                color: tuple[int, int, int], r_max: float | None = None,
                closed: bool | None = None,
-               origin: tuple[float, float] = (0.0, 0.0)) -> int:
+               origin: tuple[float, float] = (0.0, 0.0),
+               glow: bool = False,
+               fade_from: tuple[float, float] | None = None) -> int:
     """Sample, transform through the choke point, clip, draw. `origin` shifts
     the conic's frame center within the camera frame (moon orbits drawn in a
-    heliocentric view). Returns the number of chains drawn (0 = culled)."""
+    heliocentric view). Returns the number of chains drawn (0 = culled).
+
+    F0.8: `glow` under-strokes a 3 px soft halo so orbits read as light,
+    not wireframe; `fade_from` (screen px of the craft) renders the path
+    with luminance falling off along the orbit away from the craft — the
+    signature "where am I going" gradient."""
     subtense = conic_screen_subtense_px(el, cam)
     if subtense < LOD_CULL_PX:
         return 0
@@ -155,6 +162,30 @@ def draw_conic(surface: pygame.Surface, el: Elements, cam: Camera,
     if closed:
         px = np.vstack([px, px[:1]])
     chains = clip_polyline(px, cam.width, cam.height)
+    if fade_from is not None:
+        fx, fy = fade_from
+        for chain in chains:
+            cpts = np.asarray(chain)
+            n = len(cpts)
+            d2 = (cpts[:, 0] - fx) ** 2 + (cpts[:, 1] - fy) ** 2
+            i0 = int(np.argmin(d2))
+            for i in range(n - 1):
+                k = abs(i - i0)
+                if closed:
+                    k = min(k, n - k)
+                f = 0.28 + 0.72 * math.exp(-k / (0.20 * max(n, 2)))
+                c = tuple(int(ch * f) for ch in color)
+                a, b = cpts[i], cpts[i + 1]
+                if glow:
+                    pygame.draw.line(surface,
+                                     tuple(int(v * 0.40) for v in c),
+                                     a, b, 3)
+                pygame.draw.aaline(surface, c, a, b)
+        return len(chains)
     for chain in chains:
+        if glow:
+            pygame.draw.lines(surface,
+                              tuple(int(v * 0.35) for v in color),
+                              False, chain, 3)
         pygame.draw.aalines(surface, color, False, chain)
     return len(chains)

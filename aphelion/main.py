@@ -59,8 +59,8 @@ _BODY_COLORS = {
     "core:uranus": (160, 210, 220), "core:neptune": (110, 140, 230),
 }
 _DEFAULT_COLOR = (130, 135, 145)
-_ORBIT_COLOR = (40, 50, 70)
-_MOON_ORBIT_COLOR = (55, 65, 85)
+_ORBIT_COLOR = (52, 64, 92)
+_MOON_ORBIT_COLOR = (64, 76, 104)
 _CRAFT_COLOR = (120, 255, 170)
 _GROUND_COLORS = {
     "core:earth": (28, 46, 34), "core:moon": (68, 70, 76),
@@ -829,6 +829,8 @@ def run(argv: list[str] | None = None) -> int:
                         help="QA: print PERF work-ms stats on exit")
     parser.add_argument("--warp", type=int, default=0,
                         help="QA: boot at this warp-ladder index")
+    parser.add_argument("--zoom", type=float, default=1.0,
+                        help="QA: zoom the boot camera OUT by this factor")
     parser.add_argument("--scene", type=str, default="auto",
                         choices=["auto", "menu", "flight", "builder", "base",
                                  "research", "research_ed", "research_codex",
@@ -847,7 +849,8 @@ def run(argv: list[str] | None = None) -> int:
     from aphelion.render.body_art import body_sprite, marker_dot, sun_sprite
     from aphelion.sim.power import thermal_balance_kw
     from aphelion.render.draw_conics import draw_conic
-    from aphelion.render.postfx import Bloom, Nebula, soi_ring, vignette
+    from aphelion.render.postfx import (Bloom, Nebula, soi_ring, sun_streak,
+                                        vignette)
     from aphelion.render.surface_art import (
         PAD_GROUND_Y, PAD_W, RIDGE_PAD, ground_palette, ground_strip,
         pad_complex, ridge_layers, sky_surface)
@@ -1550,6 +1553,8 @@ def run(argv: list[str] | None = None) -> int:
     perf_samples: list[float] = []
     perf_open = False
     _perf_prev_post = None
+    if args.zoom != 1.0:                # QA: wider establishing shots
+        cam.zoom /= max(args.zoom, 1e-6)
     while running:
         _perf_pre = time.perf_counter()
         if _perf_prev_post is not None:
@@ -5297,11 +5302,18 @@ def run(argv: list[str] | None = None) -> int:
                                   px[1] - dot.get_height() // 2))
 
         for pid in planets:
-            draw_conic(screen, tree.body(pid).elements, cam, _ORBIT_COLOR)
+            draw_conic(screen, tree.body(pid).elements, cam, _ORBIT_COLOR,
+                       glow=True)
         sun_px = cam.world_to_screen(0.0, 0.0)
         if -400 < sun_px[0] < size[0] + 400 and -400 < sun_px[1] < size[1] + 400:
             sd = max(10, min(int(2.0 * tree.body("core:sun").radius * cam.zoom),
                              512))
+            # anamorphic streak UNDER the disc: the sun reads as the light
+            # source of the whole frame, not another sprite (F0.8)
+            stk = sun_streak(max(sd, 26))
+            screen.blit(stk, (sun_px[0] - stk.get_width() // 2,
+                              sun_px[1] - stk.get_height() // 2),
+                        special_flags=pygame.BLEND_ADD)
             sspr = sun_sprite(sd)
             screen.blit(sspr, (sun_px[0] - sspr.get_width() // 2,
                                sun_px[1] - sspr.get_height() // 2))
@@ -5319,7 +5331,8 @@ def run(argv: list[str] | None = None) -> int:
                 body_click_pts.append((ppx[0], ppx[1], focus_of_body[pid]))
             for mid in moons_of.get(pid, []):
                 mel = tree.body(mid).elements
-                draw_conic(screen, mel, cam, _MOON_ORBIT_COLOR, origin=(prx, pry))
+                draw_conic(screen, mel, cam, _MOON_ORBIT_COLOR,
+                           origin=(prx, pry), glow=True)
                 mrx, mry, _, _ = tree.state_in_parent(mid, t)
                 mpx = cam.world_to_screen(prx + mrx, pry + mry)
                 if (2.0 * abs(mel.a) * cam.zoom > 8.0
@@ -5350,7 +5363,7 @@ def run(argv: list[str] | None = None) -> int:
             torigin = ((0.0, 0.0) if tparent == "core:sun"
                        else body_root(tparent))
             draw_conic(screen, tree.body(target_id).elements, cam,
-                       (110, 190, 255), origin=torigin)
+                       (110, 190, 255), origin=torigin, glow=True)
             ttx, tty = body_root(target_id)
             tpx = cam.world_to_screen(ttx, tty)
             soi_t = tree.body(target_id).soi_radius
@@ -5409,13 +5422,17 @@ def run(argv: list[str] | None = None) -> int:
         soi_marks: list[tuple[float, float, str]] = []
         apsis_marks: list[tuple[tuple, str, float]] = []
         if av is not None:
-            for leg in av.predict(t):
+            _avx, _avy, _, _ = av.state(t)
+            _av_px = cam.world_to_screen(_avx, _avy)
+            for _li, leg in enumerate(av.predict(t)):
                 frx, fry = body_root(leg.frame_id)
                 r_soi = tree.body(leg.frame_id).soi_radius
                 r_max = r_soi if math.isfinite(r_soi) else None
                 draw_conic(screen, leg.elements, cam,
                            _frame_color(leg.frame_id),
-                           r_max=r_max, origin=(frx, fry))
+                           r_max=r_max, origin=(frx, fry), glow=True,
+                           fade_from=(_av_px if _li == 0 and
+                                      math.isfinite(_av_px[0]) else None))
                 if leg.end_reason.startswith("soi"):
                     ex, ey, _, _ = elements_to_state(leg.elements, leg.t_end)
                     epx = cam.world_to_screen(frx + ex, fry + ey)

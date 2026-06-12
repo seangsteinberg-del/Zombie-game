@@ -157,42 +157,100 @@ class Nebula:
                     for c in range(3):
                         if rgb[x + ddx, y + ddy, c] < val[c]:
                             rgb[x + ddx, y + ddy, c] = val[c]
+
+        # (e) ~12 HERO stars: real radial glow + long diffraction spikes —
+        # the anchors the eye lands on (the GL bloom amplifies them)
+        work = rgb.astype(np.int16)
+        ux2, uy2 = dx / norm, dy / norm
+        n_hero = 12
+        hu = rng.uniform(0.0, 1.0, n_hero)
+        hperp = rng.normal(0.0, 0.85, n_hero) * sigma
+        hx = np.clip(ax_ + hu * dx - hperp * uy2, 40, w - 41).astype(int)
+        hy = np.clip(ay_ + hu * dy + hperp * ux2, 40, h - 41).astype(int)
+        hero_tints = ((255, 244, 230), (210, 226, 255), (255, 224, 178),
+                      (236, 240, 255))
+        for k in range(n_hero):
+            cx, cy = int(hx[k]), int(hy[k])
+            tint = hero_tints[int(rng.integers(0, len(hero_tints)))]
+            rr = int(rng.integers(5, 10))
+            amp = float(rng.uniform(120.0, 200.0))
+            gax = np.arange(-rr, rr + 1)
+            gg = np.exp(-(gax[:, None] ** 2 + gax[None, :] ** 2)
+                        / (rr * rr * 0.30)) * amp
+            for c in range(3):
+                work[cx - rr:cx + rr + 1, cy - rr:cy + rr + 1, c] += \
+                    (gg * (tint[c] / 255.0)).astype(np.int16)
+            sl = min(int(rr * (2.2 + 2.0 * float(rng.random()))), 38)
+            fall2 = np.exp(-np.abs(np.arange(-sl, sl + 1)) / (sl * 0.36)) \
+                * amp * 0.55
+            for c in range(3):
+                seg = (fall2 * (tint[c] / 255.0)).astype(np.int16)
+                work[cx - sl:cx + sl + 1, cy, c] += seg
+                work[cx, cy - sl:cy + sl + 1, c] += seg
+        # (f) corner falloff: composition vignette baked into deep space
+        qx = (np.arange(w) / w - 0.5)[:, None]
+        qy = (np.arange(h) / h - 0.5)[None, :]
+        fallv = 1.0 - 0.21 * np.clip((qx * qx + qy * qy) * 2.4, 0.0, 1.0)
+        # honor the "space is never pure black" floor the QA pins (>=10)
+        rgb[...] = np.clip(work * fallv[..., None], 0, 255).astype(np.uint8)
+        rgb[..., 2] = np.maximum(rgb[..., 2], 10)
         del rgb
         return base
 
     def _build_nebula_tile(self, rng: np.random.Generator) -> pygame.Surface:
-        """(b) 2-3 clouds of ~120 seeded translucent blobs each, drawn at
-        1/4 res with wrap (tileable) and smoothscaled up for softness."""
+        """(b) F0.8: a real layered nebula FIELD — complementary-hue fBM
+        clouds (deep teal / magenta-rose / faint amber) structured along
+        the galaxy band, built at 1/3 res and smoothscaled. Alpha fades
+        to zero at the tile border so the 2x2 parallax wrap stays
+        seamless without true tileability."""
+        from aphelion.render.body_art import _fbm
         w, h = self._w, self._h
-        qw, qh = max(1, w // 4), max(1, h // 4)
+        qw, qh = max(2, w // 3), max(2, h // 3)
+        sq = max(qw, qh)
+        f_teal = _fbm(rng, sq, 5, 3)[:qw, :qh]
+        f_rose = _fbm(rng, sq, 5, 5)[:qw, :qh]
+        f_amber = _fbm(rng, sq, 4, 7)[:qw, :qh]
+
+        def _sm(v: np.ndarray) -> np.ndarray:
+            return v * v * (3.0 - 2.0 * v)
+
+        m_teal = _sm(np.clip((f_teal - 0.50) / 0.24, 0.0, 1.0))
+        m_rose = _sm(np.clip((f_rose - 0.56) / 0.20, 0.0, 1.0))
+        m_amber = _sm(np.clip((f_amber - 0.62) / 0.14, 0.0, 1.0))
+        # band proximity: nebulosity lives along the galaxy's diagonal
+        gx = (np.arange(qw) + 0.5) * (w / qw)
+        gy = (np.arange(qh) + 0.5) * (h / qh)
+        ax_, ay_ = -0.1 * w, 0.10 * h
+        dx, dy = 1.2 * w, 0.80 * h
+        norm = math.hypot(dx, dy)
+        dist = np.abs((gx[:, None] - ax_) * dy
+                      - (gy[None, :] - ay_) * dx) / norm
+        band = 0.35 + 0.65 * np.exp(-((dist / (0.30 * h)) ** 2))
+        # border window: alpha dies at the edges (seamless wrap)
+        wx = np.clip(np.minimum(np.arange(qw), qw - 1 - np.arange(qw))
+                     / (0.13 * qw), 0.0, 1.0)[:, None]
+        wy = np.clip(np.minimum(np.arange(qh), qh - 1 - np.arange(qh))
+                     / (0.13 * qh), 0.0, 1.0)[None, :]
+        window = _sm(wx) * _sm(wy)
+
+        teal = np.array([46.0, 96.0, 118.0])
+        rose = np.array([116.0, 56.0, 104.0])
+        amber = np.array([122.0, 92.0, 54.0])
+        num = (teal * (m_teal * 1.0)[..., None]
+               + rose * (m_rose * 0.9)[..., None]
+               + amber * (m_amber * 0.7)[..., None])
+        a_f = (m_teal * 16.0 + m_rose * 13.0 + m_amber * 8.0) * band * window
+        a_f = np.clip(a_f, 0.0, 26.0)
+        wsum = np.maximum(m_teal + m_rose * 0.9 + m_amber * 0.7, 1e-4)
+        rgb_f = np.clip(num / wsum[..., None], 0.0, 255.0)
+
         cloud = pygame.Surface((qw, qh), pygame.SRCALPHA)
-        sprites: dict[tuple[int, tuple[int, int, int], int],
-                      pygame.Surface] = {}
-        n_clouds = int(rng.integers(2, 4))
-        for i in range(n_clouds):
-            color = _CLOUD_COLORS[i % len(_CLOUD_COLORS)]
-            ccx = rng.uniform(0.0, qw)
-            ccy = rng.uniform(0.0, qh)
-            sx = qw * rng.uniform(0.14, 0.24)
-            sy = qh * rng.uniform(0.16, 0.30)
-            for _ in range(150):
-                px = (ccx + rng.normal(0.0, sx)) % qw
-                py = (ccy + rng.normal(0.0, sy)) % qh
-                r = max(3, int(rng.uniform(0.10, 0.30) * min(qw, qh)))
-                a = int(rng.integers(3, 8))            # alpha 3-7
-                key = (r, color, a)
-                spr = sprites.get(key)
-                if spr is None:
-                    spr = sprites[key] = _radial_blob(r, color, a)
-                x0, y0 = px - r, py - r
-                d = 2 * r
-                for ox in (-qw, 0, qw):                # wrap so the tile
-                    if x0 + ox + d <= 0 or x0 + ox >= qw:
-                        continue                        # stays seamless
-                    for oy in (-qh, 0, qh):
-                        if y0 + oy + d <= 0 or y0 + oy >= qh:
-                            continue
-                        cloud.blit(spr, (round(x0 + ox), round(y0 + oy)))
+        carr = pygame.surfarray.pixels3d(cloud)
+        carr[...] = rgb_f.astype(np.uint8)
+        del carr
+        calpha = pygame.surfarray.pixels_alpha(cloud)
+        calpha[...] = (a_f + 0.5).astype(np.uint8)
+        del calpha
         return pygame.transform.smoothscale(cloud, (w, h))
 
     # -- per frame ----------------------------------------------------------
@@ -276,6 +334,34 @@ def vignette(size: tuple[int, int]) -> pygame.Surface:
     del alpha
     surf = pygame.transform.smoothscale(low, (w, h))
     _VIGNETTE_CACHE[key] = surf
+    return surf
+
+
+_STREAK_CACHE: dict[int, pygame.Surface] = {}
+
+
+def sun_streak(core_d_px: int) -> pygame.Surface:
+    """Cached anamorphic lens streak for the sun (BLEND_ADD): a long
+    horizontal warm gaussian + a short vertical one. Makes the sun read
+    as the LIGHT SOURCE of the frame, not just another sprite (F0.8)."""
+    d = max(16, min(int(core_d_px), 400))
+    d = int(round(d / 8.0) * 8)                     # bucket the cache
+    got = _STREAK_CACHE.get(d)
+    if got is not None:
+        return got
+    sw, sh = d * 5, max(8, d)
+    surf = pygame.Surface((sw, sh))                 # black base, ADD blit
+    xs = (np.arange(sw) - sw / 2.0) / (sw * 0.30)
+    ys = (np.arange(sh) - sh / 2.0) / (sh * 0.22)
+    horiz = np.exp(-xs * xs)[:, None] * np.exp(-(ys * ys) * 14.0)[None, :]
+    vert = (np.exp(-(xs * xs) * 90.0)[:, None]
+            * np.exp(-(ys * ys) * 0.9)[None, :])
+    field = np.clip(horiz * 0.85 + vert * 0.55, 0.0, 1.0)
+    tint = np.array([255.0, 226.0, 170.0])
+    arr = pygame.surfarray.pixels3d(surf)
+    arr[...] = (field[..., None] * tint * 0.62).astype(np.uint8)
+    del arr
+    _STREAK_CACHE[d] = surf
     return surf
 
 
