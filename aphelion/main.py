@@ -31,6 +31,7 @@ import json
 import math
 import os
 import sys
+import time
 
 from aphelion.core.clock import RAILS_RATES, SimClock
 from aphelion.core.units import SECONDS_PER_DAY
@@ -678,6 +679,8 @@ def run(argv: list[str] | None = None) -> int:
     parser.add_argument("--frames", type=int, default=0)
     parser.add_argument("--screenshot", type=str, default="")
     parser.add_argument("--headless", action="store_true")
+    parser.add_argument("--perf", action="store_true",
+                        help="QA: print PERF work-ms stats on exit")
     parser.add_argument("--warp", type=int, default=0,
                         help="QA: boot at this warp-ladder index")
     parser.add_argument("--scene", type=str, default="auto",
@@ -1109,6 +1112,17 @@ def run(argv: list[str] | None = None) -> int:
     def apply_fade() -> None:
         nonlocal fade
         screen.blit(grain_frames[frame_count & 3], (0, 0))
+        if perf_open and len(perf_samples) > 10:
+            _rec = perf_samples[-120:]
+            _avg = sum(_rec) / len(_rec)
+            _p95 = sorted(_rec)[int(0.95 * (len(_rec) - 1))]
+            theme.draw_text(
+                screen, size[0] - 248, 4,
+                f"work {_avg:5.1f} ms avg  {_p95:5.1f} p95  "
+                f"({min(999.0, 1000.0 / max(_avg, 0.01)):3.0f} fps uncapped)",
+                color=theme.COLORS["danger"] if _avg > 33.0
+                else theme.COLORS["warn"] if _avg > 22.0
+                else theme.COLORS["good"], font="small")
         if fade > 0.0:
             fs = pygame.Surface(size)
             fs.fill((4, 6, 10))
@@ -1342,8 +1356,19 @@ def run(argv: list[str] | None = None) -> int:
 
     frame_count = 0
     running = True
+    # frame-budget instrumentation (Z pulled forward): WORK ms per frame,
+    # measured between ticks so the 60 fps sleep never pollutes it
+    perf_samples: list[float] = []
+    perf_open = False
+    _perf_prev_post = None
     while running:
+        _perf_pre = time.perf_counter()
+        if _perf_prev_post is not None:
+            perf_samples.append((_perf_pre - _perf_prev_post) * 1000.0)
+            if len(perf_samples) > 10_000:
+                del perf_samples[:5_000]
         real_dt = pygame_clock.tick(60) / 1000.0
+        _perf_prev_post = time.perf_counter()
         t = clock.t
         start_new = False
         load_save = False
@@ -1354,6 +1379,8 @@ def run(argv: list[str] | None = None) -> int:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_F8:
+                perf_open = not perf_open
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_F11:
                 fullscreen = not fullscreen
                 flags = pygame.SCALED | pygame.DOUBLEBUF | (
@@ -6420,6 +6447,12 @@ def run(argv: list[str] | None = None) -> int:
 
     if args.screenshot:
         pygame.image.save(screen, args.screenshot)
+    if args.perf and len(perf_samples) > 40:
+        body = sorted(perf_samples[30:])        # caches warm after ~30
+        avg = sum(body) / len(body)
+        p95 = body[int(0.95 * (len(body) - 1))]
+        print(f"PERF avg={avg:.2f} p95={p95:.2f} n={len(body)}",
+              flush=True)
     pygame.quit()
     return 0
 
