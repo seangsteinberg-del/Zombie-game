@@ -23,6 +23,8 @@ shoreline, no lake pump in a polar crater.
 
 from __future__ import annotations
 
+from aphelion.sim.industry.chains import (FAB_MODULES, RECIPES, power_kwe)
+from aphelion.sim.industry.wear import MAINT, MAINT_OF_MODULE
 from aphelion.sim.ledger.network import Buffer, LedgerNetwork, Module, Source
 
 DAY = 86_400.0
@@ -545,6 +547,94 @@ CATALOG: dict[str, dict] = {
     },
 }
 
+# ---- 05 production chains: the fab catalog, GENERATED from chains.py ------
+# (§4.1/§4.2 single-source rule: recipes, rates, and the power column all
+# come from sim/industry/chains so the ledger cannot drift from canon).
+# New keys on fab entries: labor_day (crew_h, robot_h at nameplate),
+# maint (the §4.6 row), mass_t, l_wear_h — the wear/PM/repair economy
+# reads them; legacy modules without them keep free repairs.
+
+
+def _fab(mid: str, recipe_id: str, price_m: float, kinds, tech: str,
+         prio: int = 4) -> dict:
+    fm = FAB_MODULES[mid]
+    r = RECIPES[recipe_id]
+    primary_res, primary_t = next(iter(r["outputs_t"].items()))
+    outputs = {res: t / primary_t for res, t in r["outputs_t"].items()}
+    for res, t in r["byproducts_t"].items():
+        outputs[res] = outputs.get(res, 0.0) + t / primary_t
+    inputs = {res: t / primary_t for res, t in r["inputs_t"].items()}
+    crew_h, robot_h = r["labor"]
+    maint_key = MAINT_OF_MODULE[mid]
+    return {
+        "prio": prio,
+        "name": f"{fm['name']} ({fm['tier']})", "price_m": price_m,
+        "power_kw": round(power_kwe(mid), 1),
+        "primary": (primary_res, fm["rate_t_day"] * 1_000.0 / DAY),
+        "inputs": inputs, "outputs": outputs,
+        # §1.5 loss_t: destroyed without a co-sited recycler (§1.7) —
+        # ledger-vented so 04's conservation rule still closes
+        "vented": {"scrap": r["loss_t"] / primary_t},
+        "mtbf_d": MAINT[maint_key].mtbf_h / 24.0,
+        "kinds": kinds, "tech": tech,
+        "labor_day": (crew_h * fm["rate_t_day"],
+                      robot_h * fm["rate_t_day"]),
+        "maint": maint_key, "mass_t": fm["mass_t"],
+        "build_days": 4.0 + fm["mass_t"] / 5.0,
+    }
+
+
+CATALOG.update({
+    "fab_printer_poly": _fab("fab_printer_poly", "comp_poly", 3.0, "*",
+                             "core:tech_in01_workshop"),
+    "fab_printer_lpbf": _fab("fab_printer_lpbf", "comp_printed", 8.0, "*",
+                             "core:tech_in01_workshop"),
+    "fab_machine_shop": _fab("fab_machine_shop", "comp_machined", 18.0,
+                             "*", "core:tech_in01_workshop"),
+    "fab_foundry_mill": _fab("fab_foundry_mill", "stock_lunar", 30.0,
+                             _REG, "core:tech_in02_foundry_chem_plant"),
+    "fab_chem_plant": _fab("fab_chem_plant", "polymers_mto", 22.0,
+                           _REG + ("aerostat", "methane_lake"),
+                           "core:tech_in02_foundry_chem_plant"),
+    "fab_elec_assy": _fab("fab_elec_assy", "electronics_std", 26.0, "*",
+                          "core:tech_in03_electronics_assembly"),
+    "fab_waam": _fab("fab_waam", "struct_waam", 24.0, "*",
+                     "core:tech_in05_orbital_assembly_waam"),
+    "fab_assembly_hall": _fab("fab_assembly_hall", "machparts_std", 34.0,
+                              "*", "core:tech_in04_robotic_manipulation"),
+    "fab_wafer_fab": _fab("fab_wafer_fab", "wafers_min", 120.0, "*",
+                          "core:tech_in11_wafer_fab"),
+    # RX-22 recycler (DECISIONS B16): reclaims 80% of repair-consumed
+    # parts back to canonical resources at the repair site
+    "recycler": {
+        "prio": 4,
+        "name": "Recycler RX-22 (T2)", "price_m": 9.0, "power_kw": 19.0,
+        "primary": None, "inputs": {}, "outputs": {},
+        "mtbf_d": MAINT["chem_plant"].mtbf_h / 24.0, "kinds": "*",
+        "tech": "core:tech_in02_foundry_chem_plant",
+        "recycler": True, "mass_t": 2.0, "build_days": 3.0,
+    },
+    # robots (§4.3): each adds robot-hours to the site labor pool —
+    # 8 h/day teleop-local at A2, 24 h × 0.35 once supervised autonomy
+    # (in09) is researched
+    "bot_worker": {
+        "prio": 4,
+        "name": "GP worker robot 'Wrench' (T2)", "price_m": 6.0,
+        "power_kw": 0.4, "primary": None, "inputs": {}, "outputs": {},
+        "mtbf_d": MAINT["robot"].mtbf_h / 24.0, "kinds": "*",
+        "tech": "core:tech_in07_teleop_robots",
+        "robot": True, "mass_t": 0.16, "build_days": 1.0,
+    },
+    "bot_mule": {
+        "prio": 4,
+        "name": "Rover-manipulator 'Mule' (T2)", "price_m": 9.0,
+        "power_kw": 1.2, "primary": None, "inputs": {}, "outputs": {},
+        "mtbf_d": MAINT["robot"].mtbf_h / 24.0, "kinds": "*",
+        "tech": "core:tech_in08_auto_haulage",
+        "robot": True, "mass_t": 0.45, "build_days": 1.0,
+    },
+})
+
 # default buffer capacity by resource when a module first touches it
 _DEFAULT_CAP = {
     "Regolith": 1_000_000.0, "IronSteel": 50_000.0, "Aluminum": 25_000.0,
@@ -553,6 +643,23 @@ _DEFAULT_CAP = {
     "RareEarths": 2_000.0, "Ammonia": 10_000.0, "Nitrogen": 20_000.0,
     "Argon": 5_000.0, "MMH": 5_000.0, "NTO": 10_000.0, "He3": 50.0,
     "MedSupplies": 2_000.0,
+    # 05 chain intermediates + the scarce import metals (DECISIONS B15:
+    # recycling, not invented ore, is Copper's relief)
+    "MetalStock": 100_000.0, "Components": 25_000.0, "Wafers": 500.0,
+    "Electronics": 10_000.0, "Copper": 10_000.0,
+    "MachineParts": 50_000.0, "StructuralParts": 100_000.0,
+    "FoodRations": 20_000.0, "Biomass": 20_000.0,
+}
+
+# what 80% of a repair-consumed parts kilogram returns as through the
+# RX-22 (§1.7: Electronics scrap reclaims only metal/RareEarths)
+RECLAIM_SPLIT = {
+    "MachineParts": {"IronSteel": 0.55, "Aluminum": 0.25},
+    "StructuralParts": {"IronSteel": 0.45, "Aluminum": 0.25,
+                        "BasaltFiber": 0.10},
+    "Electronics": {"Copper": 0.45, "IronSteel": 0.25,
+                    "RareEarths": 0.10},
+    "Polymers": {"Polymers": 0.80},
 }
 
 
@@ -600,6 +707,14 @@ def add_module(net: LedgerNetwork, key: str, site: dict,
         power *= site.get("solar", 1.0)
     rate = spec["primary"][1] if spec["primary"] else 0.0
     ensure_buffers(net, spec)
+    if spec.get("maint"):
+        # maintainable hardware needs parts SHELVES on site even before
+        # any parts producer exists (repairs draw from storage, 05 §8)
+        for res in ("MachineParts", "Electronics", "StructuralParts",
+                    "Polymers"):
+            if res not in net.buffers:
+                net.buffers[res] = Buffer(
+                    level=0.0, capacity=_DEFAULT_CAP.get(res, 20_000.0))
     mod = Module(
         module_id=f"{key}_{serial}",
         inputs=dict(spec["inputs"]),

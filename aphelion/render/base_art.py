@@ -313,6 +313,60 @@ def _d_lab(s, w, h):
                     math.pi * 0.15, math.pi * 0.85, 3)
 
 
+def _d_foundry(s, w, h):
+    """05 fab family: a long mill shed with a hot pour glow + stack."""
+    _skid(s, w, h)
+    shed = pygame.Rect(int(w * 0.08), int(h * 0.36), int(w * 0.84),
+                       int(h * 0.44))
+    pygame.draw.rect(s, _METAL, shed, border_radius=6)
+    pygame.draw.rect(s, _METAL_DARK, shed, 3, border_radius=6)
+    pygame.draw.polygon(s, _METAL_DARK,                   # sawtooth roof
+                        [(shed.x, shed.y), (shed.x + shed.w // 3,
+                                            shed.y - 12),
+                         (shed.x + shed.w // 3, shed.y),
+                         (shed.x + 2 * shed.w // 3, shed.y - 12),
+                         (shed.x + 2 * shed.w // 3, shed.y),
+                         (shed.right, shed.y - 12), (shed.right, shed.y)])
+    pygame.draw.rect(s, (255, 150, 60),                   # pour glow door
+                     (shed.x + 8, shed.bottom - 22, 18, 18))
+    pygame.draw.rect(s, _METAL_DARK, (shed.right - 18, shed.y - 26, 9, 28))
+
+
+def _d_robot(s, w, h):
+    """A small wheeled worker robot parked by its charge post."""
+    base_y = int(h * 0.80)
+    pygame.draw.rect(s, _METAL_DARK, (int(w * 0.62), base_y - 34, 6, 34))
+    pygame.draw.circle(s, (120, 220, 160), (int(w * 0.62) + 3,
+                                            base_y - 36), 4)
+    body = pygame.Rect(int(w * 0.22), base_y - 26, int(w * 0.30), 18)
+    pygame.draw.rect(s, _METAL, body, border_radius=5)
+    pygame.draw.rect(s, _METAL_DARK, body, 2, border_radius=5)
+    for wx in (body.x + 6, body.right - 6):
+        pygame.draw.circle(s, _METAL_DARK, (wx, base_y - 4), 6)
+    pygame.draw.line(s, _METAL_DARK, (body.centerx, body.y),
+                     (body.centerx + 12, body.y - 14), 3)   # arm
+    pygame.draw.circle(s, (255, 190, 90), (body.centerx + 13,
+                                           body.y - 15), 3)
+
+
+def _d_recycler(s, w, h):
+    """RX-22: a sorting hopper over the reclaimed-stock bins."""
+    _skid(s, w, h)
+    hop = pygame.Rect(int(w * 0.18), int(h * 0.34), int(w * 0.34),
+                      int(h * 0.30))
+    pygame.draw.polygon(s, _METAL, [(hop.x, hop.y), (hop.right, hop.y),
+                                    (hop.centerx + 8, hop.bottom),
+                                    (hop.centerx - 8, hop.bottom)])
+    pygame.draw.polygon(s, _METAL_DARK,
+                        [(hop.x, hop.y), (hop.right, hop.y),
+                         (hop.centerx + 8, hop.bottom),
+                         (hop.centerx - 8, hop.bottom)], 3)
+    for i, col in enumerate(((150, 150, 160), (200, 120, 70),
+                             (110, 170, 110))):
+        pygame.draw.rect(s, col, (int(w * 0.58) + i * 11,
+                                  int(h * 0.62), 9, 16))
+
+
 _DRAWERS = {
     "drill_ice": _d_drill, "electrolyzer": _d_electrolyzer,
     "sabatier": _d_sabatier, "co2_intake": _d_co2, "lake_pump": _d_pump,
@@ -320,6 +374,12 @@ _DRAWERS = {
     "hab_module": _d_hab, "tank_farm": _d_tanks,
     "battery_pack": _d_battery, "radiator_wing": _d_radiator,
     "science_lab": _d_lab,
+    "fab_foundry_mill": _d_foundry, "fab_machine_shop": _d_foundry,
+    "fab_chem_plant": _d_sabatier, "fab_elec_assy": _d_lab,
+    "fab_assembly_hall": _d_foundry, "fab_waam": _d_foundry,
+    "fab_wafer_fab": _d_lab, "fab_printer_poly": _d_lab,
+    "fab_printer_lpbf": _d_lab,
+    "recycler": _d_recycler, "bot_worker": _d_robot, "bot_mule": _d_robot,
 }
 
 

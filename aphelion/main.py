@@ -290,6 +290,7 @@ class BaseSite:
         self.pending_commission: list[tuple[float, str]] = []
         self.built: list[str] = ["solar_array"]
         self.crew: list[str] = []
+        self.cond: dict[str, float] = {}      # F-7 condition per module
         self.day_sched_until = t_founded
         self.day_anchor = t_founded
         self.net = starter_network(SITES[self.site_id], rng=rng)
@@ -304,16 +305,126 @@ class BaseSite:
                     if n in crew_db and crew_db[n].role == "engineer"),
                    default=0)
 
-    def apply_crew_effects(self, crew_db: dict) -> None:
-        """Resident engineers raise every producer's labor factor."""
-        f = 1.0 + 0.05 * self.engineer_skill(crew_db)
+    def robots(self) -> int:
+        from aphelion.game.basebuild import CATALOG
+        return sum(1 for k in self.built if CATALOG[k].get("robot"))
+
+    def apply_crew_effects(self, crew_db: dict, a3: bool = False) -> None:
+        """Resident engineers raise legacy producers' labor factor; 05
+        fab modules instead draw on the REAL site labor pool — 8 crew-h
+        per resident-day, 8 robot-h per robot (24 × 0.35 once supervised
+        autonomy is researched), crew leftovers substituting for robots
+        but never the reverse (05 §2)."""
+        from aphelion.game.basebuild import CATALOG
+        from aphelion.sim.industry.labor import a3_output_h_day, f_labor
+        f_eng = 1.0 + 0.05 * self.engineer_skill(crew_db)
+        crew_h = 8.0 * len(self.crew)
+        robot_h = (a3_output_h_day() if a3 else 8.0) * self.robots()
+        fabs = []
+        crew_req = robot_req = 0.0
         for m in self.net.modules:
-            if m.rate_kgps > 0.0:
-                m.f_labor = f
+            spec = CATALOG.get(m.module_id.rsplit("_", 1)[0], {})
+            lab = spec.get("labor_day")
+            if lab and m.rate_kgps > 0.0:
+                fabs.append(m)
+                crew_req += lab[0]
+                robot_req += lab[1]
+            elif m.rate_kgps > 0.0:
+                m.f_labor = f_eng
+        if fabs:
+            f_pool = f_labor(crew_req, robot_req, crew_h, robot_h)
+            for m in fabs:
+                m.f_labor = f_pool
 
     def repair_turnaround(self, crew_db: dict) -> float:
         return self.REPAIR_TURNAROUND / (
             1.0 + 0.25 * self.engineer_skill(crew_db))
+
+    # -- spares economy (05 §3.4): parts-costed repairs, PM, RX-22 ---------
+    def _debit_parts(self, cost_kg: dict) -> bool:
+        """All-or-nothing parts draw from STORAGE (never inline from
+        production buffers — §8's closed-chain rule is moot here because
+        buffers ARE the site storage)."""
+        for res, kg in cost_kg.items():
+            buf = self.net.buffers.get(res)
+            if buf is None or buf.level < kg:
+                return False
+        for res, kg in cost_kg.items():
+            self.net.buffers[res].level -= kg
+            self._reclaim(res, kg)
+        return True
+
+    def _reclaim(self, res: str, kg: float) -> None:
+        """RX-22 (DECISIONS B16): with a live recycler on site, 80% of a
+        consumed part's mass returns as canonical resources, 20% as
+        Regolith. Electronics scrap reclaims only metal fractions."""
+        from aphelion.game.basebuild import RECLAIM_SPLIT
+        if not any(m.module_id.startswith("recycler")
+                   and m.state not in ("FAILED", "OFF")
+                   for m in self.net.modules):
+            return
+        for out, frac in RECLAIM_SPLIT.get(res, {}).items():
+            buf = self.net.buffers.get(out)
+            if buf is not None:
+                buf.level = min(buf.capacity, buf.level + kg * frac)
+        reg = self.net.buffers.get("Regolith")
+        if reg is not None:
+            reg.level = min(reg.capacity, reg.level + kg * 0.2)
+
+    def _repair_parts_roll(self, mod, due: tuple) -> tuple[bool, dict]:
+        """F-8 severity at repair time: minor 95% = 0.1% module mass in
+        parts, major 5% = 1.0%, split per the §4.6 row — deterministic
+        per (site, module, failure instant). Legacy modules without a
+        maint row keep free repairs."""
+        import zlib
+
+        import numpy as np
+
+        from aphelion.game.basebuild import CATALOG
+        from aphelion.sim.industry.wear import MAINT, roll_failure
+        spec = CATALOG.get(mod.module_id.rsplit("_", 1)[0], {})
+        mk = spec.get("maint")
+        if not mk:
+            return True, {}
+        seed = (zlib.crc32(f"{self.name}|{mod.module_id}".encode())
+                ^ int(due[0])) & 0x7FFFFFFF
+        roll = roll_failure(np.random.default_rng(seed),
+                            spec.get("mass_t", 5.0), MAINT[mk].split)
+        cost_kg = {r: t * 1_000.0 for r, t in roll["parts"].items()}
+        return self._debit_parts(cost_kg), cost_kg
+
+    def step_wear(self, hours: float, dusty: bool) -> list[str]:
+        """F-7: RUNNING fab modules wear toward DEGRADED; auto-PM fires
+        below C 0.55 when the §4.6 parts are in storage (+0.25, capped).
+        f_condition follows F-1 (full rate to 0.5, then C/0.5)."""
+        from aphelion.game.basebuild import CATALOG
+        from aphelion.sim.industry.chains import f_condition
+        from aphelion.sim.industry.wear import MAINT, after_pm, wear_dc
+        notes = []
+        for m in self.net.modules:
+            spec = CATALOG.get(m.module_id.rsplit("_", 1)[0], {})
+            mk = spec.get("maint")
+            if not mk:
+                continue
+            row = MAINT[mk]
+            c = self.cond.get(m.module_id, 1.0)
+            if m.state == "RUNNING":
+                c -= wear_dc(1.0, hours, row.l_wear_h, dust=dusty)
+            if c <= 0.55:
+                cost_kg = {r: v * 1_000.0 for r, v in row.pm_cost.items()
+                           if r not in ("crew_h", "robot_h")}
+                if self._debit_parts(cost_kg):
+                    c = after_pm(c)
+                    notes.append(f"{self.name}: PM on {m.module_id} "
+                                 f"(C back to {c:.2f})")
+            was = self.cond.get(m.module_id, 1.0)
+            if was > 0.5 >= c:
+                notes.append(f"{self.name}: {m.module_id} DEGRADED — "
+                             f"throughput falling (PM parts short?)")
+            c = max(0.0, c)
+            self.cond[m.module_id] = c
+            m.f_condition = f_condition(c)
+        return notes
 
     # -- power scheduling -------------------------------------------------
     def _schedule_daynight(self, t0: float) -> None:
@@ -414,7 +525,8 @@ class BaseSite:
                      site_id: str = "site:peary",
                      built: list[str] | None = None,
                      crew: list[str] | None = None,
-                     pending_commission: list | None = None) -> "BaseSite":
+                     pending_commission: list | None = None,
+                     cond: dict | None = None) -> "BaseSite":
         site = cls.__new__(cls)
         site.site_id = site_id
         site.built = list(built or ["solar_array"])
@@ -425,6 +537,7 @@ class BaseSite:
         site.pending_repairs = list(pending_repairs)
         site.pending_commission = [tuple(c) for c in
                                    (pending_commission or [])]
+        site.cond = dict(cond or {})
         site.net = net
         site.day_sched_until = last_t
         site.day_anchor = last_t
@@ -462,8 +575,18 @@ class BaseSite:
                 due = min(self.pending_repairs)
                 self.pending_repairs.remove(due)
                 mod = [m for m in self.net.modules if m.module_id == due[1]][0]
-                self.net.repair(mod, due[0])
-                new_events.append(LedgerEvent(due[0], "repaired", due[1]))
+                ok_parts, cost_kg = self._repair_parts_roll(mod, due)
+                if ok_parts:
+                    self.net.repair(mod, due[0])
+                    new_events.append(LedgerEvent(due[0], "repaired", due[1]))
+                else:
+                    # no spares in storage: the module stays down and the
+                    # crew re-checks the shelves tomorrow (05 §8)
+                    self.pending_repairs.append((due[0] + 86_400.0, due[1]))
+                    need = ", ".join(f"{kg:,.0f} kg {r}"
+                                     for r, kg in cost_kg.items())
+                    new_events.append(LedgerEvent(
+                        due[0], "awaiting_parts", f"{due[1]} ({need})"))
             if t_com <= t_stop + 1e-6:
                 due_c = min(self.pending_commission)
                 self.pending_commission.remove(due_c)
@@ -834,7 +957,8 @@ def run(argv: list[str] | None = None) -> int:
                                                  b.get("site_id", "site:peary"),
                                                  b.get("built"),
                                                  b.get("crew"),
-                                                 b.get("pending_commission"))
+                                                 b.get("pending_commission"),
+                                                 b.get("cond"))
                            for b in got["bases"]],
                     crew=got["crew"], research=got["research"],
                     visited=got["visited"],
@@ -4553,6 +4677,17 @@ def run(argv: list[str] | None = None) -> int:
                 toast_until = t + 14
                 audio.play("alarm")
 
+            # industry wear (05 §3.4): fab modules wear while RUNNING,
+            # auto-PM draws real parts, the labor pool re-prices f_labor
+            _a3 = "core:tech_in09_supervised_autonomy" in research.unlocked
+            for b in bases:
+                dusty_b = SITES[b.site_id].get("kind", "regolith") in (
+                    "regolith", "mars_ice", "psr_ice")
+                for note in b.step_wear(days * 24.0, dusty_b):
+                    toast, toast_until = note, t + 8
+                    audio.play("warn")
+                b.apply_crew_effects(crew, a3=_a3)
+
             # bent docking rings: an engineer aboard (or a landed base's
             # shop) works the backlog off in real hours
             for fv in vessels:
@@ -5588,6 +5723,12 @@ def run(argv: list[str] | None = None) -> int:
                         lines2.append(
                             f"engineer's forecast: next fault in "
                             f"{theme.fmt_duration(max(0.0, m.failure_t - t))}")
+                if m.module_id in site_b.cond:
+                    c_w = site_b.cond[m.module_id]
+                    lines2.append(
+                        f"condition {c_w:.2f}"
+                        + ("  — DEGRADED (C/0.5 rate)" if c_w < 0.5
+                           else "  (PM below 0.55)"))
                 if m.state == "FAILED":
                     eta_rep = min((r[0] for r in site_b.pending_repairs
                                    if r[1] == m.module_id),

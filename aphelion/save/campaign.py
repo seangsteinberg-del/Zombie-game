@@ -137,6 +137,7 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
                 "module_extras": {m.module_id: {
                     "mtbf_s": _num(m.mtbf_s), "failure_t": _num(m.failure_t),
                     "heat_kw": m.heat_kw,
+                    "cond": getattr(b, "cond", {}).get(m.module_id, 1.0),
                 } for m in b.net.modules},
             } for b in bases],
         },
@@ -218,12 +219,14 @@ def restore_campaign(save: dict, db, tree):
     bases = []
     for bd in c["bases"]:
         net = ledger_from_dict(bd["ledger"])
+        cond = {}
         for m in net.modules:
             extra = bd["module_extras"].get(m.module_id)
             if extra:
                 m.mtbf_s = _unnum(extra["mtbf_s"])
                 m.failure_t = _unnum(extra["failure_t"])
                 m.heat_kw = extra["heat_kw"]
+                cond[m.module_id] = extra.get("cond", 1.0)
         bases.append({
             "name": bd["name"], "last_t": bd["last_t"],
             "site_id": bd.get("site_id", "site:peary"),
@@ -232,6 +235,7 @@ def restore_campaign(save: dict, db, tree):
             "pending_repairs": [tuple(r) for r in bd["pending_repairs"]],
             "pending_commission": [tuple(c) for c in
                                    bd.get("pending_commission", [])],
+            "cond": cond,
             "net": net,
         })
     return {
