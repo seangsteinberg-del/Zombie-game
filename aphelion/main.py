@@ -4559,10 +4559,11 @@ def run(argv: list[str] | None = None) -> int:
                                     or interior_vessel is not None):
             # ---- inside the hab: walk the rooms, meet the residents ----
             from aphelion.render.interior_art import (
-                FLOOR_Y, ROOM_H, ROOM_W, room_strip)
+                FLOOR_Y, PPM, ROOM_W, room_strip, space_backdrop,
+                strip_scaled)
             clock.advance_analytic(clock.t + EVA_TIME_FACTOR * real_dt)
             t = clock.t
-            ppm_i = 24.0
+            ppm_i = float(PPM)
             strip = room_strip(interior_rooms)
             total_m = strip.get_width() / ppm_i
             keys = pygame.key.get_pressed()
@@ -4591,30 +4592,34 @@ def run(argv: list[str] | None = None) -> int:
                 place_name = interior_home.name
             floating = g_in < 1.0
 
-            screen.fill((10, 12, 18))
-            scale_i = 2.2
-            sw = int(strip.get_width() * scale_i)
-            sh = int(strip.get_height() * scale_i)
-            strip_big = pygame.transform.scale(strip, (sw, sh))
+            # deep space drifts behind the hull cutaway (slow parallax)
+            bdrop = space_backdrop(size)
+            bx_off = -int((interior_x * ppm_i * 0.25)
+                          % (bdrop.get_width() - size[0]))
+            screen.blit(bdrop, (bx_off, 0))
+            scale_i = 2.0
+            strip_big = strip_scaled(interior_rooms, scale_i)
+            sh = strip_big.get_height()
             ox = size[0] / 2 - interior_x * ppm_i * scale_i
             oy = size[1] / 2 - sh / 2
             screen.blit(strip_big, (ox, oy))
-            # residents at home in their rooms (adrift when nothing pulls)
-            from aphelion.render.base_art import walker_sprite
+            # crew share the player's sprite scale — humans, not pixels
             for ri, rname in enumerate(inhabitants[:6]):
-                rx_m = (1.5 + (ri + 1) * (total_m - 3.0) / 7.0
+                rx_m = (7.0 + (ri + 1) * (total_m - 10.0) / 7.0
                         + 0.8 * math.sin(ui_t * 0.7 + ri * 2.1))
-                fy = (26 + 14 * math.sin(ui_t * 0.9 + ri * 1.7)
+                fy = (44 + 22 * math.sin(ui_t * 0.9 + ri * 1.7)
                       if floating else 0)
-                wspr = walker_sprite(rname, int(ui_t * 4 + ri) & 3, 40)
-                screen.blit(wspr, (ox + rx_m * ppm_i * scale_i
-                                   - wspr.get_width() / 2,
+                cspr = eva_art.astronaut(
+                    int(ui_t * 3 + ri) & 3 if floating else 0,
+                    -1 if ri % 2 else 1, False, h_px=148)
+                screen.blit(cspr, (ox + rx_m * ppm_i * scale_i
+                                   - cspr.get_width() / 2,
                                    oy + FLOOR_Y * scale_i
-                                   - wspr.get_height() - fy))
+                                   - cspr.get_height() - fy))
             # you
-            fy_me = 18 + 9 * math.sin(ui_t * 1.1) if floating else 0
+            fy_me = 36 + 16 * math.sin(ui_t * 1.1) if floating else 0
             aspr = eva_art.astronaut(int(interior_frame), interior_face,
-                                     False, h_px=int(40 * scale_i * 0.8))
+                                     False, h_px=160)
             screen.blit(aspr, (size[0] / 2 - aspr.get_width() / 2,
                                oy + FLOOR_Y * scale_i - aspr.get_height()
                                - fy_me))
