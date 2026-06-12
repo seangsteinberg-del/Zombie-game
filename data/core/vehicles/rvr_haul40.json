@@ -1,0 +1,22 @@
+{
+ "id": "core:rvr_haul40",
+ "catalog_id": "RVR-HAUL40",
+ "kind": "rover",
+ "tier": "T2",
+ "node": "VH-02",
+ "name": "Hauler, 40 t bed",
+ "vclass": "VC-4",
+ "dry_t": 22.0,
+ "payload_t": 40.0,
+ "power": "V-9 combustion (1.2 t reactants/100 km Mars)",
+ "reactants_t_per_100km": 1.2,
+ "crew": 0,
+ "crew_optional": 1,
+ "speed_raw_kmh": 12.0,
+ "speed_road_kmh": 35.0,
+ "e_km_kwh": 9.6,
+ "e_km_note": "full",
+ "range_km": null,
+ "range_note": "by tankage",
+ "anchor": "autonomous mining trucks"
+}

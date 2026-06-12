@@ -1,0 +1,20 @@
+{
+ "id": "core:rvr_lrv",
+ "catalog_id": "RVR-LRV",
+ "kind": "rover",
+ "tier": "T1",
+ "node": "VH-01",
+ "name": "Open crew rover",
+ "vclass": "VC-1",
+ "dry_t": 0.21,
+ "power": "8.7 kWh AgZn primary (0.9 usable) or STO-LI 60 kg",
+ "batt_kwh": 8.7,
+ "usable_frac": 0.9,
+ "crew": 2,
+ "speed_raw_kmh": 13.0,
+ "speed_road_kmh": 37.0,
+ "speed_body": "Moon",
+ "e_km_kwh": 0.089,
+ "range_km": 88.0,
+ "anchor": "Apollo LRV"
+}

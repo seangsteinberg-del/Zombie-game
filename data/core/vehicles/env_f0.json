@@ -1,0 +1,13 @@
+{
+ "id": "core:env_f0",
+ "catalog_id": "ENV-F0",
+ "kind": "aero_marine_part",
+ "tier": "T0",
+ "name": "envelope, coated fabric",
+ "areal_kg_m2": 0.2,
+ "max_dp_kpa": 5.0,
+ "mass_per_m2": true,
+ "used_by": [
+  "BLN-V0"
+ ]
+}

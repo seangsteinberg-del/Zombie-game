@@ -1,0 +1,24 @@
+{
+ "id": "core:rvr_scout",
+ "catalog_id": "RVR-SCOUT",
+ "kind": "rover",
+ "tier": "T0",
+ "node": "VH-00",
+ "name": "Robotic science rover",
+ "vclass": "VC-2",
+ "dry_t": 1.0,
+ "power": "NUK-RTG-M + 2 kWh buffer",
+ "buffer_kwh": 2.0,
+ "crew": 0,
+ "speed_avg_kmh": 0.3,
+ "km_per_sol": {
+  "a2_batch": 0.35,
+  "a2_local": 2.0,
+  "a3_cap": 7.0
+ },
+ "e_km_kwh": 0.37,
+ "e_km_note": "Mars",
+ "range_km": null,
+ "range_unlimited": true,
+ "anchor": "Curiosity/Perseverance"
+}

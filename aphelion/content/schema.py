@@ -173,6 +173,28 @@ DISCOVERY_SCHEMA: dict[str, tuple[bool, Check]] = {
     "requirement": (True, _string),
 }
 
+# 10 §1 vehicle catalog sections (one kind per catalog table §1.1-§1.10)
+VEHICLE_KINDS = {"rover", "locomotion", "aero_marine_part", "utility",
+                 "hopper", "aircraft", "balloon", "marine", "control_kit",
+                 "bay"}
+# 10 §1.0 chassis classes VC-1..VC-5; "integrated" = sub-100 kg catalog
+# items (no grid build) incl. the UTL-CDRONE 300 kg zero-g exception.
+VEHICLE_CLASSES = {"VC-1", "VC-2", "VC-3", "VC-4", "VC-5", "integrated"}
+
+VEHICLE_SCHEMA: dict[str, tuple[bool, Check]] = {
+    "id": (True, _is_id),
+    "kind": (True, lambda v: v in VEHICLE_KINDS),
+    "tier": (True, lambda v: v in TIERS),
+    "name": (True, _string),
+    # optional fields the engine relies on when present; unknown keys pass
+    "catalog_id": (False, _string),          # spec row id, e.g. "RVR-LRV"
+    "vclass": (False, lambda v: v in VEHICLE_CLASSES),
+    "dry_t": (False, _num(lo=0.0)),          # VEH-PAD is legitimately 0 t
+    "crew": (False, _num(lo=0)),
+    "speculative": (False, lambda v: isinstance(v, bool)),
+    "anchor": (False, _string),
+}
+
 # content-type directory name -> schema
 TYPE_SCHEMAS: dict[str, dict[str, tuple[bool, Check]]] = {
     "bodies": BODY_SCHEMA,
@@ -183,6 +205,7 @@ TYPE_SCHEMAS: dict[str, dict[str, tuple[bool, Check]]] = {
     "sectors": SECTOR_SCHEMA,
     "regions": REGION_SCHEMA,
     "anomalies": ANOMALY_SCHEMA,
+    "vehicles": VEHICLE_SCHEMA,
 }
 
 RECIPE_MASS_BALANCE_TOL = 0.005     # 0.5 % (05 §3.2 rule)

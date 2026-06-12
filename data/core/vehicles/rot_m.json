@@ -1,0 +1,14 @@
+{
+ "id": "core:rot_m",
+ "catalog_id": "ROT-M",
+ "kind": "aero_marine_part",
+ "tier": "T2",
+ "name": "multirotor set, 8 nacelles",
+ "disk_m2": 11.5,
+ "p_max_kw": 8.0,
+ "mass_kg": 50.0,
+ "used_by": [
+  "AIR-T1"
+ ],
+ "notes": "hover margin 8/3.2 = 2.5"
+}

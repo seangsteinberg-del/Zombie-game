@@ -1,0 +1,16 @@
+{
+ "id": "core:whl_stud",
+ "catalog_id": "WHL-STUD",
+ "kind": "locomotion",
+ "tier": "T2",
+ "name": "studded ice wheel",
+ "crr_mult": 1.0,
+ "wear_mult": 1.0,
+ "a_contact_m2": 0.04,
+ "clearance_m": 0.3,
+ "kg_per_set": 28.0,
+ "max_load_t_per_set": 0.8,
+ "mu_from": 0.25,
+ "mu_to": 0.45,
+ "where": "ICE_PLAIN"
+}

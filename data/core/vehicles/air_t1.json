@@ -1,0 +1,20 @@
+{
+ "id": "core:air_t1",
+ "catalog_id": "AIR-T1",
+ "kind": "aircraft",
+ "tier": "T3",
+ "node": "VH-06",
+ "name": "Titan rotorcraft",
+ "body": "Titan",
+ "mass_t": 0.45,
+ "power": "MMRTG + 10 kWh batt; ROT-M",
+ "batt_kwh": 10.0,
+ "rotor_id": "ROT-M",
+ "disk_m2": 11.5,
+ "hover_kw": 3.2,
+ "speed_ms": 10.0,
+ "leg_km": 30.0,
+ "leg_kwh": 2.7,
+ "leg_note": "30 km legs daily",
+ "payload_kg": 80.0
+}

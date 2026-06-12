@@ -1,0 +1,23 @@
+{
+ "id": "core:air_t2",
+ "catalog_id": "AIR-T2",
+ "kind": "aircraft",
+ "tier": "T4",
+ "speculative": true,
+ "tier_note": "engine sets tier",
+ "name": "Titan tiltrotor",
+ "body": "Titan",
+ "mass_t": 2.5,
+ "power": "V-10 O2-breather 60 kW; ROT-L",
+ "p_installed_kw": 60.0,
+ "rotor_id": "ROT-L",
+ "wing_s_m2": 25.0,
+ "disk_m2": 30.0,
+ "cl_max": 1.4,
+ "l_over_d": 15.0,
+ "hover_kw": 26.0,
+ "cruise_ms": 30.0,
+ "cruise_kw": 9.0,
+ "radius_km": 500.0,
+ "payload_kg": 800.0
+}

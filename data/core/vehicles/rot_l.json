@@ -1,0 +1,13 @@
+{
+ "id": "core:rot_l",
+ "catalog_id": "ROT-L",
+ "kind": "aero_marine_part",
+ "tier": "T3",
+ "name": "tiltrotor set",
+ "disk_m2": 30.0,
+ "p_max_kw": 70.0,
+ "mass_kg": 300.0,
+ "used_by": [
+  "AIR-T2"
+ ]
+}

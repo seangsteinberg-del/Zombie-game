@@ -1,0 +1,13 @@
+{
+ "id": "core:veh_bay_s",
+ "catalog_id": "VEH-BAY-S",
+ "kind": "bay",
+ "tier": "T1",
+ "name": "Vehicle bay, small",
+ "pressurizable": true,
+ "fits": [
+  "VC-1",
+  "VC-2"
+ ],
+ "functions": "service, dust wash (-5 D), thermal shelter"
+}

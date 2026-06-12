@@ -1,0 +1,24 @@
+{
+ "id": "core:gld_v",
+ "catalog_id": "GLD-V",
+ "kind": "aircraft",
+ "tier": "T3",
+ "node": "VH-09",
+ "name": "Venus cloud glider",
+ "body": "Venus",
+ "alt_band_km": [
+  50.0,
+  60.0
+ ],
+ "mass_t": 0.45,
+ "power": "solar-electric 5 kW",
+ "p_kw": 5.0,
+ "wing_s_m2": 50.0,
+ "cl_max": 1.4,
+ "l_over_d": 20.0,
+ "wind_ms": 65.0,
+ "circumnav_days_min": 5.0,
+ "circumnav_days_max": 7.0,
+ "payload_kg": 100.0,
+ "notes": "rides 65 m/s superrotation; station-keeps only at band edges (sun-sync would need ~16 kW - not fitted)"
+}

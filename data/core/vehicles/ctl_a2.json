@@ -1,0 +1,14 @@
+{
+ "id": "core:ctl_a2",
+ "catalog_id": "CTL-A2",
+ "kind": "control_kit",
+ "tier": "T2",
+ "node": "05 A2",
+ "name": "Teleop package",
+ "mass_kg": 20.0,
+ "mass_note": "+ comms part",
+ "grants": [
+  "TELEOP"
+ ],
+ "notes": "eta per 05 F-2"
+}

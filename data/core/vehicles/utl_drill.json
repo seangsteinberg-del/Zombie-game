@@ -1,0 +1,14 @@
+{
+ "id": "core:utl_drill",
+ "catalog_id": "UTL-DRILL",
+ "kind": "utility",
+ "tier": "T1",
+ "name": "Drill rig carrier",
+ "vclass": "VC-3",
+ "dry_t": 4.0,
+ "dry_note": "+ drill",
+ "power": "STO-LI 60 kWh / umbilical",
+ "batt_kwh": 60.0,
+ "function": "TRIDENT 1 m (T1) or 10 m rig (T2)",
+ "anchor": "Honeybee TRIDENT"
+}

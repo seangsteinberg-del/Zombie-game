@@ -1,0 +1,15 @@
+{
+ "id": "core:whl_mesh",
+ "catalog_id": "WHL-MESH",
+ "kind": "locomotion",
+ "tier": "T0",
+ "name": "wire-mesh wheel",
+ "crr_mult": 1.0,
+ "wear_mult": 1.0,
+ "a_contact_m2": 0.05,
+ "clearance_m": 0.35,
+ "kg_per_set": 12.0,
+ "max_load_t_per_set": 0.4,
+ "where": "vacuum bodies (LRV)",
+ "_comment": "10 S1.2 row (LEG-ATH), legged set / ATHLETE anchor, is deliberately omitted: stats TBD Pass 2/Phase 5 (DECISIONS C20)"
+}

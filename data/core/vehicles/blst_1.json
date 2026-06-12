@@ -1,0 +1,14 @@
+{
+ "id": "core:blst_1",
+ "catalog_id": "BLST-1",
+ "kind": "aero_marine_part",
+ "tier": "T3",
+ "name": "ballast tank",
+ "v_m3": 0.5,
+ "pump_l_s": 10.0,
+ "mass_kg": 40.0,
+ "used_by": [
+  "SUB-T"
+ ],
+ "notes": "pump rate sets trim/dive rate"
+}

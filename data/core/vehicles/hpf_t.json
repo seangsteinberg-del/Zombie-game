@@ -1,0 +1,22 @@
+{
+ "id": "core:hpf_t",
+ "catalog_id": "HPF-T",
+ "kind": "aircraft",
+ "tier": "T3",
+ "name": "Human-powered flyer",
+ "body": "Titan",
+ "mass_t": 0.03,
+ "mass_note": "30 kg wing",
+ "power": "crew ~72 W (fit human sustains 200 W)",
+ "p_crew_w": 72.0,
+ "p_crew_max_w": 200.0,
+ "wing_s_m2": 8.0,
+ "cl_max": 1.8,
+ "l_over_d": 12.0,
+ "l_over_d_note": "declared per-craft override",
+ "stall_ms": 2.1,
+ "cruise_kmh": 14.0,
+ "fatigue_limit_h": 2.0,
+ "payload": "suited crew",
+ "notes": "DECISIONS C20: IN v1 as a true EVA-mobility mode; 2 h fatigue limit (08)"
+}

@@ -1,0 +1,17 @@
+{
+ "id": "core:hop_p",
+ "catalog_id": "HOP-P",
+ "kind": "hopper",
+ "tier": "T2",
+ "name": "Crewed hopper",
+ "landed_t": 12.0,
+ "prop_cap_t": 8.0,
+ "engine_id": "ML-111",
+ "engine_count": 1,
+ "engine_note": "pump-fed methalox, 355 s vac - DECISIONS A8",
+ "dv_ms": 1778.0,
+ "dv_note": "3481*ln(20/12)",
+ "range_km_moon": 445.0,
+ "abort_reserve_frac": 0.2,
+ "use": "crew sorties; mandatory 20% dv abort reserve"
+}

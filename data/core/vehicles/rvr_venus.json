@@ -1,0 +1,19 @@
+{
+ "id": "core:rvr_venus",
+ "catalog_id": "RVR-VENUS",
+ "kind": "rover",
+ "tier": "T3",
+ "node": "VH-10",
+ "name": "Venus surface crawler",
+ "vclass": "VC-2",
+ "dry_t": 1.8,
+ "power": "wind turbine ~40 W mean / 250 W gust -> mechanical spring/flywheel store (no battery at 737 K) + SiC avionics",
+ "wind_w_mean": 40.0,
+ "wind_w_gust": 250.0,
+ "crew": 0,
+ "speed_burst_kmh": 0.3,
+ "speed_avg_kmh": 0.05,
+ "range_note": "clock-limited",
+ "mission_days": 60.0,
+ "anchor": "AREE + LLISSE/GEER"
+}

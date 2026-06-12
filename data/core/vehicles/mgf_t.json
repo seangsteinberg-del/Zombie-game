@@ -1,0 +1,23 @@
+{
+ "id": "core:mgf_t",
+ "catalog_id": "MGF-T",
+ "kind": "balloon",
+ "tier": "T2",
+ "name": "Titan Montgolfiere",
+ "body": "Titan",
+ "alt_max_km": 8.0,
+ "envelope_id": "ENV-F2",
+ "envelope_note": "10 m double-wall x2",
+ "wall_kg": 65.0,
+ "v_env_m3": 524.0,
+ "frontal_m2": 79.0,
+ "cd": 0.5,
+ "gas": "RTG-heated ambient N2",
+ "dt_k_min": 5.0,
+ "dt_k_max": 10.0,
+ "lift_kg_m3_min": 0.27,
+ "lift_kg_m3_max": 0.55,
+ "payload_kg": 120.0,
+ "anchor": "TSSM",
+ "notes": "MMRTG 2 kWt is the burner"
+}

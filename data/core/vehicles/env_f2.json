@@ -1,0 +1,15 @@
+{
+ "id": "core:env_f2",
+ "catalog_id": "ENV-F2",
+ "kind": "aero_marine_part",
+ "tier": "T2",
+ "name": "envelope, laminate",
+ "areal_kg_m2": 0.1,
+ "max_dp_kpa": 10.0,
+ "mass_per_m2": true,
+ "used_by": [
+  "DIR-T",
+  "MGF-T"
+ ],
+ "notes": "MGF-T double wall x2"
+}

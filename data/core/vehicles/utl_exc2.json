@@ -1,0 +1,15 @@
+{
+ "id": "core:utl_exc2",
+ "catalog_id": "UTL-EXC2",
+ "kind": "utility",
+ "tier": "T2",
+ "name": "Mobile bucket-wheel",
+ "vclass": "VC-4",
+ "dry_t": 9.0,
+ "tool_t": 3.0,
+ "tool": "04 BWE",
+ "power": "NUK-KP1 or 15 kWe umbilical",
+ "rate_t_per_day": 100.0,
+ "function": "100 t/day",
+ "anchor": "terrestrial BWE"
+}

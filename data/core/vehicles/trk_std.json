@@ -1,0 +1,17 @@
+{
+ "id": "core:trk_std",
+ "catalog_id": "TRK-STD",
+ "kind": "locomotion",
+ "tier": "T1",
+ "name": "tracks",
+ "crr_mult_soft": 0.8,
+ "crr_mult_hard": 1.3,
+ "wear_mult": 1.5,
+ "wear_note": "terrain_mult cap 1.5",
+ "a_contact_m2": 0.5,
+ "clearance_m": 0.25,
+ "kg_per_set": 90.0,
+ "max_load_t_per_set": 5.0,
+ "speed_cap_kmh": 15.0,
+ "where": "DUNE/soft, VC-4/5"
+}

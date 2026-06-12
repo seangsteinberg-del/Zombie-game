@@ -1,0 +1,15 @@
+{
+ "id": "core:utl_doze",
+ "catalog_id": "UTL-DOZE",
+ "kind": "utility",
+ "tier": "T1",
+ "name": "Dozer/grader",
+ "vclass": "VC-3",
+ "dry_t": 4.5,
+ "power": "STO-LI 60 kWh",
+ "batt_kwh": 60.0,
+ "rate_m_per_h": 100.0,
+ "p_kw": 8.0,
+ "function": "100 m compacted track/h @ 8 kW; berms, pads",
+ "anchor": "LANCE blade"
+}

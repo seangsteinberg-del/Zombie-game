@@ -1,0 +1,18 @@
+{
+ "id": "core:hop_ceres",
+ "catalog_id": "HOP-CERES",
+ "kind": "hopper",
+ "tier": "T2",
+ "name": "Low-g utility hopper",
+ "landed_t": 2.0,
+ "prop_cap_t": 0.35,
+ "prop_note": "biprop + cold-gas trim",
+ "engine_id": "RCS-D400",
+ "engine_count": 2,
+ "trim_engine_id": "RCS-N10",
+ "trim_engine_note": "70 s",
+ "dv_ms": 475.0,
+ "dv_note": "biprop",
+ "range_km_ceres": 210.0,
+ "use": "default mobility at g < 0.3"
+}

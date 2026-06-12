@@ -1,0 +1,19 @@
+{
+ "id": "core:rov_e",
+ "catalog_id": "ROV-E",
+ "kind": "marine",
+ "tier": "T4",
+ "speculative": true,
+ "node": "VH-08",
+ "name": "Europa under-ice ROV",
+ "dry_t": 0.9,
+ "hull": "H3",
+ "hull_mpa": 40.0,
+ "power": "NUK-RTG-S + 20 kWh",
+ "rtg_id": "NUK-RTG-S",
+ "batt_kwh": 20.0,
+ "speed_ms": 0.5,
+ "anchor": "SWIM/Orpheus",
+ "notes": "deployed by CRYO-E at shell base (~30 MPa)",
+ "_comment": "10 S1.8 row (ROV-E-ABYSS), ocean-floor variant with H4 100+ MPa hull, is deliberately omitted: TBD Pass 2/Phase 5 (DECISIONS C20)"
+}

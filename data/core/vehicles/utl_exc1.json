@@ -1,0 +1,17 @@
+{
+ "id": "core:utl_exc1",
+ "catalog_id": "UTL-EXC1",
+ "kind": "utility",
+ "tier": "T1",
+ "name": "Excavator cart",
+ "vclass": "VC-2",
+ "dry_t": 0.6,
+ "tool_t": 0.15,
+ "tool": "04 drum",
+ "power": "STO-LI 15 kWh",
+ "batt_kwh": 15.0,
+ "rate_t_per_day": 2.5,
+ "e_dig_kwh_t": 1.0,
+ "function": "2.5 t regolith/day; e_dig 1 kWh/t",
+ "anchor": "RASSOR/IPEx"
+}

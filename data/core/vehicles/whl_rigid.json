@@ -1,0 +1,15 @@
+{
+ "id": "core:whl_rigid",
+ "catalog_id": "WHL-RIGID",
+ "kind": "locomotion",
+ "tier": "T0",
+ "name": "machined metal wheel",
+ "crr_mult": 1.1,
+ "wear_mult": 2.0,
+ "wear_note": "2.0 on CHAOS",
+ "a_contact_m2": 0.04,
+ "clearance_m": 0.3,
+ "kg_per_set": 25.0,
+ "max_load_t_per_set": 0.6,
+ "where": "Mars robotic (Curiosity)"
+}

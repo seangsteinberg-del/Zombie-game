@@ -1,0 +1,15 @@
+{
+ "id": "core:utl_crane",
+ "catalog_id": "UTL-CRANE",
+ "kind": "utility",
+ "tier": "T1",
+ "name": "Rover-crane (LSMS)",
+ "vclass": "VC-3",
+ "dry_t": 3.0,
+ "power": "STO-LI 30 kWh",
+ "batt_kwh": 30.0,
+ "lift_t_ref": 12.0,
+ "g_ref": 1.62,
+ "function": "lift m_max = 12 t * (1.62/g_local); tip check = V-0b with load at boom tip",
+ "anchor": "NASA LSMS"
+}

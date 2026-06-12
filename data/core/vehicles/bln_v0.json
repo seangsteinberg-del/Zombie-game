@@ -1,0 +1,20 @@
+{
+ "id": "core:bln_v0",
+ "catalog_id": "BLN-V0",
+ "kind": "balloon",
+ "tier": "T0",
+ "node": "VH-09 free",
+ "name": "Superpressure aerobot",
+ "body": "Venus",
+ "alt_km": 54.0,
+ "envelope_id": "ENV-F0",
+ "envelope_note": "3.5 m sphere",
+ "v_env_m3": 22.0,
+ "frontal_m2": 9.6,
+ "cd": 0.45,
+ "gas": "H2",
+ "gas_note": "lift 1.00; inert in CO2",
+ "payload_kg": 7.0,
+ "anchor": "Vega",
+ "notes": "drifts 65 m/s; 46 h battery unless solar T1"
+}

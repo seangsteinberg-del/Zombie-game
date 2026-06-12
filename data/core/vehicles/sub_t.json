@@ -1,0 +1,21 @@
+{
+ "id": "core:sub_t",
+ "catalog_id": "SUB-T",
+ "kind": "marine",
+ "tier": "T3",
+ "node": "VH-07",
+ "name": "Titan submarine",
+ "dry_t": 1.5,
+ "length_m": 6.0,
+ "hull": "H1",
+ "power": "NUK-RTG-S x3 ~330 We; ~6 kWt rejected via SUB-FIN",
+ "rtg_id": "NUK-RTG-S",
+ "rtg_count": 3,
+ "power_we": 330.0,
+ "reject_kwt": 6.0,
+ "speed_ms": 1.0,
+ "leg_days": 90.0,
+ "leg_km": 2000.0,
+ "depth_m": 300.0,
+ "anchor": "NASA GRC COMPASS"
+}

@@ -1,0 +1,23 @@
+{
+ "id": "core:rvr_haul10",
+ "catalog_id": "RVR-HAUL10",
+ "kind": "rover",
+ "tier": "T1",
+ "node": "VH-02",
+ "name": "Hauler, 10 t bed",
+ "vclass": "VC-4",
+ "dry_t": 8.0,
+ "payload_t": 10.0,
+ "power": "swap pallet 300 kWh (1.2 t STO-SS) or V-9 combustion",
+ "pallet_kwh": 300.0,
+ "pallet_t": 1.2,
+ "crew": 0,
+ "speed_raw_kmh": 15.0,
+ "speed_road_kmh": 40.0,
+ "speed_body": "Mars",
+ "e_km_kwh": 2.9,
+ "e_km_note": "full",
+ "range_km": 90.0,
+ "range_note": "~90 km/pallet",
+ "anchor": "autonomous mining trucks"
+}

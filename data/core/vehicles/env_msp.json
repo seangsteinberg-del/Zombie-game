@@ -1,0 +1,14 @@
+{
+ "id": "core:env_msp",
+ "catalog_id": "ENV-MSP",
+ "kind": "aero_marine_part",
+ "tier": "T2",
+ "name": "Mars superpressure film",
+ "areal_kg_m2": 0.02,
+ "max_dp_kpa": 1.0,
+ "mass_per_m2": true,
+ "used_by": [
+  "BLN-M"
+ ],
+ "notes": "instrument loads only"
+}

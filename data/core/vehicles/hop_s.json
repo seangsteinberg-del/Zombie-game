@@ -1,0 +1,16 @@
+{
+ "id": "core:hop_s",
+ "catalog_id": "HOP-S",
+ "kind": "hopper",
+ "tier": "T1",
+ "node": "VH-03",
+ "name": "Micro-hopper",
+ "landed_t": 0.05,
+ "prop_cap_t": 0.0105,
+ "engine_id": "RCS-D400",
+ "engine_note": "NTO/MMH, 300 s",
+ "dv_ms": 560.0,
+ "dv_note": "2942*ln(60.5/50)",
+ "range_km_moon": 40.0,
+ "use": "PSR peeks, skylight survey (11 DSC-03)"
+}

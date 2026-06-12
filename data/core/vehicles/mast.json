@@ -1,0 +1,11 @@
+{
+ "id": "core:mast",
+ "catalog_id": "MAST",
+ "kind": "bay",
+ "tier": "T2",
+ "name": "Dirigible mooring mast",
+ "fits": [
+  "dirigibles"
+ ],
+ "functions": "mooring, gas top-off, cargo crane"
+}

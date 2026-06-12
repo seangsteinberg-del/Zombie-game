@@ -1,0 +1,15 @@
+{
+ "id": "core:hop_c5",
+ "catalog_id": "HOP-C5",
+ "kind": "hopper",
+ "tier": "T2",
+ "name": "Cargo hopper",
+ "landed_t": 5.0,
+ "prop_cap_t": 2.5,
+ "engine_id": "ML-24",
+ "engine_note": "PF methalox, 320 s vac",
+ "dv_ms": 1272.0,
+ "dv_note": "3138*ln(7.5/5)",
+ "range_km_moon": 220.0,
+ "use": "time-critical freight"
+}

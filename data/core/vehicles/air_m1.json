@@ -1,0 +1,19 @@
+{
+ "id": "core:air_m1",
+ "catalog_id": "AIR-M1",
+ "kind": "aircraft",
+ "tier": "T2",
+ "node": "VH-05",
+ "name": "Courier heli",
+ "body": "Mars",
+ "mass_t": 0.031,
+ "batt_kwh": 2.0,
+ "disk_m2": 7.7,
+ "hover_kw": 6.0,
+ "eta_hover": 0.42,
+ "endurance_min": 8.0,
+ "hop_km": 10.0,
+ "rho_min": 0.014,
+ "payload_kg": 4.0,
+ "notes": "basins only (rho >= 0.014)"
+}

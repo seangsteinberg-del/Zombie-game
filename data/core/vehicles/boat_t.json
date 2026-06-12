@@ -1,0 +1,17 @@
+{
+ "id": "core:boat_t",
+ "catalog_id": "BOAT-T",
+ "kind": "marine",
+ "tier": "T2",
+ "name": "Shoreline skiff",
+ "dry_t": 0.8,
+ "cargo_t": 1.0,
+ "hull": "H1",
+ "v_hull_m3": 4.0,
+ "power": "STO-SS 30 kWh",
+ "batt_kwh": 30.0,
+ "speed_ms": 4.0,
+ "range_km": 150.0,
+ "sea_state_max": 2,
+ "anchor": "TiME"
+}

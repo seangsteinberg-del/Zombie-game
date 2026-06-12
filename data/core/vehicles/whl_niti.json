@@ -1,0 +1,14 @@
+{
+ "id": "core:whl_niti",
+ "catalog_id": "WHL-NITI",
+ "kind": "locomotion",
+ "tier": "T1",
+ "name": "NiTi spring tire",
+ "crr_mult": 0.85,
+ "wear_mult": 0.6,
+ "a_contact_m2": 0.06,
+ "clearance_m": 0.35,
+ "kg_per_set": 20.0,
+ "max_load_t_per_set": 0.8,
+ "where": "vacuum/Mars (NASA Glenn)"
+}

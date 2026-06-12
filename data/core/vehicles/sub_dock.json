@@ -1,0 +1,13 @@
+{
+ "id": "core:sub_dock",
+ "catalog_id": "SUB-DOCK",
+ "kind": "bay",
+ "tier": "T3",
+ "location": "shoreline",
+ "name": "Submarine dock",
+ "fits": [
+  "boats",
+  "sub"
+ ],
+ "functions": "hull thaw (AL-5 logic), O2 bunkering, sonar offload"
+}

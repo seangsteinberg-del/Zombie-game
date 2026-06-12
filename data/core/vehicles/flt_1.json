@@ -1,0 +1,13 @@
+{
+ "id": "core:flt_1",
+ "catalog_id": "FLT-1",
+ "kind": "aero_marine_part",
+ "tier": "T2",
+ "name": "float/displacement hull cell",
+ "v_disp_m3": 4.0,
+ "mass_kg": 120.0,
+ "used_by": [
+  "BOAT-T",
+  "BARGE-T"
+ ]
+}

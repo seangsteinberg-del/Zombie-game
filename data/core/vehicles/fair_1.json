@@ -1,0 +1,14 @@
+{
+ "id": "core:fair_1",
+ "catalog_id": "FAIR-1",
+ "kind": "aero_marine_part",
+ "tier": "T2",
+ "name": "fairing kit",
+ "cd_from": 0.8,
+ "cd_to": 0.5,
+ "mass_kg": 8.0,
+ "mass_note": "per faired cell",
+ "used_by": [
+  "ground vehicles"
+ ]
+}

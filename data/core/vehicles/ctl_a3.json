@@ -1,0 +1,13 @@
+{
+ "id": "core:ctl_a3",
+ "catalog_id": "CTL-A3",
+ "kind": "control_kit",
+ "tier": "T3",
+ "node": "11 IN-09",
+ "name": "AutoNav package",
+ "mass_kg": 35.0,
+ "grants": [
+  "AUTONAV"
+ ],
+ "notes": "0.5x v_max, 24/7, exception queue"
+}

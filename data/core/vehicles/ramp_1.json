@@ -1,0 +1,14 @@
+{
+ "id": "core:ramp_1",
+ "catalog_id": "RAMP-1",
+ "kind": "aero_marine_part",
+ "tier": "T1",
+ "name": "deployment ramp",
+ "max_lander_tilt_deg": 15.0,
+ "mass_kg": 150.0,
+ "used_by": [
+  "landers",
+  "hauler beds"
+ ],
+ "notes": "load/unload w/o crane; refuses >15 deg lander tilt"
+}

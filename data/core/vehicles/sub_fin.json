@@ -1,0 +1,15 @@
+{
+ "id": "core:sub_fin",
+ "catalog_id": "SUB-FIN",
+ "kind": "aero_marine_part",
+ "tier": "T3",
+ "name": "dorsal heat-rejection fin + comms mast",
+ "reject_kwt_max": 6.0,
+ "wetted_flux_kw_m2_max": 0.5,
+ "comms": "phased-array DTE",
+ "mass_kg": 60.0,
+ "used_by": [
+  "SUB-T"
+ ],
+ "notes": "rejects <=6 kWt above waterline (keeps wetted flux <=0.5 kW/m2)"
+}

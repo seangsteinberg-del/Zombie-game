@@ -1,0 +1,12 @@
+{
+ "id": "core:veh_bay_l",
+ "catalog_id": "VEH-BAY-L",
+ "kind": "bay",
+ "tier": "T2",
+ "name": "Vehicle bay, large",
+ "fits": [
+  "VC-3",
+  "VC-4"
+ ],
+ "functions": "+ on-site Motor Pool edits, battery-pallet swap (10 min)"
+}

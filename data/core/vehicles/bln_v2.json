@@ -1,0 +1,21 @@
+{
+ "id": "core:bln_v2",
+ "catalog_id": "BLN-V2",
+ "kind": "balloon",
+ "tier": "T3",
+ "node": "VH-09",
+ "name": "Variable-altitude aerobot",
+ "body": "Venus",
+ "alt_band_km": [
+  48.0,
+  60.0
+ ],
+ "envelope_id": "ENV-F3",
+ "envelope_note": "12 m dual",
+ "v_env_m3": 900.0,
+ "frontal_m2": 110.0,
+ "cd": 0.5,
+ "gas": "H2",
+ "payload_kg": 40.0,
+ "notes": "+/-5 km control @ 0.5 m/s vertical; clamps 45-65 km envelope"
+}

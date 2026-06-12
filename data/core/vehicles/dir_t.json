@@ -1,0 +1,21 @@
+{
+ "id": "core:dir_t",
+ "catalog_id": "DIR-T",
+ "kind": "balloon",
+ "tier": "T2",
+ "name": "Titan dirigible",
+ "body": "Titan",
+ "alt_max_km": 3.0,
+ "envelope_id": "ENV-F2",
+ "envelope_note": "40x10 m ellipsoid",
+ "v_env_m3": 2050.0,
+ "frontal_m2": 78.0,
+ "cd": 0.05,
+ "gas": "H2",
+ "gas_note": "inert: no free O2 on Titan",
+ "payload_t": 10.0,
+ "speed_ms": 8.0,
+ "p_kw": 7.8,
+ "e_t_km_kwh": 0.027,
+ "notes": "Titan's railroad; moors to MAST"
+}

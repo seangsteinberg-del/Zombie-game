@@ -1,0 +1,13 @@
+{
+ "id": "core:ctl_cnv",
+ "catalog_id": "CTL-CNV",
+ "kind": "control_kit",
+ "tier": "T2",
+ "name": "Convoy follower",
+ "mass_kg": 8.0,
+ "grants": [
+  "CONVOY_FOLLOW"
+ ],
+ "follower_ratio": 5,
+ "notes": "follow leader, 5:1"
+}

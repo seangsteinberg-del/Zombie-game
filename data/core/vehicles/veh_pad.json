@@ -1,0 +1,11 @@
+{
+ "id": "core:veh_pad",
+ "catalog_id": "VEH-PAD",
+ "kind": "bay",
+ "tier": "T0",
+ "name": "Vehicle pad",
+ "dry_t": 0.0,
+ "fits": "any",
+ "functions": "park, umbilical charge; full exposure (V-24d applies)",
+ "_comment": "10 S1.10 is the vehicle-side spec; 07 owns the habitat module"
+}

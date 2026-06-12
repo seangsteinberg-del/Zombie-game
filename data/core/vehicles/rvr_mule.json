@@ -1,0 +1,18 @@
+{
+ "id": "core:rvr_mule",
+ "catalog_id": "RVR-MULE",
+ "kind": "rover",
+ "tier": "T2",
+ "name": "Rover-manipulator",
+ "vclass": "VC-1",
+ "dry_t": 0.45,
+ "power": "STO-LI 15 kWh",
+ "batt_kwh": 15.0,
+ "crew": 0,
+ "speed_raw_kmh": 8.0,
+ "speed_road_kmh": 24.0,
+ "e_km_kwh": 0.06,
+ "range_km": 200.0,
+ "anchor": "= 05 bot_mule",
+ "notes": "DECISIONS A9: 05 owns the data row; this entry is a pointer, not a copy"
+}

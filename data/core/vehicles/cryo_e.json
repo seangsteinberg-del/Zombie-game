@@ -1,0 +1,32 @@
+{
+ "id": "core:cryo_e",
+ "catalog_id": "CRYO-E",
+ "kind": "marine",
+ "tier": "T4",
+ "speculative": true,
+ "node": "VH-08",
+ "tier_note": "T3 at ~40 kWt SLUSH; T4 [SPECULATIVE] at 100 kWt (this row encodes the 100 kWt core)",
+ "tier_slush": "T3",
+ "power_kwt_slush": 40.0,
+ "name": "Ice-penetrating cryobot",
+ "dry_t": 2.2,
+ "dia_m": 0.26,
+ "length_m": 5.0,
+ "hull": "melt head",
+ "power": "100 kWt fission core (09)",
+ "power_kwt": 100.0,
+ "rate_m_day": 100.0,
+ "legs": [
+  {
+   "km": 15.0,
+   "days": 150.0
+  },
+  {
+   "km": 25.0,
+   "days": 250.0
+  }
+ ],
+ "repeater_interval_m": 500.0,
+ "autonomy": "A3 only",
+ "anchor": "Philberth/SLUSH"
+}

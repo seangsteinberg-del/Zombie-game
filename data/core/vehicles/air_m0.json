@@ -1,0 +1,20 @@
+{
+ "id": "core:air_m0",
+ "catalog_id": "AIR-M0",
+ "kind": "aircraft",
+ "tier": "T0",
+ "fieldable_tier": "T2",
+ "tier_note": "T0 hw, fieldable T2",
+ "node": "VH-05",
+ "name": "Scout heli",
+ "body": "Mars",
+ "mass_t": 0.002,
+ "power": "40 Wh batt + panel",
+ "batt_kwh": 0.04,
+ "disk_m2": 1.15,
+ "hover_w": 335.0,
+ "hover_note": "310 induced + 25 fixed",
+ "endurance_min": 3.0,
+ "km_per_sol": 0.5,
+ "payload_kg": 0.05
+}

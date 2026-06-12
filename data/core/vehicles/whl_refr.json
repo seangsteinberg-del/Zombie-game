@@ -1,0 +1,14 @@
+{
+ "id": "core:whl_refr",
+ "catalog_id": "WHL-REFR",
+ "kind": "locomotion",
+ "tier": "T3",
+ "name": "refractory wheel, dry bearings",
+ "crr_mult": 1.3,
+ "wear_note": "clock-based",
+ "a_contact_m2": 0.03,
+ "clearance_m": 0.25,
+ "kg_per_set": 40.0,
+ "max_load_t_per_set": 0.6,
+ "where": "Venus surface"
+}

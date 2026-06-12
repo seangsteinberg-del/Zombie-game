@@ -1,0 +1,15 @@
+{
+ "id": "core:whl_cryo",
+ "catalog_id": "WHL-CRYO",
+ "kind": "locomotion",
+ "tier": "T2",
+ "name": "heated-hub cryo wheel",
+ "crr_mult": 1.0,
+ "wear_mult": 1.0,
+ "wear_note": "1.0 on Titan",
+ "a_contact_m2": 0.06,
+ "clearance_m": 0.35,
+ "kg_per_set": 30.0,
+ "max_load_t_per_set": 0.8,
+ "where": "Titan (94 K bearings, metal bellows)"
+}

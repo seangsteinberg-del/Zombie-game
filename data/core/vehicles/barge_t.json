@@ -1,0 +1,26 @@
+{
+ "id": "core:barge_t",
+ "catalog_id": "BARGE-T",
+ "kind": "marine",
+ "tier": "T4",
+ "speculative": true,
+ "spec_note": "missing anchor, not exotic physics",
+ "name": "Methane barge + tug",
+ "tug_t": 6.0,
+ "barge_m3": 350.0,
+ "barge_dims_m": [
+  30.0,
+  5.0
+ ],
+ "draft_m": 1.5,
+ "submerged_frontal_m2": 7.5,
+ "hull": "H1, FLT-1 cells",
+ "power": "V-10, 30 kW installed; ~21.5 kW cruise + 3.5 kW hotel",
+ "p_installed_kw": 30.0,
+ "p_cruise_kw": 21.5,
+ "p_hotel_kw": 3.5,
+ "payload_t": 100.0,
+ "speed_ms": 2.5,
+ "e_t_km_kwh": 0.028,
+ "anchor": "displacement physics"
+}

@@ -1,0 +1,13 @@
+{
+ "id": "core:env_f3",
+ "catalog_id": "ENV-F3",
+ "kind": "aero_marine_part",
+ "tier": "T3",
+ "name": "envelope, film",
+ "areal_kg_m2": 0.06,
+ "max_dp_kpa": 15.0,
+ "mass_per_m2": true,
+ "used_by": [
+  "BLN-V2"
+ ]
+}

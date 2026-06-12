@@ -1,0 +1,14 @@
+{
+ "id": "core:utl_cdrone",
+ "catalog_id": "UTL-CDRONE",
+ "kind": "utility",
+ "tier": "T2",
+ "name": "Construction drone",
+ "vclass": "integrated",
+ "dry_t": 0.25,
+ "power": "STO-LI 5 kWh + cold gas",
+ "batt_kwh": 5.0,
+ "function": "zero-g assembly, 1 joint/30 min; A2/A3",
+ "notes": "zero-g exception: integrated catalog item up to 300 kg",
+ "anchor": "Orbital Express"
+}

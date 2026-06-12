@@ -1,0 +1,21 @@
+{
+ "id": "core:air_t3",
+ "catalog_id": "AIR-T3",
+ "kind": "aircraft",
+ "tier": "T3",
+ "name": "Titan cargo plane",
+ "body": "Titan",
+ "gross_t": 8.0,
+ "power": "V-9 methalox turbine: 36 kW installed, 28.8 kW cruise (V-10 = T4 retrofit)",
+ "p_installed_kw": 36.0,
+ "p_cruise_kw": 28.8,
+ "wing_s_m2": 60.0,
+ "cl_max": 1.8,
+ "l_over_d": 20.0,
+ "stall_ms": 6.1,
+ "cruise_ms": 40.0,
+ "cruise_kmh": 144.0,
+ "e_t_km_kwh": 0.04,
+ "runway_m": 600.0,
+ "payload_t": 5.0
+}
