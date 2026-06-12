@@ -502,6 +502,10 @@ class BaseSite:
         spec = CATALOG[key]
         if spec["tech"] and spec["tech"] not in research.unlocked:
             return False, f"{spec['name']} needs research: {spec['tech'].split(':')[1]}"
+        pair_v = {"fab_wafer_fab", "mass_driver"}
+        if key in pair_v and (pair_v - {key}) & set(self.built):
+            return False, ("vibration: a wafer fab cannot share a site "
+                           "with a mass driver (05 §3.2)")
         self.advance(t)                       # settle the ledger first
         mats = spec.get("build_materials", {})
         missing = [(r, kg) for r, kg in mats.items()
@@ -4877,6 +4881,51 @@ def run(argv: list[str] | None = None) -> int:
                     toast, toast_until = note, t + 8
                     audio.play("warn")
                 b.apply_crew_effects(crew, a3=_a3)
+
+            # mass drivers fling whitelist bulk to an orbiting catcher
+            # (05 §3.2): 43.2 t/day, zero propellant, 2% miss
+            from aphelion.sim.industry import logistics as logi_sim
+            for b in bases:
+                md_mod = next((m for m in b.net.modules
+                               if m.module_id.startswith("mass_driver")
+                               and m.state == "RUNNING"), None)
+                if md_mod is None:
+                    continue
+                _, _, f_pw = b.net.solve_rates()
+                if f_pw < 0.95:
+                    continue              # the 2.6 MW duty isn't served
+                body_b = SITES[b.site_id]["body"]
+                catcher = next(
+                    (v for v in vessels
+                     if v.frame_id == body_b and v.landed_at is None
+                     and v.cargo_cap_kg - v.cargo_kg > 100.0), None)
+                if catcher is None:
+                    continue
+                budget_kg = logi_sim.MD_THROUGHPUT_T_DAY * 1e3 * days
+                flung = 0.0
+                for res in logi_sim.MD_WHITELIST:
+                    if budget_kg <= 0.0:
+                        break
+                    buf = b.net.buffers.get(res)
+                    if buf is None or buf.level <= 0.0:
+                        continue
+                    room = ((catcher.cargo_cap_kg - catcher.cargo_kg)
+                            / (1.0 - logi_sim.MD_MISS_FRAC))
+                    take = min(budget_kg, buf.level, room)
+                    if take <= 0.0:
+                        continue
+                    buf.level -= take
+                    catcher.load_cargo(
+                        res, take * (1.0 - logi_sim.MD_MISS_FRAC))
+                    budget_kg -= take
+                    flung += take
+                if flung > 0.0 and not env_state.get("md_seen"):
+                    env_state["md_seen"] = True
+                    toast = (f"MASS DRIVER: {flung / 1e3:,.1f} t flung "
+                             f"to {catcher.name} for zero propellant "
+                             f"(2% catcher miss)")
+                    toast_until = t + 10
+                    audio.play("paid")
 
             # bent docking rings: an engineer aboard (or a landed base's
             # shop) works the backlog off in real hours

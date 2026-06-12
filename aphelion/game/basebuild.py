@@ -614,6 +614,23 @@ CATALOG.update({
         "tech": "core:tech_in02_foundry_chem_plant",
         "recycler": True, "mass_t": 2.0, "build_days": 3.0,
     },
+    # mass driver (05 §3.2): flings whitelist bulk to an orbiting
+    # catcher at 43.2 t/day for zero propellant — 2.6 MW duty average,
+    # the parts bill (510/255/68/17 t) erected from LOCAL production
+    "mass_driver": {
+        "prio": 5,
+        "name": "Mass driver 'Slinger' (T3)", "price_m": 60.0,
+        "power_kw": 2_600.0, "primary": None, "inputs": {},
+        "outputs": {},
+        "mtbf_d": MAINT["mass_driver"].mtbf_h / 24.0, "kinds": _REG,
+        "tech": "core:tech_in12_mass_driver",
+        "mass_driver": True, "maint": "mass_driver", "mass_t": 850.0,
+        "build_days": 150.0,
+        "build_materials": {"StructuralParts": 510_000.0,
+                            "MachineParts": 255_000.0,
+                            "Electronics": 68_000.0,
+                            "Polymers": 17_000.0},
+    },
     # robots (§4.3): each adds robot-hours to the site labor pool —
     # 8 h/day teleop-local at A2, 24 h × 0.35 once supervised autonomy
     # (in09) is researched
