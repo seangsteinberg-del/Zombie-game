@@ -25,9 +25,11 @@ class ZoomLayer(Enum):
     INTERIOR = "interior"         # habitat cells (Phase 3)
 
 
-# z ranges in px/m (13 §4.8, binding)
+# z ranges in px/m (13 §4.8; SYSTEM floor lowered 2026-06-13 by user
+# request — 1.6e-10 clipped Neptune's orbit at 1280 px, 6e-11 fits the
+# whole system in ~45% of the frame)
 LAYER_Z_RANGE: dict[ZoomLayer, tuple[float, float]] = {
-    ZoomLayer.SYSTEM: (1.6e-10, 1e-6),
+    ZoomLayer.SYSTEM: (6.0e-11, 1e-6),
     ZoomLayer.LOCAL: (1e-7, 0.05),
     ZoomLayer.SITE: (0.5, 50.0),
     ZoomLayer.INTERIOR: (16.0, 128.0),
