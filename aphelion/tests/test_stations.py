@@ -44,7 +44,7 @@ def test_comfort_rules_and_e9():
     # at the table's exact 24.8 m the gradient rule trips too: stacks
     assert comfort(6.0, 24.8)["productivity"] == pytest.approx(0.80)
     assert comfort(6.5, 20.0)["e9"]      # > 6 rpm crewed = E9
-    bolo = comfort(4.0, 9.2)             # lunar bolo accepts rule 5+6
+    bolo = comfort(4.0, r_for(1.62, 4.0))  # lunar bolo: rules 5+6 accepted
     assert bolo["productivity"] == pytest.approx(0.90)
     assert bolo["decon_regime"] == "half"
 
