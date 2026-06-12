@@ -194,6 +194,7 @@ from aphelion.game.sectors import (  # noqa: E402
 from aphelion.game import eva as eva_sim  # noqa: E402
 from aphelion.game import tileworld  # noqa: E402
 from aphelion.render import eva_art  # noqa: E402
+from aphelion.render import glpost  # noqa: E402
 from aphelion.render.tile_art import TileRenderer  # noqa: E402
 from aphelion.sim.vessels import autostage as dd_stage  # noqa: E402
 from aphelion.sim.vessels.buildermath import stage_report  # noqa: E402
@@ -822,6 +823,8 @@ def run(argv: list[str] | None = None) -> int:
     parser.add_argument("--frames", type=int, default=0)
     parser.add_argument("--screenshot", type=str, default="")
     parser.add_argument("--headless", action="store_true")
+    parser.add_argument("--no-gl", action="store_true",
+                        help="disable the GPU post pass (CPU renderer)")
     parser.add_argument("--perf", action="store_true",
                         help="QA: print PERF work-ms stats on exit")
     parser.add_argument("--warp", type=int, default=0,
@@ -894,8 +897,18 @@ def run(argv: list[str] | None = None) -> int:
     size = (1280, 720)
     fullscreen = False
     pygame.display.set_icon(app_icon())
-    screen = pygame.display.set_mode(size, pygame.SCALED | pygame.DOUBLEBUF,
-                                     vsync=0 if args.headless else 1)
+    # F0 GPU post pass: scenes keep drawing to a plain logical-size
+    # surface; the GL chain (bloom/grade/filmic) presents it. Falls back
+    # to the classic SCALED window when GL is unavailable (headless QA,
+    # --no-gl, exotic hardware) — presentation only, never load-bearing.
+    glp = (None if args.headless or args.no_gl
+           else glpost.GLPost.try_create(size, vsync=True))
+    if glp is not None:
+        screen = pygame.Surface(size)
+    else:
+        screen = pygame.display.set_mode(
+            size, pygame.SCALED | pygame.DOUBLEBUF,
+            vsync=0 if args.headless else 1)
     pygame.display.set_caption("APHELION")
     pygame_clock = pygame.time.Clock()
     _thf = theme.init_fonts()
@@ -1286,6 +1299,34 @@ def run(argv: list[str] | None = None) -> int:
             screen.blit(fl2, (0, 0))
             flash = max(0.0, flash - 2.2 * real_dt)
 
+    def present_frame() -> None:
+        """The one place a finished frame reaches the player: CPU fades
+        first, then either the GL post chain (graded by whichever world
+        the active scene is showing) or the classic flip."""
+        apply_fade()
+        if glp is None:
+            pygame.display.flip()
+            return
+        key = "default"
+        try:
+            if scene == "menu":
+                key = "menu"
+            elif scene == "interior":
+                key = "interior"
+            else:
+                _gav = (ascent_av if scene == "ascent" else
+                        descent_av if scene == "descent" else
+                        eva_av if scene in ("eva", "mine") else None)
+                if _gav is None and vessels:
+                    _gav = vessels[active_idx % len(vessels)]
+                if _gav is not None:
+                    _sid = getattr(_gav, "landed_at", None)
+                    key = (SITES[_sid]["body"] if _sid in SITES
+                           else _gav.frame_id)
+        except Exception:
+            key = "default"
+        glp.present(screen, key, frame_count)
+
     def planner_rows_for(av0, t0: float) -> list[dict]:
         """Transfer-window quotes from the active vessel's parking orbit —
         built entirely on the tested Hohmann/synodic toolkit in
@@ -1531,10 +1572,15 @@ def run(argv: list[str] | None = None) -> int:
                 perf_open = not perf_open
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_F11:
                 fullscreen = not fullscreen
-                flags = pygame.SCALED | pygame.DOUBLEBUF | (
-                    pygame.FULLSCREEN if fullscreen else 0)
-                screen = pygame.display.set_mode(size, flags,
-                                                 vsync=0 if args.headless else 1)
+                if glp is not None:
+                    # re-set_mode would destroy the GL context; SDL's
+                    # desktop-fullscreen toggle keeps it alive
+                    pygame.display.toggle_fullscreen()
+                else:
+                    flags = pygame.SCALED | pygame.DOUBLEBUF | (
+                        pygame.FULLSCREEN if fullscreen else 0)
+                    screen = pygame.display.set_mode(
+                        size, flags, vsync=0 if args.headless else 1)
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_m:
                 toast = ("audio muted" if audio.toggle_mute()
                          else "audio on")
@@ -3659,8 +3705,7 @@ def run(argv: list[str] | None = None) -> int:
                 (0, size[1] - theme.FOOTER_H))
             screen.blit(vig, (0, 0))
             apply_flash()
-            apply_fade()
-            pygame.display.flip()
+            present_frame()
             frame_count += 1
             if args.frames and frame_count >= args.frames:
                 running = False
@@ -3836,8 +3881,7 @@ def run(argv: list[str] | None = None) -> int:
                 (0, size[1] - theme.FOOTER_H))
             screen.blit(vig, (0, 0))
             apply_flash()
-            apply_fade()
-            pygame.display.flip()
+            present_frame()
             frame_count += 1
             if args.frames and frame_count >= args.frames:
                 running = False
@@ -3953,8 +3997,7 @@ def run(argv: list[str] | None = None) -> int:
                 "limit — over 0.5 m/s bends the ring   ESC abort"),
                 (0, size[1] - theme.FOOTER_H))
             screen.blit(vig, (0, 0))
-            apply_fade()
-            pygame.display.flip()
+            present_frame()
             frame_count += 1
             if args.frames and frame_count >= args.frames:
                 running = False
@@ -3989,8 +4032,7 @@ def run(argv: list[str] | None = None) -> int:
                 screen.blit(txt, (size[0] // 2 - 290, 220 + i * 30))
             bloom.apply(screen)
             screen.blit(vig, (0, 0))
-            apply_fade()
-            pygame.display.flip()
+            present_frame()
             frame_count += 1
             if args.frames and frame_count >= args.frames:
                 running = False
@@ -4071,8 +4113,7 @@ def run(argv: list[str] | None = None) -> int:
             screen.blit(foot, (fx0, size[1] - 53))
             bloom.apply(screen)
             screen.blit(vig, (0, 0))
-            apply_fade()
-            pygame.display.flip()
+            present_frame()
             frame_count += 1
             if args.frames and frame_count >= args.frames:
                 running = False
@@ -4261,8 +4302,7 @@ def run(argv: list[str] | None = None) -> int:
                 "B send to pad   Y yard blueprint   ESC back"),
                 (0, size[1] - theme.FOOTER_H))
             screen.blit(vig, (0, 0))
-            apply_fade()
-            pygame.display.flip()
+            present_frame()
             frame_count += 1
             if args.frames and frame_count >= args.frames:
                 running = False
@@ -4509,8 +4549,7 @@ def run(argv: list[str] | None = None) -> int:
                 "C dig down   E interact   F flag   R sample"),
                 (0, size[1] - theme.FOOTER_H))
             screen.blit(vig, (0, 0))
-            apply_fade()
-            pygame.display.flip()
+            present_frame()
             frame_count += 1
             if args.frames and frame_count >= args.frames:
                 running = False
@@ -4613,8 +4652,7 @@ def run(argv: list[str] | None = None) -> int:
                 size[0], "A/D walk   E console / airlock"),
                 (0, size[1] - theme.FOOTER_H))
             screen.blit(vig, (0, 0))
-            apply_fade()
-            pygame.display.flip()
+            present_frame()
             frame_count += 1
             if args.frames and frame_count >= args.frames:
                 running = False
@@ -6857,14 +6895,14 @@ def run(argv: list[str] | None = None) -> int:
             fl.fill((255, 215, 130, int(56 * gold_flash)))
             screen.blit(fl, (0, 0))
             gold_flash = max(0.0, gold_flash - 1.6 * real_dt)
-        apply_fade()
-        pygame.display.flip()
+        present_frame()
         frame_count += 1
         if args.frames and frame_count >= args.frames:
             running = False
 
     if args.screenshot:
-        pygame.image.save(screen, args.screenshot)
+        pygame.image.save(glp.read_screen() if glp is not None else screen,
+                          args.screenshot)
     if args.perf and len(perf_samples) > 40:
         body = sorted(perf_samples[30:])        # caches warm after ~30
         avg = sum(body) / len(body)

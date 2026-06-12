@@ -8,7 +8,10 @@ a = Analysis(
     ["aphelion/main.py"],
     pathex=["."],
     datas=[("data", "data"), ("design/README.md", "design")],
-    hiddenimports=collect_submodules("aphelion"),
+    # glcontext is moderngl's backend package — PyInstaller misses it
+    # without the explicit collect (F0 GPU post pass; Steam packaging)
+    hiddenimports=(collect_submodules("aphelion") + ["moderngl"]
+                   + collect_submodules("glcontext")),
     noarchive=False,
 )
 pyz = PYZ(a.pure)
