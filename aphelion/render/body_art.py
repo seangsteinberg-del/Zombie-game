@@ -303,21 +303,33 @@ def _alb_gas(rng: np.random.Generator, x: np.ndarray, y: np.ndarray,
 
 
 def _alb_earth(rng: np.random.Generator, x: np.ndarray, y: np.ndarray,
-               lat: np.ndarray, size: int, pal: BodyPalette) -> np.ndarray:
+               lat: np.ndarray, size: int, pal: BodyPalette):
+    """Returns (albedo, extras) — the renderer uses the ocean/land/cloud
+    masks for specular glint, city lights and cloud shadows (F0.6)."""
     ocean, deep, land = _c(pal.base), _c(pal.shade), _c(pal.accent)
     cont = _fbm(rng, size, 5, 3)
     moist = _fbm(rng, size, 4, 4)
     cloud = _fbm(rng, size, 5, 4)
+    land_m = _smooth((cont - 0.55) / 0.05)
     alb = _lerp(_lerp(deep, ocean, 0.4), ocean,
                 _smooth((cont - 0.30) / 0.25)[..., None])
     land_col = _lerp(land, np.array([0.66, 0.58, 0.38]),
                      _smooth((moist - 0.55) / 0.18)[..., None])
-    alb = _lerp(alb, land_col, _smooth((cont - 0.55) / 0.05)[..., None])
+    alb = _lerp(alb, land_col, land_m[..., None])
     cap = _smooth((np.abs(lat) - 0.80 - (cont - 0.5) * 0.08) / 0.05)
     alb = _lerp(alb, np.array([0.93, 0.95, 0.98]), cap[..., None])
-    cm = _smooth((cloud - 0.55) / 0.14) * 0.9
-    return np.clip(_lerp(alb, np.array([0.97, 0.98, 1.0]), cm[..., None]),
-                   0.0, 1.0)
+    # weather systems, not mush: banded belts + small-scale breakup
+    wisp = _fbm(rng, size, 6, 13)
+    belts = 0.45 + 0.55 * _smooth(
+        (np.sin(lat * 7.5 + (wisp - 0.5) * 5.0) + 0.25) / 0.9)
+    cm = (_smooth((cloud - 0.58) / 0.11) * belts
+          * (0.55 + 0.45 * _smooth((wisp - 0.45) / 0.18)) * 0.85)
+    # cloud self-shadow on the ground beneath (offset toward -sun is
+    # applied by the renderer; here just keep the un-clouded albedo)
+    alb = _lerp(alb, np.array([0.97, 0.98, 1.0]), cm[..., None])
+    extras = {"land": land_m * (1.0 - cap), "cloud": cm,
+              "ocean": (1.0 - land_m) * (1.0 - cap)}
+    return np.clip(alb, 0.0, 1.0), extras
 
 
 def _alb_mars(rng: np.random.Generator, x: np.ndarray, y: np.ndarray,
@@ -464,13 +476,39 @@ def _render_body(body_id: str, pal: BodyPalette, d: int,
     lam = np.clip(toward + nz * 0.55, 0.0, 1.0)     # lambert-ish
     lit = (lam ** 0.85) * (nz ** 0.45)              # gamma + limb darkening
 
-    alb = _ALBEDO[pal.kind](rng, x, y, lat, size, pal)
+    got = _ALBEDO[pal.kind](rng, x, y, lat, size, pal)
+    alb, extras = got if isinstance(got, tuple) else (got, {})
+    if "cloud" in extras:                           # cloud self-shadow (F0.6)
+        sh_px = max(1, int(d * 0.012))
+        cm_sh = np.roll(np.roll(extras["cloud"], int(-lx * sh_px), axis=0),
+                        int(-ly * sh_px), axis=1)
+        alb = alb * (1.0 - (cm_sh * (1.0 - extras["cloud"]) * 0.30)[..., None])
     col = alb * lit[..., None] + _c(pal.shade) * ((1.0 - lit) * 0.16)[..., None]
+    night = np.clip(1.0 - lam * 2.6, 0.0, 1.0) * nz ** 0.4
+    # earthshine: the night side reads as a body, not a hole in space
+    col += (_c(pal.base) * 0.07 + 0.018) * night[..., None]
+    if "land" in extras:                            # city lights on the dark
+        clus = _smooth((_fbm(rng, size, 4, 4) - 0.48) / 0.18)
+        speck = _smooth((_fbm(rng, size, 6, 12) - 0.52) / 0.06)
+        lights = (extras["land"] * (1.0 - extras["cloud"] * 0.85)
+                  * clus * speck)
+        col += (lights * night * 2.4)[..., None] * np.array([1.0, 0.72, 0.38])
+    if "ocean" in extras:                           # sun glint: small, on the
+        gd = ((x - lx * 0.45) ** 2 + (y - ly * 0.45) ** 2)   # day-side water
+        glint = np.exp(-gd / 0.007) * extras["ocean"] \
+            * (1.0 - extras["cloud"]) ** 2 * nz * np.clip(toward, 0.0, 1.0)
+        col += (glint * 0.20)[..., None] * np.array([1.0, 0.97, 0.88])
+    if pal.atmo:                                    # sunset band HUGS the
+        band = (np.exp(-(((toward + 0.02) / 0.07) ** 2))    # day/night line
+                * nz ** 0.5)
+        if "cloud" in extras:
+            band = band * (1.0 - extras["cloud"] * 0.6)
+        col += band[..., None] * np.array([1.0, 0.40, 0.15]) * 0.10
     facing = np.clip(toward / np.maximum(r, 1e-6), 0.0, 1.0)
     rim = np.exp(-(((r - 0.965) * d / 2.4) ** 2))   # thin rim on the lit edge
     rim_col = _c(pal.atmo) if pal.atmo else np.clip(_c(pal.base) * 0.6 + 0.4,
                                                     0.0, 1.0)
-    col = np.clip(col + (rim * facing ** 1.5 * 0.5)[..., None] * rim_col,
+    col = np.clip(col + (rim * facing ** 1.5 * 0.30)[..., None] * rim_col,
                   0.0, 1.0)
 
     rgb = np.zeros((size, size, 3))
@@ -483,7 +521,7 @@ def _render_body(body_id: str, pal: BodyPalette, d: int,
         glow = np.exp(-np.clip(r - 1.0, 0.0, None) / max(pal.atmo_h, 1e-3))
         glow *= np.clip((r - 1.0) * (d * 0.5) + 0.5, 0.0, 1.0)
         glow *= np.clip((scale - 0.04 - r) / 0.10, 0.0, 1.0)    # fade at edge
-        glow *= (0.45 + 0.55 * facing) * 0.8
+        glow *= (0.40 + 0.60 * facing) * 0.85       # brighter lit-side limb
         rgb, a = _add(rgb, a, _c(pal.atmo), glow)
     if pal.rings:                                   # near half over the disc
         rgb, a = _over(rgb, a, ring_rgb, np.where(y >= 0.0, ring_a, 0.0))

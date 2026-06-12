@@ -100,7 +100,9 @@ class Nebula:
         gx = (np.arange(lw) + 0.5) * (w / lw)
         gy = (np.arange(lh) + 0.5) * (h / lh)
         dist = np.abs((gx[:, None] - ax_) * dy - (gy[None, :] - ay_) * dx) / norm
-        haze_a = np.exp(-((dist / sigma) ** 2)) * 15.0
+        # wide faint glow + a narrow bright core = a structured galaxy band
+        haze_a = (np.exp(-((dist / (sigma * 1.25)) ** 2)) * 17.0
+                  + np.exp(-((dist / (sigma * 0.32)) ** 2)) * 16.0)
         haze = pygame.Surface((lw, lh), pygame.SRCALPHA)
         hrgb = pygame.surfarray.pixels3d(haze)
         hrgb[...] = _HAZE_RGB
@@ -111,34 +113,42 @@ class Nebula:
         base.blit(pygame.transform.smoothscale(haze, (w, h)), (0, 0))
 
         rgb = pygame.surfarray.pixels3d(base)
-        # ... and ~900 tiny dim stars scattered along the band
-        n = 900
+        # ... and ~1700 tiny dim stars, denser along the band
+        n = 1700
         u = rng.uniform(-0.05, 1.05, n)
-        perp = rng.normal(0.0, 0.55, n) * sigma
+        perp = rng.normal(0.0, 0.62, n) * sigma
         ux, uy = dx / norm, dy / norm
         sx = ax_ + u * dx - perp * uy
         sy = ay_ + u * dy + perp * ux
         xi = np.round(sx).astype(np.int64)
         yi = np.round(sy).astype(np.int64)
-        v = rng.uniform(22.0, 80.0, n)
+        # power-law brightness: many faint, few bright (real sky statistics)
+        v = 34.0 + 116.0 * (rng.random(n) ** 2.6)
         m = (xi >= 0) & (xi < w) & (yi >= 0) & (yi < h)
         xi, yi, v = xi[m], yi[m], v[m]
         for c, tint in enumerate(_BAND_STAR_TINT):
             rgb[xi, yi, c] = np.maximum(rgb[xi, yi, c],
                                         (v * tint).astype(np.uint8))
 
-        # (d) ~140 brighter fixed stars with slight color variation
-        nb = 140
+        # (d) ~230 brighter fixed stars with slight color variation
+        nb = 230
         bx = rng.integers(4, w - 4, nb)
         by = rng.integers(4, h - 4, nb)
-        bv = rng.uniform(90.0, 230.0, nb)
+        bv = 90.0 + 155.0 * (rng.random(nb) ** 1.8)
         tint_idx = rng.integers(0, len(_BRIGHT_STAR_TINTS), nb)
         tints = np.asarray(_BRIGHT_STAR_TINTS)
-        for c in range(3):
-            rgb[bx, by, c] = np.maximum(
-                rgb[bx, by, c], (bv * tints[tint_idx, c]).astype(np.uint8))
-        # a handful get subtle cross-spike glints
-        for k in range(min(8, nb)):
+        # soft 3x3 kernel: bright stars get SIZE, not just value (a single
+        # pixel can't carry a starfield at 720p)
+        for wgt, (ddx, ddy) in (((1.0), (0, 0)),
+                                (0.52, (1, 0)), (0.52, (-1, 0)),
+                                (0.52, (0, 1)), (0.52, (0, -1)),
+                                (0.24, (1, 1)), (0.24, (-1, -1)),
+                                (0.24, (1, -1)), (0.24, (-1, 1))):
+            for c in range(3):
+                np.maximum.at(rgb, (bx + ddx, by + ddy, c),
+                              (bv * wgt * tints[tint_idx, c]).astype(np.uint8))
+        # the brightest get subtle cross-spike glints
+        for k in range(min(20, nb)):
             x, y, vk = int(bx[k]), int(by[k]), float(bv[k])
             tint = _BRIGHT_STAR_TINTS[int(tint_idx[k])]
             for off, fall in ((1, 0.55), (2, 0.32), (3, 0.16)):
@@ -165,11 +175,11 @@ class Nebula:
             ccy = rng.uniform(0.0, qh)
             sx = qw * rng.uniform(0.14, 0.24)
             sy = qh * rng.uniform(0.16, 0.30)
-            for _ in range(120):
+            for _ in range(150):
                 px = (ccx + rng.normal(0.0, sx)) % qw
                 py = (ccy + rng.normal(0.0, sy)) % qh
                 r = max(3, int(rng.uniform(0.10, 0.30) * min(qw, qh)))
-                a = int(rng.integers(2, 6))            # alpha 2-5
+                a = int(rng.integers(3, 8))            # alpha 3-7
                 key = (r, color, a)
                 spr = sprites.get(key)
                 if spr is None:

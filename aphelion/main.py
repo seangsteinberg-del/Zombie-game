@@ -5312,8 +5312,10 @@ def run(argv: list[str] | None = None) -> int:
             on_screen = -60 < ppx[0] < size[0] + 60 and -60 < ppx[1] < size[1] + 60
             if on_screen:
                 blit_body(pid, prx, pry, ppx)
+                # label clears the disc: beside small dots, under big spheres
+                _lr = tree.body(pid).radius * cam.zoom
                 screen.blit(font.render(pid.split(":")[1], True, (150, 160, 180)),
-                            (ppx[0] + 8, ppx[1] - 8))
+                            (ppx[0] + 8, ppx[1] + max(-8, _lr * 0.78 + 4)))
                 body_click_pts.append((ppx[0], ppx[1], focus_of_body[pid]))
             for mid in moons_of.get(pid, []):
                 mel = tree.body(mid).elements
@@ -5323,8 +5325,9 @@ def run(argv: list[str] | None = None) -> int:
                 if (2.0 * abs(mel.a) * cam.zoom > 8.0
                         and -60 < mpx[0] < size[0] + 60 and -60 < mpx[1] < size[1] + 60):
                     blit_body(mid, prx + mrx, pry + mry, mpx)
+                    _mr = tree.body(mid).radius * cam.zoom
                     screen.blit(font.render(mid.split(":")[1], True, (120, 130, 150)),
-                                (mpx[0] + 7, mpx[1] - 7))
+                                (mpx[0] + 7, mpx[1] + max(-7, _mr * 0.78 + 4)))
                     body_click_pts.append((mpx[0], mpx[1], focus_of_body[mid]))
 
         # SOI boundary of the active vessel's frame (faint dashed cyan)

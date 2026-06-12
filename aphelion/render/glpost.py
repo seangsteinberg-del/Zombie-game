@@ -85,10 +85,12 @@ void main() {
     c.g = texture(u_tex, v_uv).g;
     c.b = texture(u_tex, v_uv + off).b;
     c += texture(u_bloom, v_uv).rgb * u_bloom_str;
-    // filmic S-curve (ACES approx), blended: deep blacks + creamy
-    // highlights without crushing the UI text
+    // filmic S-curve (ACES approx), blended — but FADED OUT in the deep
+    // shadows: the toe would crush faint stars to black (F0.6 lesson)
+    float l0 = dot(c, vec3(0.2126, 0.7152, 0.0722));
     vec3 flm = (c * (2.51 * c + 0.03)) / (c * (2.43 * c + 0.59) + 0.14);
-    c = mix(c, clamp(flm, 0.0, 1.0), u_curve);
+    c = mix(c, clamp(flm, 0.0, 1.0),
+            u_curve * smoothstep(0.02, 0.20, l0));
     c = pow(max(c, 0.0), vec3(u_gamma));
     float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
     c = mix(vec3(l), c, u_sat);
