@@ -43,3 +43,40 @@ def burn_load_ok(size: str, payload_t: float, a_ms2: float,
     the docking joint). `derate` 0.5 under W6 wobble."""
     load_kn = payload_t * a_ms2
     return load_kn <= PORTS[size]["rating_kn"] * derate, load_kn
+
+
+# ---- stack-level port survey (the E8 pre-flight on REAL rows) -----------------
+_PREF = ("L", "B", "S")        # mate through the biggest common passage
+
+
+def stack_ports(vessel) -> set[str]:
+    """Port sizes a stack actually carries (DK-* parts on its rows)."""
+    return {vessel.part(r)["port"]["size"] for r in vessel.rows
+            if "port" in vessel.part(r)}
+
+
+def has_arm(vessel) -> bool:
+    return any(vessel.part(r).get("robot_arm") for r in vessel.rows)
+
+
+def mate_plan(chaser, target) -> tuple[str | None, bool, str]:
+    """(size, soft_assist, refusal_note). E8: ports mate within a size
+    class only. A stack with no DK part falls back to its integral S
+    probe-and-drogue (early capsules keep docking). Berthing port B
+    needs a robot arm on either side — and an arm present anywhere
+    doubles capture tolerances on every size (it snags you)."""
+    a = stack_ports(chaser) or {"S"}
+    b = stack_ports(target) or {"S"}
+    common = a & b
+    arm = has_arm(chaser) or has_arm(target)
+    if "B" in common and not arm:
+        common.discard("B")
+        if not common:
+            return None, False, ("berthing port B needs a robot arm "
+                                 "on either vessel")
+    for s in _PREF:
+        if s in common:
+            return s, arm, ""
+    return None, False, (f"E8: no matching port — chaser has "
+                         f"{'/'.join(sorted(a))}, target has "
+                         f"{'/'.join(sorted(b))}")

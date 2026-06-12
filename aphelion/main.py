@@ -200,6 +200,7 @@ from aphelion.sim.vessels.grid import GridVessel  # noqa: E402
 from aphelion.sim.vessels.structure import (  # noqa: E402
     ascent_qsim, qalpha_limit_kpadeg, validate_e7)
 from aphelion.sim.stations import keeping as keeping_sim  # noqa: E402
+from aphelion.sim.stations import ports as ports_sim  # noqa: E402
 from aphelion.sim.stations import spin as spin_sim  # noqa: E402
 from aphelion.sim.environment.mars_climate import (  # noqa: E402
     MarsWeather, f_dust as mars_f_dust)
@@ -683,7 +684,7 @@ def run(argv: list[str] | None = None) -> int:
                         choices=["auto", "menu", "flight", "builder", "base",
                                  "research", "research_ed", "research_codex",
                                  "ascent", "descent", "eva", "mine",
-                                 "drydock", "help",
+                                 "drydock", "proxops", "aboard", "help",
                                  "contracts", "crew", "pause", "planner"])
     args = parser.parse_args(argv)
     if args.headless:
@@ -708,7 +709,8 @@ def run(argv: list[str] | None = None) -> int:
     from aphelion.sim.flight.descent_live import LiveDescent
     from aphelion.sim.flight.entry import fly_entry
     from aphelion.sim.flight.proxops_live import (
-        CAPTURE_RANGE_M, CAPTURE_SPEED_MS, ProxOps)
+        CAPTURE_RANGE_M, CAPTURE_SPEED_MS, CONTACT_RANGE_M, PULSE_FINE_MS,
+        ProxOps)
     from aphelion.ui import theme
     from aphelion.ui.audio import AudioCues
     from aphelion.ui.effects import Particles, Starfield
@@ -950,8 +952,12 @@ def run(argv: list[str] | None = None) -> int:
     EVA_TIME_FACTOR = 30.0            # EVA ops run at 30x sim time
     interior_x = 2.0                  # walker x inside the hab strip, m
     interior_home = None              # the BaseSite whose interior we walk
+    interior_vessel = None            # ... or the flying stack we board (T)
     interior_rooms: tuple = ()        # habitable module keys, build order
+    interior_labels: tuple = ()       # vessel mode: (part name, info) rows
     interior_return_x = 0.0           # where on the surface we re-emerge
+    interior_face = 1                 # walker sprite facing/animation
+    interior_frame = 0.0
     # Drydock 2.0 (06): the grid design room
     dd_v = GridVessel()
     dd_cursor = [4, 0]
@@ -1266,6 +1272,73 @@ def run(argv: list[str] | None = None) -> int:
         descent.engage_autoland()
         descent_warp = 8.0
         scene = "descent"
+    if want in ("proxops", "aboard"):   # QA: docking + interiors (T)
+        from aphelion.sim.vessels.vessel import Vessel as _V
+        _eb = tree.body("core:earth")
+        _rq = _eb.radius + 400e3
+        _elq = state_to_elements(_rq, 0.0, 0.0,
+                                 tr.circular_speed(_eb.mu, _rq), 0.0,
+                                 _eb.mu)
+        _stn_rows = [_V.fueled_row(db, p) for p in
+                     ("core:hb_rig_s", "core:hb_lab", "core:hb_grn_s",
+                      "core:dk_s", "core:dk_l", "core:pw_sa_r")]
+        _stn = FleetVessel(tree, "core:earth", _elq,
+                           _V(db, _stn_rows,
+                              stage_plan=[list(range(len(_stn_rows)))]),
+                           "Foothold Station", next_vid,
+                           crew=["V. Ainsworth", "K. Osei"])
+        next_vid += 1
+        vessels.append(_stn)
+        active_idx = len(vessels) - 1
+        if want == "proxops":
+            _ch_rows = [_V.fueled_row(db, p) for p in
+                        ("core:engine_mv815", "core:tank_ml_s",
+                         "core:capsule_vela", "core:dk_s")]
+            _ch = FleetVessel(tree, "core:earth", _elq,
+                              _V(db, _ch_rows, stage_plan=[[0, 1, 2, 3]]),
+                              "Courier", next_vid, crew=["M. Reyes"])
+            next_vid += 1
+            vessels.append(_ch)
+            prox = ProxOps(n=math.sqrt(_eb.mu / _rq ** 3), budget_dv=30.0,
+                           port_size="S", x=-26.0, y=-14.0,
+                           vx=0.35, vy=0.18)
+            prox_chaser, prox_target = _ch, _stn
+            prox_trail = []
+            scene = "proxops"
+        else:                           # aboard: walk the station rooms
+            from aphelion.render.interior_art import vessel_rooms
+            _rv = vessel_rooms(_stn.vessel)
+            interior_vessel = _stn
+            interior_rooms = tuple(k for k, _, _ in _rv)
+            interior_labels = tuple((n, i2) for _, n, i2 in _rv)
+            interior_x = 10.0
+            scene = "interior"
+
+    def docked_burn_veto(fv) -> str | None:
+        """06 §2.8a across the docking joint: a burn loads every joint
+        with the mass riding beyond it; the port rating (halved under W6
+        wobble) is a hard gate."""
+        if not fv.dock_joints:
+            return None
+        m = fv.vessel.total_mass_kg()
+        thrust = fv.vessel.active_thrust_vac_n()
+        if m <= 0.0 or thrust <= 0.0:
+            return None
+        a = thrust / m
+        derate = 1.0
+        if getattr(fv, "spin_rpm", 0.0) > 0.0 and spin_sim.balance(
+                fv.docked_mass_t(), getattr(fv, "spin_r_m", 25.0)) != "ok":
+            derate = 0.5
+        for port, payload_t, load_kn in fv.joint_burn_loads(a):
+            ok_j, _ = ports_sim.burn_load_ok(port, payload_t, a,
+                                             derate=derate)
+            if not ok_j:
+                rating = ports_sim.PORTS[port]["rating_kn"] * derate
+                return (f"E8: burn puts {load_kn:,.0f} kN through the "
+                        f"DK-{port} joint (rated {rating:,.0f}"
+                        + (", W6 wobble halves it" if derate < 1.0 else "")
+                        + ") — undock first")
+        return None
 
     frame_count = 0
     running = True
@@ -1442,7 +1515,13 @@ def run(argv: list[str] | None = None) -> int:
                         audio.play("warn")
             elif scene == "proxops":
                 if event.type == pygame.KEYDOWN and prox is not None:
-                    mag = 2.0 if (event.mod & pygame.KMOD_SHIFT) else 0.5
+                    # inside the gate, un-shifted taps drop to verniers —
+                    # port capture limits live at 0.05–0.20 m/s
+                    if prox.range_m < CAPTURE_RANGE_M + 10.0:
+                        mag = 0.5 if (event.mod & pygame.KMOD_SHIFT) \
+                            else PULSE_FINE_MS
+                    else:
+                        mag = 2.0 if (event.mod & pygame.KMOD_SHIFT) else 0.5
                     if event.key in (pygame.K_UP, pygame.K_DOWN,
                                      pygame.K_LEFT, pygame.K_RIGHT):
                         dx = {pygame.K_UP: 1.0, pygame.K_DOWN: -1.0}.get(
@@ -1597,11 +1676,14 @@ def run(argv: list[str] | None = None) -> int:
                                     if key_b in HABITABLE:
                                         # step inside: airlock + rooms
                                         interior_home = home_b
+                                        interior_vessel = None
                                         interior_rooms = tuple(
                                             k for k in home_b.built
                                             if k in HABITABLE)
                                         interior_x = 4.0
                                         interior_return_x = eva_state.x
+                                        interior_face = eva_state.facing
+                                        interior_frame = 0.0
                                         eva_state.o2_s = eva_sim.SUIT_O2_S
                                         scene = "interior"
                                         toast = (f"INSIDE {home_b.name} — "
@@ -1681,19 +1763,32 @@ def run(argv: list[str] | None = None) -> int:
                     elif event.key == pygame.K_F2 and base_screen:
                         base_screen = False
             elif scene == "interior":
-                if event.type == pygame.KEYDOWN and eva_state is not None:
+                if event.type == pygame.KEYDOWN:
                     from aphelion.render.interior_art import ROOM_W
                     ppm_i = 24.0
                     if event.key == pygame.K_e:
                         if interior_x < ROOM_W / ppm_i:      # the airlock
-                            scene = "eva"
-                            eva_state.x = interior_return_x
-                            toast = "back on the surface"
-                            toast_until = t + 5
-                            audio.play("clunk")
+                            if interior_vessel is not None:
+                                scene = "flight"
+                                interior_vessel = None
+                                toast = "back on the flight deck"
+                                toast_until = t + 4
+                                audio.play("clunk")
+                            elif eva_state is not None:
+                                scene = "eva"
+                                eva_state.x = interior_return_x
+                                toast = "back on the surface"
+                                toast_until = t + 5
+                                audio.play("clunk")
                         else:
                             room_i = int(interior_x * ppm_i // ROOM_W) - 1
-                            if (interior_home is not None
+                            if (interior_vessel is not None
+                                    and 0 <= room_i < len(interior_labels)):
+                                nm_i, info_i = interior_labels[room_i]
+                                toast = f"{nm_i} — {info_i}"
+                                toast_until = t + 7
+                                audio.play("blip")
+                            elif (interior_home is not None
                                     and 0 <= room_i < len(interior_rooms)):
                                 key_i = interior_rooms[room_i]
                                 interior_home.advance(t)
@@ -1793,9 +1888,17 @@ def run(argv: list[str] | None = None) -> int:
                     rpm0 = getattr(av0, "spin_rpm", 0.0)
                     r0 = getattr(av0, "spin_r_m", 25.0)
                     if event.key in (pygame.K_EQUALS, pygame.K_UP):
-                        cap = 6.0 if av0.crew else 8.0   # E9 crewed
-                        av0.spin_rpm = min(cap, rpm0 + 0.5)
-                        audio.play("tick")
+                        bal = spin_sim.balance(av0.docked_mass_t(), r0)
+                        if bal == "despin":
+                            toast = (f"W6: {av0.docked_mass_t():,.0f} t "
+                                     f"docked off-axis unbalances the ring"
+                                     f" — undock before spinning up")
+                            toast_until = t + 8
+                            audio.play("warn")
+                        else:
+                            cap = 6.0 if av0.crew else 8.0   # E9 crewed
+                            av0.spin_rpm = min(cap, rpm0 + 0.5)
+                            audio.play("tick" if bal == "ok" else "warn")
                     elif event.key in (pygame.K_MINUS, pygame.K_DOWN):
                         av0.spin_rpm = max(0.0, rpm0 - 0.5)
                         audio.play("tick")
@@ -2509,24 +2612,52 @@ def run(argv: list[str] | None = None) -> int:
                         toast_until = t + 6
                         audio.play("alarm")
                     else:
-                        av0._pay_dv(best_cost)
-                        body_p = tree.body(av0.frame_id)
-                        a_t = max(abs(best_tgt.elements.a),
-                                  body_p.radius + 100e3)
-                        budget = min(3.0 * av0.prox_ops_dv,
-                                     max(2.0, av0.dv_remaining))
-                        prox = ProxOps(
-                            n=math.sqrt(body_p.mu / a_t ** 3),
-                            budget_dv=budget)
-                        prox_chaser, prox_target = av0, best_tgt
-                        prox_trail = []
-                        prox_seen = True
-                        node = None
-                        scene = "proxops"
-                        toast = (f"rendezvous {best_cost:,.0f} m/s paid — "
-                                 f"fly the approach")
-                        toast_until = t + 6
-                        audio.play("burn")
+                        # E8 pre-flight: matching port class, sound rings,
+                        # and a despun hub (06 §3.3) — refused BEFORE the
+                        # velocity match is paid
+                        psize, soft, why = ports_sim.mate_plan(
+                            av0.vessel, best_tgt.vessel)
+                        rep_h = max(getattr(av0, "port_repair_h", 0.0),
+                                    getattr(best_tgt, "port_repair_h", 0.0))
+                        spin_max = max(getattr(av0, "spin_rpm", 0.0),
+                                       getattr(best_tgt, "spin_rpm", 0.0))
+                        if psize is None:
+                            toast, toast_until = why, t + 8
+                            audio.play("warn")
+                        elif rep_h > 0.0:
+                            toast = (f"docking ring damaged — {rep_h:,.0f} h"
+                                     f" of repair left (an engineer aboard "
+                                     f"or a landed base works it off)")
+                            toast_until = t + 8
+                            audio.play("warn")
+                        elif spin_max > 0.5:
+                            toast = ("despin below 0.5 rpm to dock — "
+                                     "ports mate at a still hub (F7)")
+                            toast_until = t + 7
+                            audio.play("warn")
+                        else:
+                            av0._pay_dv(best_cost)
+                            body_p = tree.body(av0.frame_id)
+                            a_t = max(abs(best_tgt.elements.a),
+                                      body_p.radius + 100e3)
+                            budget = min(3.0 * av0.prox_ops_dv,
+                                         max(2.0, av0.dv_remaining))
+                            prox = ProxOps(
+                                n=math.sqrt(body_p.mu / a_t ** 3),
+                                budget_dv=budget, port_size=psize,
+                                magnetic=soft)
+                            prox_chaser, prox_target = av0, best_tgt
+                            prox_trail = []
+                            prox_seen = True
+                            node = None
+                            scene = "proxops"
+                            toast = (f"rendezvous {best_cost:,.0f} m/s paid"
+                                     f" — fly the approach to the DK-"
+                                     f"{psize}"
+                                     + (" (arm-assisted capture)"
+                                        if soft else ""))
+                            toast_until = t + 6
+                            audio.play("burn")
                 elif event.key == pygame.K_u and vessels:
                     av0 = vessels[active_idx % len(vessels)]
                     split = av0.undock_last(t, next_vid)
@@ -2550,7 +2681,37 @@ def run(argv: list[str] | None = None) -> int:
                         toast_until = t + 6
                         audio.play("blip")
                     else:
-                        toast, toast_until = "no propellant to crossfeed", t + 4
+                        bad_j = [p for p in
+                                 getattr(av0, "dock_joint_ports", [])
+                                 if p != "L"]
+                        toast = (f"no fluid lines through a DK-{bad_j[0]} "
+                                 f"joint — only a DK-L berth crossfeeds"
+                                 if bad_j else "no propellant to crossfeed")
+                        toast_until = t + 5
+                elif event.key == pygame.K_i and vessels:
+                    # board the active stack: every pressurized part is a
+                    # walkable room (06 §3 station interiors)
+                    av0 = vessels[active_idx % len(vessels)]
+                    from aphelion.render.interior_art import vessel_rooms
+                    rooms_v = vessel_rooms(av0.vessel)
+                    if not rooms_v:
+                        toast = ("no pressurized modules aboard — fit a "
+                                 "hab, lab, or capsule")
+                        toast_until = t + 6
+                        audio.play("warn")
+                    else:
+                        interior_vessel = av0
+                        interior_home = None
+                        interior_rooms = tuple(k for k, _, _ in rooms_v)
+                        interior_labels = tuple((n, i2)
+                                                for _, n, i2 in rooms_v)
+                        interior_x = 4.0
+                        interior_face, interior_frame = 1, 0.0
+                        scene = "interior"
+                        toast = (f"ABOARD {av0.name} — E at a console "
+                                 f"reads the module; the airlock exits")
+                        toast_until = t + 7
+                        audio.play("clunk")
                 elif event.key == pygame.K_g:
                     if vessels:
                         surface_open = not surface_open
@@ -2598,6 +2759,11 @@ def run(argv: list[str] | None = None) -> int:
                         continue
                     dvp = {pygame.K_x: (+step, 0.0), pygame.K_z: (-step, 0.0),
                            pygame.K_a: (0.0, +step), pygame.K_d: (0.0, -step)}[event.key]
+                    veto = docked_burn_veto(av0)
+                    if veto is not None:
+                        toast, toast_until = veto, t + 8
+                        audio.play("warn")
+                        continue
                     crx0, cry0, cvx0, cvy0 = av0.state(t)
                     if not av0.burn(t, *dvp):
                         toast = "INSUFFICIENT PROPELLANT — build a new vessel (B)"
@@ -2914,25 +3080,37 @@ def run(argv: list[str] | None = None) -> int:
             descent_av = None
             scene = "flight"
 
-        if prox_done and prox is not None:
+        if prox is not None and (prox_done or prox.outcome == "damage"):
             if (prox.outcome == "captured" and prox_chaser is not None
                     and prox_target is not None and prox_chaser in vessels
                     and prox_target in vessels):
                 prox_chaser._pay_dv(min(prox.used_dv,
                                         prox_chaser.dv_remaining))
                 cname = prox_chaser.name
-                prox_chaser.dock_join(prox_target)
+                prox_chaser.dock_join(prox_target,
+                                      port_size=prox.port_size)
                 vessels.remove(prox_chaser)
                 active_idx = vessels.index(prox_target)
                 node = None
                 milestones.add("docked")
-                toast = (f"DOCKED: {cname} -> {prox_target.name} "
+                toast = (f"DOCKED through the DK-{prox.port_size}: "
+                         f"{cname} -> {prox_target.name} "
                          f"({prox.used_dv:,.1f} m/s RCS"
                          + (f", {prox.bounces} bounce"
                             + ("s" if prox.bounces != 1 else "")
-                            if prox.bounces else "") + ")")
+                            if prox.bounces else "")
+                         + (")" if prox.port_size == "L"
+                            else "; no fluid lines — DK-L crossfeeds)"))
                 toast_until = t + 8
                 audio.play("clunk")
+            elif prox.outcome == "damage" and prox_chaser is not None:
+                prox_chaser._pay_dv(min(prox.used_dv,
+                                        prox_chaser.dv_remaining))
+                prox_chaser.port_repair_h = 24.0
+                toast = (f"HARD IMPACT — {prox_chaser.name}'s docking ring"
+                         f" bent: 24 h of repairs before the next attempt")
+                toast_until = t + 10
+                audio.play("alarm")
             else:
                 if prox_chaser is not None:
                     prox_chaser._pay_dv(min(prox.used_dv,
@@ -3386,12 +3564,20 @@ def run(argv: list[str] | None = None) -> int:
                         theme.draw_text(screen, cx0 + rp + 4, cy0 - 8, lbl,
                                         color=theme.COLORS["text_dim"],
                                         font="small")
-            cap_ok = prox.speed_ms <= CAPTURE_SPEED_MS
+            cap_ok = prox.speed_ms <= (
+                prox.capture_limit_ms
+                if prox.range_m < CAPTURE_RANGE_M else CAPTURE_SPEED_MS)
             cap_px = max(8, int(CAPTURE_RANGE_M * sc))
             pygame.draw.circle(screen,
                                theme.COLORS["good"] if cap_ok
                                else theme.COLORS["danger"],
                                (cx0, cy0), cap_px, 2)
+            # the adapter itself: contact at 4 m runs the capture ladder
+            con_px = max(5, int(CONTACT_RANGE_M * sc))
+            pygame.draw.circle(screen,
+                               theme.COLORS["gold"] if cap_ok
+                               else theme.COLORS["danger"],
+                               (cx0, cy0), con_px, 1)
             tspr = craft_icon(math.pi / 2.0, 16)
             screen.blit(tspr, (cx0 - tspr.get_width() // 2,
                                cy0 - tspr.get_height() // 2))
@@ -3425,6 +3611,10 @@ def run(argv: list[str] | None = None) -> int:
                      else theme.COLORS["warn"]),
                     (f"TARGET {prox_target.name if prox_target else '?':>9s}",
                      theme.COLORS["accent"]),
+                    (f"PORT   DK-{prox.port_size}"
+                     + ("·ARM" if prox.magnetic else "")
+                     + f"  ≤{prox.capture_limit_ms:.2f}",
+                     theme.COLORS["text"]),
                     (f"BOUNCE {prox.bounces:9d}",
                      theme.COLORS["warn"] if prox.bounces
                      else theme.COLORS["text_dim"]),
@@ -3453,9 +3643,10 @@ def run(argv: list[str] | None = None) -> int:
                                 color=theme.COLORS["gold"])
             screen.blit(theme.footer(
                 size[0],
-                "arrows RCS pulses (SHIFT = 2 m/s)   A approach autopilot "
-                "(pilot)   ◎ capture: inside the circle under 2 m/s   "
-                "ESC abort"), (0, size[1] - theme.FOOTER_H))
+                "arrows RCS (verniers inside 60 m; SHIFT coarse)   "
+                "A autopilot (pilot)   ◎ contact at 4 m under the port "
+                "limit — over 0.5 m/s bends the ring   ESC abort"),
+                (0, size[1] - theme.FOOTER_H))
             screen.blit(vig, (0, 0))
             apply_fade()
             pygame.display.flip()
@@ -3731,8 +3922,8 @@ def run(argv: list[str] | None = None) -> int:
                 pygame.draw.rect(screen, (14, 18, 28),
                                  (gx0, gy0, gw, gh))
                 qmax_dd = max(40.0, dd_sim["peak_q_kpa"] * 1.15)
-                tr = dd_sim["trace"]
-                tmax = max(1.0, tr[-1][0])
+                trace_dd = dd_sim["trace"]
+                tmax = max(1.0, trace_dd[-1][0])
                 for series, colr in ((1, theme.COLORS["accent"]),
                                      (2, theme.COLORS["warn"])):
                     pts_dd = [(gx0 + tt / tmax * gw,
@@ -3741,7 +3932,7 @@ def run(argv: list[str] | None = None) -> int:
                                    else qalpha_limit_kpadeg(dd_v)))
                                * gh)
                               for tt, *vals in [(p[0], p[1], p[2])
-                                                for p in tr[::4]]
+                                                for p in trace_dd[::4]]
                               for val in [vals[series - 1]]]
                     if len(pts_dd) > 1:
                         pygame.draw.lines(screen, colr, False,
@@ -4020,8 +4211,8 @@ def run(argv: list[str] | None = None) -> int:
                 running = False
             continue
 
-        if scene == "interior" and eva_state is not None \
-                and interior_home is not None:
+        if scene == "interior" and (interior_home is not None
+                                    or interior_vessel is not None):
             # ---- inside the hab: walk the rooms, meet the residents ----
             from aphelion.render.interior_art import (
                 FLOOR_Y, ROOM_H, ROOM_W, room_strip)
@@ -4037,10 +4228,24 @@ def run(argv: list[str] | None = None) -> int:
             if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
                 move += 1
             if move:
-                eva_state.facing = move
-                eva_state.frame += real_dt * 6.0
+                interior_face = move
+                interior_frame += real_dt * 6.0
                 interior_x = max(1.0, min(total_m - 1.0,
                                           interior_x + move * 1.8 * real_dt))
+
+            # microgravity unless the spin section (or the ground) holds you
+            if interior_vessel is not None:
+                g_in = (spin_sim.a_spin(
+                    getattr(interior_vessel, "spin_rpm", 0.0),
+                    getattr(interior_vessel, "spin_r_m", 25.0))
+                    if interior_vessel.landed_at is None else 9.81)
+                inhabitants = interior_vessel.crew
+                place_name = interior_vessel.name
+            else:
+                g_in = 9.81
+                inhabitants = interior_home.crew
+                place_name = interior_home.name
+            floating = g_in < 1.0
 
             screen.fill((10, 12, 18))
             scale_i = 2.2
@@ -4050,36 +4255,52 @@ def run(argv: list[str] | None = None) -> int:
             ox = size[0] / 2 - interior_x * ppm_i * scale_i
             oy = size[1] / 2 - sh / 2
             screen.blit(strip_big, (ox, oy))
-            # residents at home in their rooms
+            # residents at home in their rooms (adrift when nothing pulls)
             from aphelion.render.base_art import walker_sprite
-            for ri, rname in enumerate(interior_home.crew[:6]):
+            for ri, rname in enumerate(inhabitants[:6]):
                 rx_m = (1.5 + (ri + 1) * (total_m - 3.0) / 7.0
                         + 0.8 * math.sin(ui_t * 0.7 + ri * 2.1))
+                fy = (26 + 14 * math.sin(ui_t * 0.9 + ri * 1.7)
+                      if floating else 0)
                 wspr = walker_sprite(rname, int(ui_t * 4 + ri) & 3, 40)
                 screen.blit(wspr, (ox + rx_m * ppm_i * scale_i
                                    - wspr.get_width() / 2,
                                    oy + FLOOR_Y * scale_i
-                                   - wspr.get_height()))
+                                   - wspr.get_height() - fy))
             # you
-            aspr = eva_art.astronaut(int(eva_state.frame), eva_state.facing,
+            fy_me = 18 + 9 * math.sin(ui_t * 1.1) if floating else 0
+            aspr = eva_art.astronaut(int(interior_frame), interior_face,
                                      False, h_px=int(40 * scale_i * 0.8))
             screen.blit(aspr, (size[0] / 2 - aspr.get_width() / 2,
-                               oy + FLOOR_Y * scale_i - aspr.get_height()))
+                               oy + FLOOR_Y * scale_i - aspr.get_height()
+                               - fy_me))
             # room label + prompt
             room_i = int(interior_x * ppm_i // ROOM_W) - 1
-            label = ("AIRLOCK — E exits to the surface"
-                     if room_i < 0 else
-                     interior_rooms[room_i].replace("_", " ").upper()
-                     + "   ·   E console")
+            if room_i < 0:
+                label = ("AIRLOCK — E returns to the flight deck"
+                         if interior_vessel is not None else
+                         "AIRLOCK — E exits to the surface")
+            elif (interior_vessel is not None
+                    and room_i < len(interior_labels)):
+                label = (interior_labels[room_i][0].upper()
+                         + "   ·   E reads the module")
+            else:
+                label = (interior_rooms[room_i].replace("_", " ").upper()
+                         + "   ·   E console")
             theme.draw_text(screen, size[0] / 2 - 120, int(oy) - 26, label,
                             color=theme.COLORS["gold"], font="ui_small")
+            chips_in = [(f"INSIDE  {place_name}", theme.COLORS["text"]),
+                        (f"{'crew' if interior_vessel is not None else 'residents'}"
+                         f" {len(inhabitants)}", theme.COLORS["text_dim"])]
+            if interior_vessel is not None:
+                chips_in.append(
+                    (f"{g_in:.1f} m/s² spin gravity" if not floating
+                     else "0 g — handrails", theme.COLORS["accent"]))
+            else:
+                chips_in.append((f"beds {interior_home.beds()}",
+                                 theme.COLORS["text_dim"]))
             chx_i = 10
-            for chip_txt, chip_col in (
-                    (f"INSIDE  {interior_home.name}", theme.COLORS["text"]),
-                    (f"residents {len(interior_home.crew)}",
-                     theme.COLORS["text_dim"]),
-                    (f"beds {interior_home.beds()}",
-                     theme.COLORS["text_dim"])):
+            for chip_txt, chip_col in chips_in:
                 cs = theme.chip(chip_txt, chip_col)
                 screen.blit(cs, (chx_i, 8))
                 chx_i += cs.get_width() + 8
@@ -4118,8 +4339,12 @@ def run(argv: list[str] | None = None) -> int:
         av = vessels[active_idx % len(vessels)] if vessels else None
         # node execution at its instant (the plan IS the burn at rails fidelity)
         if node is not None and node["armed"] and t >= node["t_node"]:
-            if av is not None and av.burn(node["t_node"], node["dvp"],
-                                          node["dvr"]):
+            veto = docked_burn_veto(av) if av is not None else None
+            if veto is not None:
+                toast = f"NODE REFUSED — {veto}"
+                audio.play("alarm")
+            elif av is not None and av.burn(node["t_node"], node["dvp"],
+                                            node["dvr"]):
                 toast = (f"NODE EXECUTED: {math.hypot(node['dvp'], node['dvr']):,.0f}"
                          f" m/s")
                 burn_glow = 0.8
@@ -4300,6 +4525,21 @@ def run(argv: list[str] | None = None) -> int:
                 toast = f"{cname} STARVED — the food chain failed"
                 toast_until = t + 14
                 audio.play("alarm")
+
+            # bent docking rings: an engineer aboard (or a landed base's
+            # shop) works the backlog off in real hours
+            for fv in vessels:
+                rep = getattr(fv, "port_repair_h", 0.0)
+                if rep <= 0.0:
+                    continue
+                if fv.landed_at is not None \
+                        or best_skill(fv, crew, "engineer") >= 1:
+                    fv.port_repair_h = max(0.0, rep - days * 24.0)
+                    if fv.port_repair_h == 0.0:
+                        toast = (f"{fv.name}: docking ring trued and "
+                                 f"re-certified")
+                        toast_until = t + 6
+                        audio.play("blip")
 
             # medicine runs on a daily cadence (08 §4.6)
             env_state["med_acc"] = env_state.get("med_acc", 0.0) + days
@@ -5015,8 +5255,9 @@ def run(argv: list[str] | None = None) -> int:
         screen.blit(theme.footer(
             size[0],
             "X/Z burn   B build   N node   P planner   O contracts   "
-            "V ship   E dock   G surface   F2 colony   R research   "
-            "K crew   SPACE pause   ./, warp   F1 help   ESC menu"),
+            "V ship   E dock   I aboard   G surface   F2 colony   "
+            "R research   K crew   SPACE pause   ./, warp   F1 help   "
+            "ESC menu"),
             (0, size[1] - theme.FOOTER_H))
 
         # one shared dimmer under any content overlay (kills HUD bleed-through)
@@ -5675,6 +5916,8 @@ def run(argv: list[str] | None = None) -> int:
             except Exception:
                 alt_km = 400.0
             fee = keeping_sim.stationkeeping_ms_yr(av0.frame_id, alt_km)
+            off_t = av0.docked_mass_t()
+            bal_st = spin_sim.balance(off_t, r0)
             rows_st = [
                 (f"{av0.name} — spin section r {r0:.0f} m   "
                  f"[ ] adjusts radius", theme.COLORS["text"]),
@@ -5691,6 +5934,12 @@ def run(argv: list[str] | None = None) -> int:
                  else theme.COLORS["text_dim"]),
                 (f"spin-up quote ~{quote:,.0f} kg storables at the rim "
                  f"(I = {i_spin:.2e} kg·m²)", theme.COLORS["text_dim"]),
+                ((f"W6 balance {bal_st.upper()} — {off_t:,.0f} t docked "
+                  f"off-axis" if av0.dock_joints else
+                  "W6 balance OK — nothing docked off-axis"),
+                 theme.COLORS["danger"] if bal_st == "despin"
+                 else theme.COLORS["warn"] if bal_st == "wobble"
+                 else theme.COLORS["text_dim"]),
                 (f"station-keeping {fee:.0f} m/s/yr at "
                  f"{alt_km:,.0f} km (auto-RCS)",
                  theme.COLORS["text_dim"]),
@@ -6117,7 +6366,10 @@ def run(argv: list[str] | None = None) -> int:
                     ("right-click", "set TARGET body (encounter + closest "
                                     "approach)"),
                     ("V / click", "switch command between vessels"),
-                    ("E / U / T", "dock · undock · crossfeed propellant"),
+                    ("E / U / T", "dock (E8 port match) · undock · "
+                                  "crossfeed (DK-L only)"),
+                    ("I", "board the stack: walk its pressurized modules"),
+                    ("F7", "station ops: spin gravity, balance, fees"),
                     ("G", "surface ops: land, relaunch, found a base"),
                     ("TAB / click", "camera focus   ·   C your craft"),
                     ("wheel", "zoom   ·   . , time warp   ·   SPACE pause"),

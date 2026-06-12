@@ -36,6 +36,8 @@ class FleetVessel:
         self.lss_bonus = 1.0                  # engineer aboard (game/crew)
         self.prox_ops_dv = self.PROX_OPS_DV   # pilot aboard cuts this
         self.dock_joints: list[int] = []      # row offsets of docked stacks
+        self.dock_joint_ports: list[str] = []  # port class at each joint
+        self.port_repair_h = 0.0              # docking ring damage backlog
         self.legs = []
         self._legs_t0 = -1.0
 
@@ -250,12 +252,15 @@ class FleetVessel:
         base = math.hypot(vx - ovx, vy - ovy)
         return base + (self.prox_ops_dv if include_prox else 0.0)
 
-    def dock_join(self, other: "FleetVessel") -> None:
+    def dock_join(self, other: "FleetVessel", port_size: str = "S") -> None:
         """Merge this (chaser) into `other` with no further dv charge —
         the approach was already paid (instant dock or flown prox-ops).
+        The joint remembers its port class: only a DK-L carries fluid
+        lines, and burns load the joint at its rating (06 §3.3).
         The caller removes the chaser from the fleet."""
         from aphelion.sim.vessels.docking import dock
         other.dock_joints.append(len(other.vessel.rows))
+        other.dock_joint_ports.append(port_size)
         dock(other.vessel, self.vessel)
         other.crew.extend(self.crew)
         self.crew = []
@@ -263,12 +268,17 @@ class FleetVessel:
 
     def dock_with(self, other: "FleetVessel", t: float) -> bool:
         """Chaser docks to `other` (the primary keeps name and orbit).
-        Pays the rendezvous dv from THIS vessel's tanks, then merges rows;
-        the caller removes the chaser from the fleet."""
+        Runs the E8 mate-plan (matching port class or no dock), pays the
+        rendezvous dv from THIS vessel's tanks, then merges rows; the
+        caller removes the chaser from the fleet."""
+        from aphelion.sim.stations.ports import mate_plan
+        psize, _, _ = mate_plan(self.vessel, other.vessel)
+        if psize is None:
+            return False
         cost = self.rendezvous_cost(other, t)
         if cost is None or not self._pay_dv(cost):
             return False
-        self.dock_join(other)
+        self.dock_join(other, port_size=psize)
         return True
 
     UNDOCK_SEP_MS = 1.5             # mechanical spring separation, m/s
@@ -281,6 +291,8 @@ class FleetVessel:
         if not self.dock_joints:
             return None
         joint = self.dock_joints.pop()
+        if self.dock_joint_ports:
+            self.dock_joint_ports.pop()
         going = list(range(joint, len(self.vessel.rows)))
         if not going:
             return None
@@ -296,11 +308,24 @@ class FleetVessel:
         return FleetVessel(self.tree, self.frame_id, el_split, split,
                            f"{self.name}-B", new_vid, t_now=t)
 
+    def _fluid_blocked_rows(self) -> set[int]:
+        """Row indices isolated behind a docking joint with no fluid
+        lines: propellant only crosses a DK-L joint (06 §3.3). Joints
+        with no recorded class (pre-port saves) are grandfathered as L."""
+        blocked: set[int] = set()
+        for k, joint in enumerate(self.dock_joints):
+            port = (self.dock_joint_ports[k]
+                    if k < len(self.dock_joint_ports) else "L")
+            if port != "L":
+                blocked.update(range(joint, len(self.vessel.rows)))
+        return blocked
+
     def crossfeed(self) -> float:
         """Depot refuel: top the ACTIVE stage's tanks from any other rows
         holding the same resources (a docked tanker's load becomes burnable).
-        Returns kg moved."""
+        Rows behind a non-L docking joint cannot feed. Returns kg moved."""
         active = set(self.vessel.active_stage())
+        blocked = self._fluid_blocked_rows()
         moved = 0.0
         for i, row in enumerate(self.vessel.rows):
             if i not in active:
@@ -314,7 +339,7 @@ class FleetVessel:
                 if room <= 0.0:
                     continue
                 for j, src in enumerate(self.vessel.rows):
-                    if j in active or room <= 0.0:
+                    if j in active or j in blocked or room <= 0.0:
                         continue
                     have = src.fill.get(res, 0.0)
                     take = min(have, room)
@@ -324,6 +349,32 @@ class FleetVessel:
                         room -= take
                         moved += take
         return moved
+
+    def _row_mass_t(self, i: int) -> float:
+        r = self.vessel.rows[i]
+        return (self.vessel.part(r)["mass_t"]
+                + sum(r.fill.values()) / 1_000.0)
+
+    def docked_mass_t(self) -> float:
+        """Tonnes riding beyond the FIRST docking joint — the W6 spin
+        imbalance a docked visitor puts on a spinning ring."""
+        if not self.dock_joints:
+            return 0.0
+        j0 = min(self.dock_joints)
+        return sum(self._row_mass_t(i)
+                   for i in range(j0, len(self.vessel.rows)))
+
+    def joint_burn_loads(self, a_ms2: float) -> list[tuple[str, float, float]]:
+        """(port_class, payload_t, load_kN) per docking joint under a
+        burn at a_ms2 — everything beyond the joint loads it (06 §2.8a)."""
+        out = []
+        for k, joint in enumerate(self.dock_joints):
+            port = (self.dock_joint_ports[k]
+                    if k < len(self.dock_joint_ports) else "L")
+            payload_t = sum(self._row_mass_t(i)
+                            for i in range(joint, len(self.vessel.rows)))
+            out.append((port, payload_t, payload_t * a_ms2))
+        return out
 
     # -- life support (08, vessel-side endurance model) ----------------------
 

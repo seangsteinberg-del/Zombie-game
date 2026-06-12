@@ -126,21 +126,25 @@ def test_lss_countdown_and_loss(world):
 
 
 def test_dock_undock_crossfeed_cycle(world):
-    """Tanker docks to a station, crossfeed refuels the station's active
-    stage, undock releases the (now lighter) tanker."""
+    """Tanker berths to a station through DK-L ports (fluid lines, 06
+    §3.3), crossfeed refuels the station's active stage, undock releases
+    the (now lighter) tanker."""
     db, tree = world
     station = _in_leo(db, tree, [["core:engine_mv815", "core:tank_ml_m",
-                                  "core:capsule_vela"]], crew=["A"])
+                                  "core:capsule_vela", "core:dk_l"]],
+                      crew=["A"])
     station.burn(0.0, 900.0, 0.0)               # spend most of the M tank
     station.elements = _in_leo(db, tree, [["core:payload_2t"]]).elements
-    tanker = _in_leo(db, tree, [["core:engine_mv815", "core:tank_ml_m"]])
+    tanker = _in_leo(db, tree, [["core:engine_mv815", "core:tank_ml_m",
+                                 "core:dk_l"]])
     dv_before = station.dv_remaining
 
     cost = tanker.rendezvous_cost(station, 0.0)
     assert cost is not None and cost == pytest.approx(20.0, abs=1.0)
     assert tanker.dock_with(station, 0.0)
-    assert station.dock_joints == [3]
-    assert len(station.vessel.rows) == 5
+    assert station.dock_joints == [4]
+    assert station.dock_joint_ports == ["L"]     # mate-plan found the berth
+    assert len(station.vessel.rows) == 7
 
     moved = station.crossfeed()
     assert moved > 1_000.0                       # tonnes flowed forward
@@ -149,8 +153,9 @@ def test_dock_undock_crossfeed_cycle(world):
     split = station.undock_last(0.0, new_vid=9)
     assert split is not None
     assert station.dock_joints == []
-    assert len(station.vessel.rows) == 3
-    assert split.vessel.total_mass_kg() < 30_000.0   # tanker left lighter
+    assert station.dock_joint_ports == []
+    assert len(station.vessel.rows) == 4
+    assert split.vessel.total_mass_kg() < 32_000.0   # tanker left lighter
 
 
 def test_rendezvous_refused_across_frames(world):

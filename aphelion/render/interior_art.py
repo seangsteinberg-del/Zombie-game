@@ -24,6 +24,36 @@ HABITABLE = ("hab_module", "hab_rigid", "hab_inflatable", "regolith_vault",
              "machine_shop", "science_lab")
 
 
+def vessel_rooms(vessel) -> list[tuple[str, str, str]]:
+    """(room_kind, name, info) per pressurized part of a flying stack —
+    any row with a [hab] or [crew] table earns a walkable room, drawn in
+    the idiom its function suggests (06 §3 station interiors)."""
+    out = []
+    for r in vessel.rows:
+        p = vessel.part(r)
+        hab = p.get("hab")
+        crew_t = p.get("crew")
+        if not hab and not crew_t:
+            continue
+        if hab and hab.get("grow_m2"):
+            kind = "greenhouse"
+            info = f"{hab['grow_m2']:,.0f} m² under grow-lights"
+        elif hab and hab.get("lab"):
+            kind = "science_lab"
+            info = f"{hab.get('v_press_m3', 0):,.0f} m³ of benches"
+        elif (hab and hab.get("sleeps")) or crew_t:
+            kind = "hab_module"
+            sleeps = (hab or {}).get("sleeps") or (crew_t or {}).get(
+                "capacity", 0)
+            info = (f"sleeps {sleeps}"
+                    + (f" · {hab['v_press_m3']:,.0f} m³" if hab else ""))
+        else:
+            kind = "machine_shop"
+            info = f"{(hab or {}).get('v_press_m3', 0):,.0f} m³ pressurized"
+        out.append((kind, p.get("name", r.part_id), info))
+    return out
+
+
 def _room_base(s: pygame.Surface, x0: int, vault: bool = False) -> None:
     wall = (62, 56, 50) if vault else _WALL
     pygame.draw.rect(s, wall, (x0, 0, ROOM_W, ROOM_H))

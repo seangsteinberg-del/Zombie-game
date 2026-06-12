@@ -73,6 +73,8 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
                 "landed_at": v.landed_at,
                 "lss_used_days": v.lss_used_days,
                 "dock_joints": list(v.dock_joints),
+                "dock_joint_ports": list(getattr(v, "dock_joint_ports", [])),
+                "port_repair_h": getattr(v, "port_repair_h", 0.0),
                 "spin_rpm": getattr(v, "spin_rpm", 0.0),
                 "spin_r_m": getattr(v, "spin_r_m", 25.0),
             } for v in vessels],
@@ -206,6 +208,10 @@ def restore_campaign(save: dict, db, tree):
         fv.landed_at = vd["landed_at"]
         fv.lss_used_days = vd["lss_used_days"]
         fv.dock_joints = list(vd.get("dock_joints", []))
+        # pre-port saves: grandfather old joints as fluid-capable L berths
+        fv.dock_joint_ports = list(
+            vd.get("dock_joint_ports", ["L"] * len(fv.dock_joints)))
+        fv.port_repair_h = vd.get("port_repair_h", 0.0)
         fv.spin_rpm = vd.get("spin_rpm", 0.0)
         fv.spin_r_m = vd.get("spin_r_m", 25.0)
         vessels.append(fv)

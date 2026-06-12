@@ -12,8 +12,8 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 from aphelion.game.fleet import FleetVessel
 from aphelion.sim.flight.descent_live import LiveDescent
-from aphelion.sim.flight.proxops_live import (CAPTURE_RANGE_M,
-                                              CAPTURE_SPEED_MS, ProxOps)
+from aphelion.sim.flight.proxops_live import (CAPTURE_SPEED_MS,
+                                              CONTACT_RANGE_M, ProxOps)
 from aphelion.sim.orbits import transfers as tr
 from aphelion.sim.orbits.ephemeris import load_solar_system
 from aphelion.sim.orbits.kepler import state_to_elements
@@ -91,15 +91,33 @@ def test_proxops_autopilot_captures(world):
     assert prox.used_dv <= 60.0
 
 
-def test_proxops_hot_contact_bounces(world):
-    prox = ProxOps(n=1e-3, budget_dv=60.0, x=-80.0, y=0.0, vx=6.0, vy=0.0)
+def test_proxops_contact_ladder(world):
+    """06 §3.3 at the adapter: over 0.5 m/s bends the ring (damage), over
+    the port's closing limit bounces, under it with a magnetic assist
+    captures."""
+    hot = ProxOps(n=1e-3, budget_dv=60.0, x=-80.0, y=0.0, vx=6.0, vy=0.0)
     for _ in range(4_000):
-        prox.step(0.02)
-        if prox.bounces:
+        hot.step(0.02)
+        if hot.outcome is not None:
             break
-    assert prox.bounces >= 1
-    assert prox.outcome is None            # bounced off, not captured
-    assert prox.range_m > CAPTURE_RANGE_M
+    assert hot.outcome == "damage"
+
+    warm = ProxOps(n=1e-3, budget_dv=60.0, x=-8.0, y=0.0, vx=0.3, vy=0.0)
+    for _ in range(4_000):
+        warm.step(0.02)
+        if warm.bounces:
+            break
+    assert warm.bounces >= 1
+    assert warm.outcome is None            # bounced off, not captured
+    assert warm.range_m > CONTACT_RANGE_M
+
+    soft = ProxOps(n=1e-3, budget_dv=60.0, x=-8.0, y=0.0, vx=0.08, vy=0.0,
+                   port_size="L", magnetic=True)   # limit 0.05 -> 0.10
+    for _ in range(4_000):
+        soft.step(0.02)
+        if soft.outcome is not None:
+            break
+    assert soft.outcome == "captured"
 
 
 def test_landing_gate_demands_low_orbit(world):
