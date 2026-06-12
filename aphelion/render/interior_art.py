@@ -112,6 +112,53 @@ def _glow(s: pygame.Surface, cx: int, cy: int, r: int, color,
     s.blit(g, (cx - r, cy - r), special_flags=pygame.BLEND_ADD)
 
 
+def _shadow(s: pygame.Surface, cx: int, cy: int, w: int,
+            h: int = 8, alpha: int = 70) -> None:
+    """Soft contact-shadow ellipse — ART-DIRECTION rule zero: NOTHING
+    floats; every object is anchored to what holds it."""
+    key = ("shadow", w, h, alpha)
+    g = _CACHE.get(key)
+    if g is None:
+        g = pygame.Surface((w, h * 2), pygame.SRCALPHA)
+        for i in range(3):
+            a = alpha // (i + 1)
+            pygame.draw.ellipse(g, (0, 0, 0, a),
+                                (i * w // 10, i * 2, w - i * w // 5,
+                                 h * 2 - i * 4))
+        _CACHE[key] = g
+    s.blit(g, (cx - w // 2, cy - h))
+
+
+def _drop_shadow(s: pygame.Surface, rect, dy: int = 5,
+                 alpha: int = 56) -> None:
+    """Offset shadow behind a wall-mounted object (depth cue #2)."""
+    x, y, w, h = rect
+    g = pygame.Surface((w + 8, h + 8), pygame.SRCALPHA)
+    pygame.draw.rect(g, (0, 0, 0, alpha), (0, 0, w + 8, h + 8),
+                     border_radius=8)
+    s.blit(g, (x - 4 + 2, y - 4 + dy))
+
+
+def _recess(s: pygame.Surface, rect, depth_shade: int = 38) -> None:
+    """A bay CUT INTO the wall: darker interior gradient, top inner
+    shadow, lit bottom lip — recesses read as space, not stickers."""
+    x, y, w, h = rect
+    _vgrad(s, rect, (30, 35, 46), (24, 28, 37))
+    top = pygame.Surface((w, 12), pygame.SRCALPHA)
+    for i in range(12):
+        pygame.draw.line(top, (0, 0, 0, int(110 * (1 - i / 12))),
+                         (0, i), (w, i))
+    s.blit(top, (x, y))
+    side = pygame.Surface((8, h), pygame.SRCALPHA)
+    for i in range(8):
+        pygame.draw.line(side, (0, 0, 0, int(80 * (1 - i / 8))),
+                         (i, 0), (i, h))
+    s.blit(side, (x, y))
+    pygame.draw.line(s, (132, 144, 168), (x, y + h - 1),
+                     (x + w, y + h - 1), 2)          # lit lip
+    pygame.draw.rect(s, (20, 24, 32), rect, width=2, border_radius=3)
+
+
 def _screen_panel(s, x, y, w, h, color=_SCREEN, lines=3,
                   rng: random.Random | None = None) -> None:
     pygame.draw.rect(s, (16, 22, 32), (x - 3, y - 3, w + 6, h + 6),
@@ -170,25 +217,53 @@ def _room_shell(s: pygame.Surface, x0: int, rng: random.Random,
     sh = pygame.Surface((ROOM_W, 18), pygame.SRCALPHA)
     sh.fill((0, 0, 0, 46))
     s.blit(sh, (x0, FLOOR_Y - 18))
-    # two ceiling light fixtures with pooled warm light
+    # two ceiling light fixtures: housing + light CONE down the wall +
+    # a pooled ellipse on the deck (light has direction, bible §2)
     for fx in (x0 + ROOM_W // 4, x0 + 3 * ROOM_W // 4):
-        pygame.draw.rect(s, (200, 184, 140),
-                         (fx - 36, SPACE_TOP + HULL_T + CEIL_BAND - 5, 72, 5),
-                         border_radius=2)
+        cone_h = FLOOR_Y - CEIL_Y + 4
+        cone = pygame.Surface((150, cone_h), pygame.SRCALPHA)
+        for ci in range(cone_h):
+            f = ci / cone_h
+            half = int(26 + 46 * f)
+            aa = int(34 * (1.0 - f * 0.78))
+            pygame.draw.line(cone, (255, 226, 160, aa),
+                             (75 - half, ci), (75 + half, ci))
+        s.blit(cone, (fx - 75, CEIL_Y - 2))
+        pool = pygame.Surface((170, 22), pygame.SRCALPHA)
+        pygame.draw.ellipse(pool, (255, 226, 160, 30), (0, 0, 170, 22))
+        s.blit(pool, (fx - 85, FLOOR_Y - 10))
+        pygame.draw.rect(s, (70, 76, 90),
+                         (fx - 40, SPACE_TOP + HULL_T + CEIL_BAND - 8, 80, 8),
+                         border_radius=3)            # housing
         pygame.draw.rect(s, _WARM,
-                         (fx - 32, SPACE_TOP + HULL_T + CEIL_BAND - 3, 64, 3))
-        _glow(s, fx, CEIL_Y + 26, 120, (110, 96, 60), 0.9)
-        _glow(s, fx, FLOOR_Y - 8, 90, (70, 62, 42), 0.6)
+                         (fx - 32, SPACE_TOP + HULL_T + CEIL_BAND - 4, 64, 4))
+        _glow(s, fx, CEIL_Y + 4, 54, (120, 104, 66), 0.9)
     # structural ribs at the room joints
     pygame.draw.rect(s, _HULL_DARK, (x0 + ROOM_W - 7, SPACE_TOP, 7,
                                      FLOOR_Y + DECK_H - SPACE_TOP + HULL_T))
     pygame.draw.rect(s, _HULL, (x0 + ROOM_W - 10, SPACE_TOP, 4,
                                 FLOOR_Y + DECK_H - SPACE_TOP + HULL_T))
-    # open hatchway highlight at the joint
+    # PRESSURE HATCHWAY at the joint: a real opening — ring frame with
+    # bolts, dark interior, warm light from the next room spilling
+    # through onto this room's deck
     hx = x0 + ROOM_W - 7
-    pygame.draw.ellipse(s, (24, 28, 38),
-                        (hx - 8, FLOOR_Y - 112, 22, 112))
-    pygame.draw.ellipse(s, _TRIM, (hx - 8, FLOOR_Y - 112, 22, 112), 3)
+    hw, hh = 30, 118
+    pygame.draw.ellipse(s, (16, 19, 26), (hx - hw // 2, FLOOR_Y - hh,
+                                          hw, hh))   # the opening
+    spill = pygame.Surface((64, 16), pygame.SRCALPHA)
+    pygame.draw.ellipse(spill, (255, 222, 150, 38), (0, 0, 64, 16))
+    s.blit(spill, (hx - 32, FLOOR_Y - 6))
+    pygame.draw.ellipse(s, (96, 106, 126), (hx - hw // 2 - 5,
+                                            FLOOR_Y - hh - 5,
+                                            hw + 10, hh + 10), 5)
+    pygame.draw.ellipse(s, (140, 150, 170), (hx - hw // 2 - 5,
+                                             FLOOR_Y - hh - 5,
+                                             hw + 10, hh + 10), 2)
+    for bi in range(7):                              # ring bolts
+        ba = -1.35 + bi * 0.45
+        bxp = hx + int((hw // 2 + 5) * math.cos(ba) * 0.9)
+        byp = FLOOR_Y - hh // 2 + int((hh // 2 + 5) * math.sin(ba) * 0.95)
+        pygame.draw.circle(s, (58, 64, 78), (bxp, byp), 2)
 
 
 def _porthole(s, cx, cy, r, rng):
@@ -211,8 +286,9 @@ def _flight_deck(s, x0, rng):
     switch rows, portholes — the user's benchmark room."""
     _porthole(s, x0 + 88, CEIL_Y + 34, 22, rng)
     _porthole(s, x0 + ROOM_W - 150, CEIL_Y + 34, 22, rng)
-    # instrument panel spanning the upper mid-wall
+    # instrument panel spanning the upper mid-wall (mounted, shadowed)
     px, pw = x0 + 150, 250
+    _drop_shadow(s, (px, CEIL_Y + 8, pw, 64), dy=6)
     pygame.draw.rect(s, (30, 38, 52), (px, CEIL_Y + 8, pw, 64),
                      border_radius=8)
     pygame.draw.rect(s, (52, 62, 80), (px, CEIL_Y + 8, pw, 64),
@@ -223,9 +299,10 @@ def _flight_deck(s, x0, rng):
     for i in range(10):                              # switch row
         sx = px + 14 + i * 23
         pygame.draw.rect(s, (180, 190, 205), (sx, CEIL_Y + 64, 5, 4))
-    # two reclined couches
+    # two reclined couches (anchored by contact shadows)
     for i in range(2):
         bx = x0 + 170 + i * 130
+        _shadow(s, bx + 42, FLOOR_Y + 3, 92, 7, 64)
         pygame.draw.polygon(s, (88, 100, 122), (
             (bx, FLOOR_Y), (bx + 14, FLOOR_Y - 44), (bx + 40, FLOOR_Y - 58),
             (bx + 78, FLOOR_Y - 50), (bx + 84, FLOOR_Y - 38),
@@ -238,6 +315,7 @@ def _flight_deck(s, x0, rng):
         pygame.draw.rect(s, (210, 120, 90), (bx + 44, FLOOR_Y - 56, 18, 7),
                          border_radius=3)            # harness pad
     # hand controller pedestal
+    _shadow(s, x0 + 120, FLOOR_Y + 2, 30, 5, 58)
     pygame.draw.line(s, _TRIM, (x0 + 120, FLOOR_Y), (x0 + 120, FLOOR_Y - 30), 5)
     pygame.draw.circle(s, (200, 90, 70), (x0 + 120, FLOOR_Y - 34), 7)
 
@@ -247,24 +325,29 @@ def _bunks(s, x0, rng):
         bx = x0 + 56 + i * 230
         for level in range(2):
             by = FLOOR_Y - 52 - level * 64
-            pygame.draw.rect(s, (54, 62, 80), (bx - 6, by - 34, 152, 90),
-                             border_radius=8)        # alcove
+            _recess(s, (bx - 6, by - 34, 152, 88))   # alcove CUT IN
             pygame.draw.rect(s, (84, 96, 118), (bx, by, 140, 16),
                              border_radius=5)        # mattress
+            sh = pygame.Surface((140, 8), pygame.SRCALPHA)
+            sh.fill((0, 0, 0, 60))
+            s.blit(sh, (bx, by + 16))                # under-mattress shade
             pygame.draw.rect(s, (168, 186, 214), (bx + 6, by + 2, 30, 11),
                              border_radius=4)        # pillow
             pygame.draw.rect(s, (122, 96, 70), (bx + 44, by + 3, 88, 10),
                              border_radius=4)        # blanket
-            _glow(s, bx + 124, by - 12, 30, (96, 84, 52), 0.8)
+            _glow(s, bx + 124, by - 12, 26, (96, 84, 52), 0.8)
             pygame.draw.circle(s, _WARM, (bx + 124, by - 14), 3)
-    # lockers
+    # lockers (drop-shadowed, latched)
+    _drop_shadow(s, (x0 + ROOM_W - 134, FLOOR_Y - 92, 96, 92), dy=4)
     for j in range(3):
         lx = x0 + ROOM_W - 132 + j * 34
-        pygame.draw.rect(s, (70, 80, 98), (lx, FLOOR_Y - 92, 28, 92),
-                         border_radius=3)
-        pygame.draw.rect(s, (48, 56, 72), (lx, FLOOR_Y - 92, 28, 92), 2,
+        _vgrad(s, (lx, FLOOR_Y - 92, 28, 92), (76, 86, 104), (58, 66, 82))
+        pygame.draw.rect(s, (44, 52, 66), (lx, FLOOR_Y - 92, 28, 92), 2,
                          border_radius=3)
         pygame.draw.circle(s, _TRIM, (lx + 22, FLOOR_Y - 46), 2)
+        pygame.draw.line(s, (50, 58, 72), (lx + 4, FLOOR_Y - 62),
+                         (lx + 24, FLOOR_Y - 62), 2)
+    _shadow(s, x0 + ROOM_W - 86, FLOOR_Y + 2, 100, 7, 60)
 
 
 def _planters(s, x0, rng):
@@ -272,6 +355,10 @@ def _planters(s, x0, rng):
         ty = FLOOR_Y - 26 - tier * 64
         for i in range(3):
             px = x0 + 44 + i * 162
+            if tier == 0:
+                _shadow(s, px + 66, FLOOR_Y + 2, 130, 7, 58)
+            else:
+                _drop_shadow(s, (px, ty - 14, 132, 16), dy=5)
             pygame.draw.rect(s, (60, 48, 36), (px, ty - 14, 132, 16),
                              border_radius=4)
             pygame.draw.rect(s, (44, 35, 26), (px, ty - 14, 132, 16), 2,
@@ -296,6 +383,7 @@ def _planters(s, x0, rng):
 
 
 def _med(s, x0, rng):
+    _shadow(s, x0 + 145, FLOOR_Y + 2, 150, 7, 60)
     pygame.draw.rect(s, (200, 206, 216), (x0 + 70, FLOOR_Y - 44, 150, 14),
                      border_radius=6)
     pygame.draw.rect(s, (140, 148, 162), (x0 + 78, FLOOR_Y - 30, 8, 30))
@@ -314,6 +402,7 @@ def _med(s, x0, rng):
 
 
 def _shop(s, x0, rng):
+    _drop_shadow(s, (x0 + 60, CEIL_Y + 14, 200, 86), dy=5)
     pygame.draw.rect(s, (66, 74, 90), (x0 + 60, CEIL_Y + 14, 200, 86),
                      border_radius=6)                # tool wall
     pygame.draw.rect(s, (50, 58, 72), (x0 + 60, CEIL_Y + 14, 200, 86), 2,
@@ -323,6 +412,7 @@ def _shop(s, x0, rng):
         pygame.draw.line(s, (170, 178, 192), (tx, CEIL_Y + 26),
                          (tx, CEIL_Y + 48 + (i % 3) * 8), 4)
         pygame.draw.circle(s, (190, 198, 212), (tx, CEIL_Y + 26), 4)
+    _shadow(s, x0 + 150, FLOOR_Y + 2, 184, 7, 62)
     pygame.draw.rect(s, (92, 100, 116), (x0 + 60, FLOOR_Y - 46, 180, 46))
     pygame.draw.rect(s, (120, 130, 148), (x0 + 60, FLOOR_Y - 52, 180, 8),
                      border_radius=3)                # bench top
@@ -348,6 +438,7 @@ def _shop(s, x0, rng):
 
 
 def _lab(s, x0, rng):
+    _shadow(s, x0 + 165, FLOOR_Y + 2, 234, 7, 62)
     pygame.draw.rect(s, (92, 100, 116), (x0 + 50, FLOOR_Y - 44, 230, 44))
     pygame.draw.rect(s, (124, 134, 152), (x0 + 50, FLOOR_Y - 50, 230, 8),
                      border_radius=3)
@@ -367,46 +458,72 @@ def _lab(s, x0, rng):
 
 
 def _airlock(s, x0, rng):
-    """A real airlock: round hatch with a wheel, caution stripes, suit
-    rack with two suits, status lamp."""
-    hx, hy, hr = x0 + 96, FLOOR_Y - 64, 56
-    pygame.draw.rect(s, (150, 66, 50), (hx - hr - 14, hy - hr - 14,
-                                        2 * hr + 28, 2 * hr + 14 + 64),
+    """A real airlock bay: pressure door with wheel + bolted ring,
+    caution stripes, suits stowed in RECESSED lockers (dim, behind
+    retaining bars — equipment, not glowing ghosts), mounted panel."""
+    hx, hy, hr = x0 + 96, FLOOR_Y - 70, 52
+    _drop_shadow(s, (hx - hr - 14, hy - hr - 14, 2 * hr + 28,
+                     2 * hr + 14 + 70), dy=6)
+    pygame.draw.rect(s, (142, 62, 47), (hx - hr - 14, hy - hr - 14,
+                                        2 * hr + 28, 2 * hr + 14 + 70),
                      border_radius=10)               # door leaf
-    pygame.draw.rect(s, (108, 46, 36), (hx - hr - 14, hy - hr - 14,
-                                        2 * hr + 28, 2 * hr + 14 + 64),
+    _vgrad(s, (hx - hr - 10, hy - hr - 10, 2 * hr + 20, 26),
+           (168, 78, 60), (142, 62, 47))             # top light catch
+    pygame.draw.rect(s, (96, 40, 31), (hx - hr - 14, hy - hr - 14,
+                                       2 * hr + 28, 2 * hr + 14 + 70),
                      width=3, border_radius=10)
-    pygame.draw.circle(s, (62, 30, 24), (hx, hy), hr)
-    pygame.draw.circle(s, (190, 180, 150), (hx, hy), hr, 4)
-    pygame.draw.circle(s, (190, 180, 150), (hx, hy), 22, 4)     # wheel
+    pygame.draw.circle(s, (52, 26, 21), (hx, hy), hr)
+    pygame.draw.circle(s, (30, 16, 13), (hx, hy), hr, 6)        # dished
+    pygame.draw.circle(s, (186, 176, 148), (hx, hy), hr + 2, 3)
+    for bi in range(10):                             # ring bolts
+        ba = bi * math.tau / 10
+        pygame.draw.circle(s, (210, 200, 170),
+                           (hx + int((hr - 7) * math.cos(ba)),
+                            hy + int((hr - 7) * math.sin(ba))), 2)
+    pygame.draw.circle(s, (190, 180, 150), (hx, hy), 20, 4)     # wheel
     for a in range(4):
         ang = a * math.pi / 2 + 0.4
         pygame.draw.line(s, (190, 180, 150),
-                         (hx + 20 * math.cos(ang), hy + 20 * math.sin(ang)),
-                         (hx + hr * 0.86 * math.cos(ang),
-                          hy + hr * 0.86 * math.sin(ang)), 4)
+                         (hx + 18 * math.cos(ang), hy + 18 * math.sin(ang)),
+                         (hx + hr * 0.74 * math.cos(ang),
+                          hy + hr * 0.74 * math.sin(ang)), 4)
     for i in range(7):                               # caution stripes
         sx = x0 + 24 + i * 26
         pygame.draw.polygon(s, (220, 180, 60) if i % 2 == 0 else (44, 40, 36),
                             ((sx, FLOOR_Y + 3), (sx + 13, FLOOR_Y + 3),
                              (sx + 26, FLOOR_Y + 11), (sx + 13, FLOOR_Y + 11)))
-    pygame.draw.circle(s, (120, 230, 130), (hx + hr + 26, hy - hr + 4), 5)
-    _glow(s, hx + hr + 26, hy - hr + 4, 20, (40, 110, 46), 1.0)
-    # suit rack
+    pygame.draw.circle(s, (120, 230, 130), (hx + hr + 24, hy - hr + 2), 4)
+    _glow(s, hx + hr + 24, hy - hr + 2, 16, (40, 110, 46), 1.0)
+    # suits stowed in recessed lockers — equipment racks, not ghosts
     for i in range(2):
-        sx = x0 + 300 + i * 90
-        pygame.draw.rect(s, (52, 60, 76), (sx - 26, CEIL_Y + 18, 64, 130),
-                         border_radius=8)
-        pygame.draw.circle(s, (226, 230, 238), (sx + 6, CEIL_Y + 44), 15)
-        pygame.draw.rect(s, (40, 46, 58), (sx - 2, CEIL_Y + 38, 17, 11),
-                         border_radius=4)            # visor
-        pygame.draw.rect(s, (216, 220, 230), (sx - 10, CEIL_Y + 60, 33, 52),
-                         border_radius=9)            # torso
-        pygame.draw.rect(s, (196, 200, 212), (sx - 8, CEIL_Y + 112, 12, 30),
-                         border_radius=5)
-        pygame.draw.rect(s, (196, 200, 212), (sx + 9, CEIL_Y + 112, 12, 30),
-                         border_radius=5)
-    _screen_panel(s, x0 + 470, CEIL_Y + 30, 64, 40, (255, 196, 110), 2, rng)
+        lx = x0 + 286 + i * 102
+        bay = (lx, CEIL_Y + 16, 78, FLOOR_Y - CEIL_Y - 24)
+        _recess(s, bay)
+        sxc = lx + 39                                # dim stowed suit
+        pygame.draw.circle(s, (164, 170, 182), (sxc, bay[1] + 30), 13)
+        pygame.draw.rect(s, (96, 78, 40), (sxc - 9, bay[1] + 24, 18, 11),
+                         border_radius=4)            # gold visor, dark
+        pygame.draw.rect(s, (150, 156, 168),
+                         (sxc - 15, bay[1] + 45, 30, 46), border_radius=8)
+        pygame.draw.rect(s, (196, 92, 42),
+                         (sxc - 15, bay[1] + 58, 30, 7))    # orange chest
+        for leg in (-9, 3):
+            pygame.draw.rect(s, (138, 144, 156),
+                             (sxc + leg, bay[1] + 91, 11, 34),
+                             border_radius=5)
+        _shadow(s, sxc, bay[1] + bay[3] - 2, 52, 6, 60)
+        for bar in range(2):                         # retaining bars
+            by = bay[1] + 52 + bar * 44
+            pygame.draw.line(s, (104, 114, 134), (lx + 4, by),
+                             (lx + 74, by), 4)
+        pygame.draw.circle(s, (255, 196, 110), (lx + 70, bay[1] + 8), 3)
+    # wall panel on a REAL mount (arm + body), not a floating sticker
+    px, py = x0 + 472, CEIL_Y + 34
+    pygame.draw.line(s, (90, 98, 114), (px + 30, py + 44), (px + 30, py + 58), 6)
+    _drop_shadow(s, (px - 4, py - 4, 72, 50), dy=5)
+    pygame.draw.rect(s, (44, 52, 66), (px - 6, py - 6, 76, 54),
+                     border_radius=6)
+    _screen_panel(s, px, py, 64, 40, (255, 196, 110), 2, rng)
 
 
 _PROPS = {"hab_module": _bunks, "hab_rigid": _bunks,

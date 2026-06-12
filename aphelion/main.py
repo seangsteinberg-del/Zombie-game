@@ -4608,23 +4608,31 @@ def run(argv: list[str] | None = None) -> int:
             ox = size[0] / 2 - interior_x * ppm_i * scale_i
             oy = size[1] / 2 - sh / 2
             screen.blit(strip_big, (ox, oy))
-            # crew share the player's sprite scale — humans, not pixels
+            # crew share the player's sprite scale — humans, not pixels.
+            # Floating = a DRIFT pose (frame 0, slow tumble), never a
+            # mid-air walk cycle (ART-DIRECTION §4)
             for ri, rname in enumerate(inhabitants[:6]):
                 rx_m = (7.0 + (ri + 1) * (total_m - 10.0) / 7.0
                         + 0.8 * math.sin(ui_t * 0.7 + ri * 2.1))
                 fy = (44 + 22 * math.sin(ui_t * 0.9 + ri * 1.7)
                       if floating else 0)
-                cspr = eva_art.astronaut(
-                    int(ui_t * 3 + ri) & 3 if floating else 0,
-                    -1 if ri % 2 else 1, False, h_px=148)
+                cspr = eva_art.astronaut(0, -1 if ri % 2 else 1,
+                                         False, h_px=148)
+                if floating:
+                    cspr = pygame.transform.rotozoom(
+                        cspr, 9.0 * math.sin(ui_t * 0.5 + ri * 1.3), 1.0)
                 screen.blit(cspr, (ox + rx_m * ppm_i * scale_i
                                    - cspr.get_width() / 2,
                                    oy + FLOOR_Y * scale_i
                                    - cspr.get_height() - fy))
             # you
             fy_me = 36 + 16 * math.sin(ui_t * 1.1) if floating else 0
-            aspr = eva_art.astronaut(int(interior_frame), interior_face,
-                                     False, h_px=160)
+            aspr = eva_art.astronaut(
+                0 if floating else int(interior_frame), interior_face,
+                False, h_px=160)
+            if floating:
+                aspr = pygame.transform.rotozoom(
+                    aspr, 6.0 * math.sin(ui_t * 0.7), 1.0)
             screen.blit(aspr, (size[0] / 2 - aspr.get_width() / 2,
                                oy + FLOOR_Y * scale_i - aspr.get_height()
                                - fy_me))
