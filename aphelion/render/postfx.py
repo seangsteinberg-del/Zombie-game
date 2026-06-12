@@ -101,8 +101,9 @@ class Nebula:
         gy = (np.arange(lh) + 0.5) * (h / lh)
         dist = np.abs((gx[:, None] - ax_) * dy - (gy[None, :] - ay_) * dx) / norm
         # wide faint glow + a narrow bright core = a structured galaxy band
-        haze_a = (np.exp(-((dist / (sigma * 1.25)) ** 2)) * 17.0
-                  + np.exp(-((dist / (sigma * 0.32)) ** 2)) * 16.0)
+        # (restrained per ART-DIRECTION §1.1 — space stays near-black)
+        haze_a = (np.exp(-((dist / (sigma * 1.25)) ** 2)) * 13.0
+                  + np.exp(-((dist / (sigma * 0.32)) ** 2)) * 12.0)
         haze = pygame.Surface((lw, lh), pygame.SRCALPHA)
         hrgb = pygame.surfarray.pixels3d(haze)
         hrgb[...] = _HAZE_RGB
@@ -239,8 +240,10 @@ class Nebula:
         num = (teal * (m_teal * 1.0)[..., None]
                + rose * (m_rose * 0.9)[..., None]
                + amber * (m_amber * 0.7)[..., None])
-        a_f = (m_teal * 16.0 + m_rose * 13.0 + m_amber * 8.0) * band * window
-        a_f = np.clip(a_f, 0.0, 26.0)
+        # ART-DIRECTION §1.1: nebulae are barely-there — contrast is the
+        # drama, space stays near-black
+        a_f = (m_teal * 11.0 + m_rose * 9.0 + m_amber * 6.0) * band * window
+        a_f = np.clip(a_f, 0.0, 19.0)
         wsum = np.maximum(m_teal + m_rose * 0.9 + m_amber * 0.7, 1e-4)
         rgb_f = np.clip(num / wsum[..., None], 0.0, 255.0)
 

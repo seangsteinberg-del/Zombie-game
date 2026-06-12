@@ -302,30 +302,71 @@ def _alb_gas(rng: np.random.Generator, x: np.ndarray, y: np.ndarray,
     return np.clip(alb, 0.0, 1.0)
 
 
+def _warp_gather(field: np.ndarray, fx: np.ndarray,
+                 fy: np.ndarray) -> np.ndarray:
+    """Bilinear gather with wrap — samples `field` at warped coordinates
+    (the domain-warping core of the v3 cloud look)."""
+    n = field.shape[0]
+    fx = np.mod(fx, n)
+    fy = np.mod(fy, n)
+    x0 = fx.astype(np.intp)
+    y0 = fy.astype(np.intp)
+    x1 = (x0 + 1) % n
+    y1 = (y0 + 1) % n
+    tx = fx - x0
+    ty = fy - y0
+    return (field[x0, y0] * (1 - tx) * (1 - ty)
+            + field[x1, y0] * tx * (1 - ty)
+            + field[x0, y1] * (1 - tx) * ty
+            + field[x1, y1] * tx * ty)
+
+
 def _alb_earth(rng: np.random.Generator, x: np.ndarray, y: np.ndarray,
                lat: np.ndarray, size: int, pal: BodyPalette):
-    """Returns (albedo, extras) — the renderer uses the ocean/land/cloud
-    masks for specular glint, city lights and cloud shadows (F0.6)."""
-    ocean, deep, land = _c(pal.base), _c(pal.shade), _c(pal.accent)
-    cont = _fbm(rng, size, 5, 3)
-    moist = _fbm(rng, size, 4, 4)
-    cloud = _fbm(rng, size, 5, 4)
-    land_m = _smooth((cont - 0.55) / 0.05)
-    alb = _lerp(_lerp(deep, ocean, 0.4), ocean,
-                _smooth((cont - 0.30) / 0.25)[..., None])
-    land_col = _lerp(land, np.array([0.66, 0.58, 0.38]),
+    """v3, calibrated against orbital photography: Earth's identity is
+    SWIRLING WHITE CLOUD SYSTEMS over deep navy ocean — domain-warped
+    fBM with zonal wind shear and explicit cyclone vortices, continents
+    second. Returns (albedo, extras): ocean/land/cloud masks feed the
+    renderer's glint, city lights and cloud shadows."""
+    ocean = np.array([0.05, 0.13, 0.31])            # deep navy, saturated
+    deep = ocean * 0.55
+    land = np.array([0.27, 0.25, 0.15])             # dark olive — in orbital
+    cont = _fbm(rng, size, 5, 3)                    # photos land is DARKER
+    moist = _fbm(rng, size, 4, 4)                   # than cloud, never bright
+    land_m = _smooth((cont - 0.57) / 0.05)
+    alb = _lerp(deep, ocean, _smooth((cont - 0.30) / 0.25)[..., None])
+    land_col = _lerp(land, np.array([0.40, 0.33, 0.20]),
                      _smooth((moist - 0.55) / 0.18)[..., None])
     alb = _lerp(alb, land_col, land_m[..., None])
     cap = _smooth((np.abs(lat) - 0.80 - (cont - 0.5) * 0.08) / 0.05)
     alb = _lerp(alb, np.array([0.93, 0.95, 0.98]), cap[..., None])
-    # weather systems, not mush: banded belts + small-scale breakup
-    wisp = _fbm(rng, size, 6, 13)
-    belts = 0.45 + 0.55 * _smooth(
-        (np.sin(lat * 7.5 + (wisp - 0.5) * 5.0) + 0.25) / 0.9)
-    cm = (_smooth((cloud - 0.58) / 0.11) * belts
-          * (0.55 + 0.45 * _smooth((wisp - 0.45) / 0.18)) * 0.85)
-    # cloud self-shadow on the ground beneath (offset toward -sun is
-    # applied by the renderer; here just keep the un-clouded albedo)
+
+    # ---- the clouds (the actual subject of the planet) -------------
+    idx = np.arange(size, dtype=np.float64)
+    gx = np.broadcast_to(idx[:, None], (size, size)).copy()
+    gy = np.broadcast_to(idx[None, :], (size, size)).copy()
+    w1 = _fbm(rng, size, 4, 3)
+    w2 = _fbm(rng, size, 4, 3)
+    warp = size * 0.085
+    fx = gx + (w1 - 0.5) * warp + size * 0.05 * np.sin(lat * 3.4)
+    fy = gy + (w2 - 0.5) * warp * 0.6
+    for k in range(4):                              # cyclone vortices
+        ccx, ccy = rng.uniform(0.15, 0.85, 2) * size
+        rad = size * rng.uniform(0.07, 0.13)
+        ddx, ddy = gx - ccx, gy - ccy
+        r2 = (ddx * ddx + ddy * ddy) / (rad * rad)
+        ang = (2.8 if k % 2 == 0 else -2.8) * np.exp(-r2)
+        ca, sa = np.cos(ang), np.sin(ang)
+        fx2 = ccx + ca * (fx - ccx) - sa * (fy - ccy)
+        fy = ccy + sa * (fx - ccx) + ca * (fy - ccy)
+        fx = fx2
+    base_c = _fbm(rng, size, 5, 4)
+    wisp = _fbm(rng, size, 6, 9)
+    cloud = _warp_gather(base_c, fx, fy)
+    streak = _warp_gather(wisp, fx, fy)
+    cm = (_smooth((cloud - 0.47) / 0.16)
+          * (0.55 + 0.45 * _smooth((streak - 0.42) / 0.22)))
+    cm = np.clip(cm * 1.15, 0.0, 1.0) * 0.96        # bright white systems
     alb = _lerp(alb, np.array([0.97, 0.98, 1.0]), cm[..., None])
     extras = {"land": land_m * (1.0 - cap), "cloud": cm,
               "ocean": (1.0 - land_m) * (1.0 - cap)}
@@ -517,11 +558,20 @@ def _render_body(body_id: str, pal: BodyPalette, d: int,
         ring_rgb, ring_a = _render_rings(rng, x, y, d, pal)
         rgb, a = _over(rgb, a, ring_rgb, np.where(y < 0.0, ring_a, 0.0))
     rgb, a = _over(rgb, a, col, cov)
-    if pal.atmo:                                    # additive halo past limb
-        glow = np.exp(-np.clip(r - 1.0, 0.0, None) / max(pal.atmo_h, 1e-3))
-        glow *= np.clip((r - 1.0) * (d * 0.5) + 0.5, 0.0, 1.0)
-        glow *= np.clip((scale - 0.04 - r) / 0.10, 0.0, 1.0)    # fade at edge
-        glow *= (0.40 + 0.60 * facing) * 0.85       # brighter lit-side limb
+    if pal.atmo:
+        # MISSION FILM limb: a RAZOR-THIN brilliant arc hugging the edge
+        # (the photographic signature) + a short, restrained outer glow —
+        # not the old wide soft halo
+        px_r = d * 0.5
+        arc = np.exp(-(((r - 1.0) * px_r) / 1.8) ** 2)
+        arc *= (0.20 + 0.80 * facing ** 0.8)
+        arc_col = np.clip(_c(pal.atmo) * 0.7 + 0.45, 0.0, 1.0)  # blue-white
+        rgb, a = _add(rgb, a, arc_col, np.clip(arc, 0.0, 1.0))
+        glow = np.exp(-np.clip(r - 1.0, 0.0, None)
+                      / max(pal.atmo_h * 0.45, 1e-3))
+        glow *= np.clip((r - 1.0) * px_r + 0.5, 0.0, 1.0)
+        glow *= np.clip((scale - 0.04 - r) / 0.10, 0.0, 1.0)    # sprite edge
+        glow *= (0.30 + 0.70 * facing) * 0.55
         rgb, a = _add(rgb, a, _c(pal.atmo), glow)
     if pal.rings:                                   # near half over the disc
         rgb, a = _over(rgb, a, ring_rgb, np.where(y >= 0.0, ring_a, 0.0))
