@@ -73,6 +73,8 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
                 "landed_at": v.landed_at,
                 "lss_used_days": v.lss_used_days,
                 "dock_joints": list(v.dock_joints),
+                "spin_rpm": getattr(v, "spin_rpm", 0.0),
+                "spin_r_m": getattr(v, "spin_r_m", 25.0),
             } for v in vessels],
             "active_idx": active_idx,
             "next_vid": next_vid,
@@ -204,6 +206,8 @@ def restore_campaign(save: dict, db, tree):
         fv.landed_at = vd["landed_at"]
         fv.lss_used_days = vd["lss_used_days"]
         fv.dock_joints = list(vd.get("dock_joints", []))
+        fv.spin_rpm = vd.get("spin_rpm", 0.0)
+        fv.spin_r_m = vd.get("spin_r_m", 25.0)
         vessels.append(fv)
     bases = []
     for bd in c["bases"]:

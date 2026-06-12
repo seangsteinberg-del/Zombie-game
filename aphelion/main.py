@@ -199,6 +199,8 @@ from aphelion.sim.vessels.buildermath import stage_report  # noqa: E402
 from aphelion.sim.vessels.grid import GridVessel  # noqa: E402
 from aphelion.sim.vessels.structure import (  # noqa: E402
     ascent_qsim, qalpha_limit_kpadeg, validate_e7)
+from aphelion.sim.stations import keeping as keeping_sim  # noqa: E402
+from aphelion.sim.stations import spin as spin_sim  # noqa: E402
 from aphelion.sim.environment.mars_climate import (  # noqa: E402
     MarsWeather, f_dust as mars_f_dust)
 from aphelion.sim.environment.space_env import (  # noqa: E402
@@ -983,6 +985,7 @@ def run(argv: list[str] | None = None) -> int:
     crew_focus = "cands"              # or "roster" (training)
     roster_cursor = 0
     help_open = False
+    station_open = False              # F7: spin/keeping/depot ops
     # map intelligence: target, transfer planner, warp-to-node
     target_id: str | None = None
     planner_open = False
@@ -1781,6 +1784,27 @@ def run(argv: list[str] | None = None) -> int:
                         menu_cursor = 0
                     else:
                         running = False
+            elif event.type == pygame.KEYDOWN and station_open:
+                av0 = vessels[active_idx % len(vessels)] if vessels \
+                    else None
+                if event.key in (pygame.K_ESCAPE, pygame.K_F7):
+                    station_open = False
+                elif av0 is not None and av0.landed_at is None:
+                    rpm0 = getattr(av0, "spin_rpm", 0.0)
+                    r0 = getattr(av0, "spin_r_m", 25.0)
+                    if event.key in (pygame.K_EQUALS, pygame.K_UP):
+                        cap = 6.0 if av0.crew else 8.0   # E9 crewed
+                        av0.spin_rpm = min(cap, rpm0 + 0.5)
+                        audio.play("tick")
+                    elif event.key in (pygame.K_MINUS, pygame.K_DOWN):
+                        av0.spin_rpm = max(0.0, rpm0 - 0.5)
+                        audio.play("tick")
+                    elif event.key == pygame.K_LEFTBRACKET:
+                        av0.spin_r_m = max(5.0, r0 - 5.0)
+                        audio.play("tick")
+                    elif event.key == pygame.K_RIGHTBRACKET:
+                        av0.spin_r_m = min(450.0, r0 + 5.0)
+                        audio.play("tick")
             elif event.type == pygame.KEYDOWN and surface_open:
                 av0 = vessels[active_idx % len(vessels)] if vessels else None
                 opts = (_surface_options(av0, bases, db,
@@ -2559,6 +2583,8 @@ def run(argv: list[str] | None = None) -> int:
                 elif event.key == pygame.K_k:
                     crew_open = True
                     crew_cursor = 0
+                elif event.key == pygame.K_F7:
+                    station_open = True
                 elif event.key in (pygame.K_x, pygame.K_z, pygame.K_a, pygame.K_d):
                     av0 = vessels[active_idx % len(vessels)] if vessels else None
                     if av0 is None:
@@ -4218,7 +4244,10 @@ def run(argv: list[str] | None = None) -> int:
                         _bw = tree.body(body0)
                         g_eff = _bw.mu / _bw.radius ** 2
                     else:
-                        g_eff = 0.0
+                        # spin gravity counts (06 §3.1 rule 7)
+                        g_eff = spin_sim.a_spin(
+                            getattr(fv0, "spin_rpm", 0.0),
+                            getattr(fv0, "spin_r_m", 25.0))
                     ctx = {"vol_m3": 14.0, "private_quarters": False,
                            "window": True, "g_eff": g_eff,
                            "light_min": abs(d_au - 1.0) * 8.32}
@@ -5625,6 +5654,56 @@ def run(argv: list[str] | None = None) -> int:
                 theme.draw_text(screen, spx + 16,
                                 spy + 96 + 30 * (n_rows - 1), blurb,
                                 color=theme.COLORS["accent"], font="small")
+
+        if station_open and vessels:
+            # ---- STATION OPS (06 §3): spin, fees, the depot economy ----
+            av0 = vessels[active_idx % len(vessels)]
+            rpm0 = getattr(av0, "spin_rpm", 0.0)
+            r0 = getattr(av0, "spin_r_m", 25.0)
+            cf = spin_sim.comfort(rpm0, r0)
+            screen.blit(theme.panel(560, 250, "STATION OPS"),
+                        (size[0] // 2 - 280, 120))
+            syy = 160
+            m_kg = av0.vessel.total_mass_kg()
+            i_spin = spin_sim.moment_of_inertia([(m_kg, r0)])
+            quote = spin_sim.spinup_prop_kg(i_spin, max(rpm0, 1.0), r0,
+                                            300.0)
+            try:
+                _bb = tree.body(av0.frame_id)
+                _sx, _sy2, _, _ = av0.state(t)
+                alt_km = (math.hypot(_sx, _sy2) - _bb.radius) / 1e3
+            except Exception:
+                alt_km = 400.0
+            fee = keeping_sim.stationkeeping_ms_yr(av0.frame_id, alt_km)
+            rows_st = [
+                (f"{av0.name} — spin section r {r0:.0f} m   "
+                 f"[ ] adjusts radius", theme.COLORS["text"]),
+                (f"spin {rpm0:.1f} rpm (+/− adjusts)   a_spin "
+                 f"{cf['a_ms2']:.2f} m/s²   v_rim "
+                 f"{spin_sim.v_rim(rpm0, r0):.1f} m/s",
+                 theme.COLORS["accent"]),
+                (("E9 — CREWED SPIN CAPPED AT 6 RPM" if rpm0 >= 6.0
+                  and av0.crew else
+                  f"comfort ×{cf['productivity']:.2f}   adapt "
+                  f"{cf['adapt_days']:.0f} d   deconditioning: "
+                  f"{cf['decon_regime']}"),
+                 theme.COLORS["warn"] if cf["productivity"] < 1.0
+                 else theme.COLORS["text_dim"]),
+                (f"spin-up quote ~{quote:,.0f} kg storables at the rim "
+                 f"(I = {i_spin:.2e} kg·m²)", theme.COLORS["text_dim"]),
+                (f"station-keeping {fee:.0f} m/s/yr at "
+                 f"{alt_km:,.0f} km (auto-RCS)",
+                 theme.COLORS["text_dim"]),
+                (f"MMOD P_pen {keeping_sim.mmod_p_pen(1e-4, 40.0, 365.25):.2%}/yr"
+                 f" bare hull — Whipple panels cut it 10–50×",
+                 theme.COLORS["text_dim"]),
+                ("crew aboard feel a_spin as gravity: conditioning "
+                 "and morale follow", theme.COLORS["text_dim"]),
+            ]
+            for txt_st, col_st in rows_st:
+                theme.draw_text(screen, size[0] // 2 - 262, syy, txt_st,
+                                color=col_st, font="small")
+                syy += 26
 
         if crew_open:
             from aphelion.game.crew import ROLES as _ROLES
