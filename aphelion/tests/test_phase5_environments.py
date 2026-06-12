@@ -153,13 +153,18 @@ def test_titan_human_powered_flight_is_real():
 
 
 def test_titan_dirigible_lift():
-    # warm H2 in cold dense N2: monster lift per m3 vs Earth's ~1.1 kg/m3
-    assert titan_dirigible_lift_kg_m3("h2") > 4.0
+    """Canon 4.9 kg/m³: AMBIENT-temperature H2 in cold dense N2 (warm
+    gas is the Montgolfière mechanic, 10 §4.2 reconciliation)."""
+    assert titan_dirigible_lift_kg_m3("h2") == pytest.approx(4.9,
+                                                             abs=0.1)
 
 
 def test_titan_submarine_must_be_dense():
-    """570 kg/m3 methane: a 10 m3 hull massing 6 t SINKS (negative net
-    buoyancy) — the NASA study's central design problem."""
+    """Canon mean sea 550 kg/m3 (per-sea 520/580/600, 10 §2.7): a 10 m3
+    hull massing 6 t SINKS — the NASA study's central design problem."""
     assert titan_submarine_net_buoyancy_n(10.0, 6_000.0) < 0.0
-    # neutral trim needs mass ~ 5.7 t for 10 m3
-    assert abs(titan_submarine_net_buoyancy_n(10.0, 5_700.0)) < 1.0
+    # neutral trim needs mass ~ 5.5 t for 10 m3 at the canon mean
+    assert abs(titan_submarine_net_buoyancy_n(10.0, 5_500.0)) < 1.0
+    # ethane-rich Kraken carries more than methane-rich Ligeia
+    assert titan_submarine_net_buoyancy_n(10.0, 5_500.0, sea="kraken") \
+        > titan_submarine_net_buoyancy_n(10.0, 5_500.0, sea="ligeia")
