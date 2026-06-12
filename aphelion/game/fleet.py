@@ -38,8 +38,27 @@ class FleetVessel:
         self.dock_joints: list[int] = []      # row offsets of docked stacks
         self.dock_joint_ports: list[str] = []  # port class at each joint
         self.port_repair_h = 0.0              # docking ring damage backlog
+        self.cargo: dict[str, float] = {}     # bulk parts/goods aboard, kg
+        self.yard_job: dict | None = None     # an orbital build under way
         self.legs = []
         self._legs_t0 = -1.0
+
+    @property
+    def cargo_cap_kg(self) -> float:
+        return sum(float(self.vessel.part(r).get("cargo_t", 0.0))
+                   for r in self.vessel.rows) * 1_000.0
+
+    @property
+    def cargo_kg(self) -> float:
+        return sum(self.cargo.values())
+
+    def load_cargo(self, res: str, kg: float) -> float:
+        """Put kg of bulk cargo aboard, capped by cargo cells."""
+        room = max(0.0, self.cargo_cap_kg - self.cargo_kg)
+        take = min(kg, room)
+        if take > 0.0:
+            self.cargo[res] = self.cargo.get(res, 0.0) + take
+        return take
 
     # -- derived readouts (the rows are the truth) ---------------------------
 
@@ -264,6 +283,10 @@ class FleetVessel:
         dock(other.vessel, self.vessel)
         other.crew.extend(self.crew)
         self.crew = []
+        # bulk cargo transfers with the hull (yard resupply runs)
+        for res, kg in self.cargo.items():
+            other.cargo[res] = other.cargo.get(res, 0.0) + kg
+        self.cargo = {}
         other._legs_t0 = -1.0
 
     def dock_with(self, other: "FleetVessel", t: float) -> bool:

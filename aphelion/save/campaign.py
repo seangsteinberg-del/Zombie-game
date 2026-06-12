@@ -55,7 +55,8 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
                       builder_stack: list | None = None,
                       difficulty: str = "DIRECTOR",
                       tutorial_state: dict | None = None,
-                      explore: dict | None = None) -> dict:
+                      explore: dict | None = None,
+                      yard_designs: list | None = None) -> dict:
     """bases: objects with .name .last_t .pending_repairs .net (BaseSite)."""
     save = {
         "schema_version": SCHEMA_VERSION,
@@ -77,6 +78,8 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
                 "port_repair_h": getattr(v, "port_repair_h", 0.0),
                 "spin_rpm": getattr(v, "spin_rpm", 0.0),
                 "spin_r_m": getattr(v, "spin_r_m", 25.0),
+                "cargo": dict(getattr(v, "cargo", {}) or {}),
+                "yard_job": getattr(v, "yard_job", None),
             } for v in vessels],
             "active_idx": active_idx,
             "next_vid": next_vid,
@@ -124,6 +127,7 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
             "milestones": sorted(milestones or set()),
             "tutorial_done": tutorial_done,
             "builder_stack": [list(s) for s in (builder_stack or [])],
+            "yard_designs": list(yard_designs or []),
             "bases": [{
                 "name": b.name,
                 "site_id": getattr(b, "site_id", "site:peary"),
@@ -215,6 +219,8 @@ def restore_campaign(save: dict, db, tree):
         fv.port_repair_h = vd.get("port_repair_h", 0.0)
         fv.spin_rpm = vd.get("spin_rpm", 0.0)
         fv.spin_r_m = vd.get("spin_r_m", 25.0)
+        fv.cargo = dict(vd.get("cargo", {}))
+        fv.yard_job = vd.get("yard_job")
         vessels.append(fv)
     bases = []
     for bd in c["bases"]:
@@ -251,6 +257,7 @@ def restore_campaign(save: dict, db, tree):
         "milestones": set(c.get("milestones", [])),
         "tutorial_done": c["tutorial_done"],
         "builder_stack": c.get("builder_stack", []),
+        "yard_designs": c.get("yard_designs", []),
         "difficulty": c.get("difficulty", "DIRECTOR"),
         "tutorial_state": c.get("tutorial_state"),
         "explore": c.get("explore", {}),

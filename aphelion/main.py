@@ -245,6 +245,22 @@ def _surface_options(av, bases, db=None,
             if home.crew:
                 opts.append((("board",),
                              f"BOARD CREW   ({', '.join(home.crew[:4])})"))
+            # bulk parts cargo for the orbital yard economy (05 §3.1)
+            if av.cargo_cap_kg > 0.0:
+                from aphelion.sim.industry.yard import PARTS_CARGO
+                on_shelf = sum(home.net.buffers[r].level
+                               for r in PARTS_CARGO
+                               if r in home.net.buffers)
+                if on_shelf > 1.0:
+                    opts.append((("load_parts",),
+                                 f"LOAD PARTS CARGO   (shelves "
+                                 f"{on_shelf / 1e3:,.1f} t, bays "
+                                 f"{av.cargo_kg / 1e3:,.1f}/"
+                                 f"{av.cargo_cap_kg / 1e3:,.0f} t)"))
+            if av.cargo_kg > 0.0:
+                opts.append((("unload_cargo",),
+                             f"UNLOAD CARGO TO BASE   "
+                             f"({av.cargo_kg / 1e3:,.1f} t aboard)"))
     else:
         body = av.tree.body(av.frame_id)
         g_local = body.mu / (body.radius ** 2)
@@ -965,6 +981,7 @@ def run(argv: list[str] | None = None) -> int:
                     visited_surface=got["visited_surface"],
                     milestones=got["milestones"], tutorial=tut,
                     builder_stack=got.get("builder_stack", []),
+                    yard_designs=got.get("yard_designs", []),
                     difficulty=got.get("difficulty", "DIRECTOR"))
 
     def campaign_tuple(st: dict):
@@ -981,11 +998,12 @@ def run(argv: list[str] | None = None) -> int:
                                       "surveydata_gb": 0.0,
                                       "survey_progress": {}, "flags": [],
                                       "dug": {}, "deposits": {}},
+                list(st.get("yard_designs") or []),
                 None, 0, False, False, False, False, False, 0.0, "", 0.0)
 
     (clock, vessels, active_idx, next_vid, program, campaign_rng, bases,
      crew, research, visited, visited_surface, milestones, tutorial, builder,
-     difficulty, explore,
+     difficulty, explore, yard_designs,
      node, warp_idx, paused, base_screen, builder_open, research_open,
      crew_warned, last_dose_t, toast, toast_until) = \
         campaign_tuple(fresh_campaign())
@@ -1035,6 +1053,7 @@ def run(argv: list[str] | None = None) -> int:
             milestones=milestones, bases=bases,
             tutorial_done=tutorial.completed, rng=campaign_rng,
             builder_stack=builder.stack, difficulty=difficulty,
+            yard_designs=yard_designs,
             tutorial_state={"rail": tutorial.rail, "index": tutorial.index,
                             "visible": tutorial.visible,
                             "done": sorted(tutorial.done_rails)},
@@ -1419,6 +1438,7 @@ def run(argv: list[str] | None = None) -> int:
                                  _eb.mu)
         _stn_rows = [_V.fueled_row(db, p) for p in
                      ("core:hb_rig_s", "core:hb_lab", "core:hb_grn_s",
+                      "core:hb_dockyard", "core:cg_bay",
                       "core:dk_s", "core:dk_l", "core:pw_sa_r")]
         _stn = FleetVessel(tree, "core:earth", _elq,
                            _V(db, _stn_rows,
@@ -1788,6 +1808,30 @@ def run(argv: list[str] | None = None) -> int:
                                      "builder")
                             toast_until = t + 8
                             audio.play("paid")
+                    elif event.key == pygame.K_y:
+                        # blueprint for ORBITAL construction (05 §3.1):
+                        # a yard with parts cargo erects it without a
+                        # launch — F-11 learning per repeat build
+                        plan_dd = dd_stage.flyable_stack(dd_v)
+                        if not plan_dd:
+                            dd_msg = "nothing flyable on the grid yet"
+                        elif dd_v.validate():
+                            dd_msg = "clear the validation list first"
+                            audio.play("warn")
+                        else:
+                            dry_dd = sum(float(p.spec["mass_t"])
+                                         for p in dd_v.parts)
+                            yard_designs.append({
+                                "name": f"BP-{len(yard_designs) + 1}",
+                                "stack": [list(s) for s in plan_dd],
+                                "dry_t": round(dry_dd, 2),
+                                "n_parts": len(dd_v.parts),
+                                "built": 0})
+                            dd_msg = (f"blueprint BP-"
+                                      f"{len(yard_designs)} saved "
+                                      f"({dry_dd:,.1f} t dry) — build "
+                                      f"it at any orbital dockyard (F7)")
+                            audio.play("paid")
                     elif event.key == pygame.K_ESCAPE:
                         scene = "flight"
             elif scene == "eva":
@@ -2059,6 +2103,63 @@ def run(argv: list[str] | None = None) -> int:
                     elif event.key == pygame.K_RIGHTBRACKET:
                         av0.spin_r_m = min(450.0, r0 + 5.0)
                         audio.play("tick")
+                    elif pygame.K_1 <= event.key <= pygame.K_9 \
+                            and yard_designs:
+                        # lay down a blueprint at the orbital yard (05 §3.1)
+                        from aphelion.sim.industry.yard import (
+                            has_dockyard, plan_build)
+                        idx_y = event.key - pygame.K_1
+                        if not has_dockyard(av0.vessel):
+                            toast = ("no dockyard module aboard — fit "
+                                     "HB-DOCKYARD in the drydock")
+                            toast_until = t + 6
+                            audio.play("warn")
+                        elif av0.yard_job is not None:
+                            toast = "the yard is already mid-build"
+                            toast_until = t + 5
+                            audio.play("warn")
+                        elif not av0.crew:
+                            toast = ("OUTFIT quality gate wants hands on "
+                                     "the job — crew the yard first")
+                            toast_until = t + 6
+                            audio.play("warn")
+                        elif idx_y < len(yard_designs):
+                            d_y = yard_designs[idx_y]
+                            a3_y = ("core:tech_in09_supervised_autonomy"
+                                    in research.unlocked)
+                            plan_y = plan_build(
+                                d_y["dry_t"], d_y["n_parts"], a3=a3_y,
+                                n_built_before=d_y.get("built", 0))
+                            short = {r: kg - av0.cargo.get(r, 0.0)
+                                     for r, kg in plan_y.bill_kg.items()
+                                     if av0.cargo.get(r, 0.0) < kg - 1e-6}
+                            if short:
+                                toast = ("parts short at the yard: "
+                                         + ", ".join(
+                                             f"{kg / 1e3:,.1f} t {r}"
+                                             for r, kg in short.items()))
+                                toast_until = t + 8
+                                audio.play("warn")
+                            else:
+                                for r, kg in plan_y.bill_kg.items():
+                                    av0.cargo[r] -= kg
+                                    if av0.cargo[r] <= 1e-9:
+                                        av0.cargo.pop(r)
+                                av0.yard_job = {
+                                    "design": idx_y, "name": d_y["name"],
+                                    "stack": [list(s)
+                                              for s in d_y["stack"]],
+                                    "done_t": t + plan_y.days * 86_400.0,
+                                    "days": plan_y.days}
+                                toast = (f"LAID DOWN: {d_y['name']} — "
+                                         f"{plan_y.days:,.0f} d through "
+                                         f"BERTH/FABWELD/OUTFIT/COMMISSION"
+                                         + (f" (Wright ×"
+                                            f"{plan_y.learning:.2f})"
+                                            if plan_y.learning < 1.0
+                                            else ""))
+                                toast_until = t + 9
+                                audio.play("paid")
             elif event.type == pygame.KEYDOWN and surface_open:
                 av0 = vessels[active_idx % len(vessels)] if vessels else None
                 opts = (_surface_options(av0, bases, db,
@@ -2237,6 +2338,54 @@ def run(argv: list[str] | None = None) -> int:
                             toast = "no seats free for the colonists"
                             toast_until = t + 5
                             audio.play("warn")
+                    elif action[0] == "load_parts":
+                        from aphelion.sim.industry.yard import PARTS_CARGO
+                        home = next(b for b in bases
+                                    if b.site_id == av0.landed_at)
+                        home.advance(t, crew)
+                        moved_c: dict[str, float] = {}
+                        for res in PARTS_CARGO:
+                            buf = home.net.buffers.get(res)
+                            if buf is None or buf.level <= 0.0:
+                                continue
+                            took = av0.load_cargo(res, buf.level)
+                            if took > 0.0:
+                                buf.level -= took
+                                moved_c[res] = took
+                        if moved_c:
+                            det = "  ".join(f"+{kg / 1e3:,.2f}t {res}"
+                                            for res, kg in
+                                            sorted(moved_c.items()))
+                            toast = (f"CARGO LOADED: {det} — bays "
+                                     f"{av0.cargo_kg / 1e3:,.1f}/"
+                                     f"{av0.cargo_cap_kg / 1e3:,.0f} t")
+                            toast_until = t + 8
+                            surface_open = False
+                            audio.play("clunk")
+                        else:
+                            toast = "bays full or shelves empty"
+                            toast_until = t + 5
+                            audio.play("warn")
+                    elif action[0] == "unload_cargo":
+                        home = next(b for b in bases
+                                    if b.site_id == av0.landed_at)
+                        home.advance(t, crew)
+                        from aphelion.game.basebuild import (
+                            ensure_buffers as _ensb)
+                        for res, kg in list(av0.cargo.items()):
+                            _ensb(home.net, {"inputs": {res: 1},
+                                             "outputs": {}})
+                            buf = home.net.buffers[res]
+                            put = min(kg, buf.capacity - buf.level)
+                            buf.level += put
+                            if put >= kg - 1e-9:
+                                av0.cargo.pop(res)
+                            else:
+                                av0.cargo[res] = kg - put
+                        toast = f"cargo offloaded to {home.name}"
+                        toast_until = t + 6
+                        surface_open = False
+                        audio.play("clunk")
                     elif action[0] == "land":
                         sid = action[1]
                         site = SITES[sid]
@@ -3093,7 +3242,8 @@ def run(argv: list[str] | None = None) -> int:
         if start_new:
             (clock, vessels, active_idx, next_vid, program, campaign_rng,
              bases, crew, research, visited, visited_surface, milestones,
-             tutorial, builder, difficulty, explore, node, warp_idx, paused,
+             tutorial, builder, difficulty, explore, yard_designs, node,
+             warp_idx, paused,
              base_screen, builder_open, research_open, crew_warned,
              last_dose_t, toast,
              toast_until) = campaign_tuple(fresh_campaign(
@@ -3109,7 +3259,7 @@ def run(argv: list[str] | None = None) -> int:
                     (clock, vessels, active_idx, next_vid, program,
                      campaign_rng, bases, crew, research, visited,
                      visited_surface, milestones, tutorial, builder,
-                     difficulty, explore, node,
+                     difficulty, explore, yard_designs, node,
                      warp_idx, paused, base_screen, builder_open,
                      research_open, crew_warned, last_dose_t, toast,
                      toast_until) = campaign_tuple(loaded_campaign())
@@ -4104,7 +4254,7 @@ def run(argv: list[str] | None = None) -> int:
                 size[0],
                 "ARROWS cursor   TAB class   ,/. part   ENTER place   "
                 "X remove   E offender   S ascent sim   M isp   "
-                "B send to pad   ESC back"),
+                "B send to pad   Y yard blueprint   ESC back"),
                 (0, size[1] - theme.FOOTER_H))
             screen.blit(vig, (0, 0))
             apply_fade()
@@ -4509,6 +4659,46 @@ def run(argv: list[str] | None = None) -> int:
             toast_until = t + 6
             node = None
             warp_to_node = False
+        # orbital yards finish hulls (05 §3.1): the new ship spawns on a
+        # gently diverging orbit, tanks DRY — crossfeed from a tanker
+        for fv in vessels:
+            job_y = getattr(fv, "yard_job", None)
+            if not job_y or t < job_y["done_t"]:
+                continue
+            from aphelion.sim.vessels.vessel import PartRow
+            from aphelion.sim.vessels.vessel import Vessel as _VY
+            rows_y, plan_y2 = [], []
+            for stg in job_y["stack"]:
+                idxs = []
+                for pid in stg:
+                    idxs.append(len(rows_y))
+                    rows_y.append(PartRow(part_id=pid, fill={}))
+                plan_y2.append(idxs)
+            rx_y, ry_y, vx_y, vy_y = fv.state(t)
+            r_y = math.hypot(rx_y, ry_y) or 1.0
+            mu_y = tree.body(fv.frame_id).mu
+            el_y = state_to_elements(
+                rx_y, ry_y, vx_y + 1.5 * rx_y / r_y,
+                vy_y + 1.5 * ry_y / r_y, t, mu_y)
+            built_n = 0
+            if 0 <= job_y.get("design", -1) < len(yard_designs):
+                yard_designs[job_y["design"]]["built"] = \
+                    yard_designs[job_y["design"]].get("built", 0) + 1
+                built_n = yard_designs[job_y["design"]]["built"]
+            nv_y = FleetVessel(
+                tree, fv.frame_id, el_y,
+                _VY(db, rows_y, stage_plan=plan_y2, cd_a_m2=3.2),
+                f"{job_y['name']}-{built_n or 1}", next_vid, t_now=t)
+            next_vid += 1
+            vessels.append(nv_y)
+            fv.yard_job = None
+            milestones.add("orbital_build")
+            toast = (f"COMMISSIONED AT THE YARD: {nv_y.name} — built in "
+                     f"orbit, tanks dry (dock a tanker, T crossfeeds "
+                     f"through a DK-L)")
+            toast_until = t + 12
+            audio.play("paid")
+
         # the whole fleet flies: SOI handoffs + first-entry science
         for fv in vessels:
             for note in fv.advance_to(t):
@@ -6070,8 +6260,6 @@ def run(argv: list[str] | None = None) -> int:
             rpm0 = getattr(av0, "spin_rpm", 0.0)
             r0 = getattr(av0, "spin_r_m", 25.0)
             cf = spin_sim.comfort(rpm0, r0)
-            screen.blit(theme.panel(560, 250, "STATION OPS"),
-                        (size[0] // 2 - 280, 120))
             syy = 160
             m_kg = av0.vessel.total_mass_kg()
             i_spin = spin_sim.moment_of_inertia([(m_kg, r0)])
@@ -6086,6 +6274,43 @@ def run(argv: list[str] | None = None) -> int:
             fee = keeping_sim.stationkeeping_ms_yr(av0.frame_id, alt_km)
             off_t = av0.docked_mass_t()
             bal_st = spin_sim.balance(off_t, r0)
+            # the orbital yard (05 §3.1) rides the same panel
+            from aphelion.sim.industry.yard import (has_dockyard,
+                                                    plan_build)
+            yard_rows = []
+            if has_dockyard(av0.vessel):
+                cargo_txt = "  ".join(
+                    f"{r.replace('Parts', '')} {kg / 1e3:,.1f}t"
+                    for r, kg in sorted(av0.cargo.items())) or "empty bays"
+                yard_rows.append((f"YARD — stores: {cargo_txt}",
+                                  theme.COLORS["gold"]))
+                job_st = av0.yard_job
+                if job_st:
+                    left_d = max(0.0, (job_st["done_t"] - t) / 86_400.0)
+                    frac_j = 1.0 - left_d / max(job_st["days"], 1e-9)
+                    yard_rows.append(
+                        (f"building {job_st['name']}: "
+                         f"{frac_j:5.0%} — {left_d:,.1f} d to "
+                         f"commissioning", theme.COLORS["accent"]))
+                elif yard_designs:
+                    a3_q = ("core:tech_in09_supervised_autonomy"
+                            in research.unlocked)
+                    for di, d_q in enumerate(yard_designs[:4]):
+                        p_q = plan_build(d_q["dry_t"], d_q["n_parts"],
+                                         a3=a3_q,
+                                         n_built_before=d_q.get("built", 0))
+                        bill_q = "  ".join(
+                            f"{kg / 1e3:,.1f}t {r.replace('Parts', '')}"
+                            for r, kg in p_q.bill_kg.items())
+                        yard_rows.append(
+                            (f"[{di + 1}] {d_q['name']}  "
+                             f"{d_q['dry_t']:,.0f} t dry — "
+                             f"{p_q.days:,.0f} d, {bill_q}",
+                             theme.COLORS["text"]))
+                else:
+                    yard_rows.append(
+                        ("no blueprints — press Y over a clean design "
+                         "in the drydock", theme.COLORS["text_dim"]))
             rows_st = [
                 (f"{av0.name} — spin section r {r0:.0f} m   "
                  f"[ ] adjusts radius", theme.COLORS["text"]),
@@ -6116,9 +6341,12 @@ def run(argv: list[str] | None = None) -> int:
                  theme.COLORS["text_dim"]),
                 ("crew aboard feel a_spin as gravity: conditioning "
                  "and morale follow", theme.COLORS["text_dim"]),
-            ]
+            ] + yard_rows
+            screen.blit(theme.panel(680, 56 + 26 * len(rows_st),
+                                    "STATION OPS"),
+                        (size[0] // 2 - 340, 120))
             for txt_st, col_st in rows_st:
-                theme.draw_text(screen, size[0] // 2 - 262, syy, txt_st,
+                theme.draw_text(screen, size[0] // 2 - 322, syy, txt_st,
                                 color=col_st, font="small")
                 syy += 26
 
