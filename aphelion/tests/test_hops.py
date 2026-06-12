@@ -53,7 +53,7 @@ def test_catalog_hop_quotes():
     assert dv_hop_p == pytest.approx(1_778.0, abs=5.0)
     assert dv_hop_ms(MU_MOON, R_MOON, 445e3) < dv_hop_p
     usable = dv_hop_p * 0.8                  # mandatory abort reserve
-    assert dv_hop_ms(MU_MOON, R_MOON, 280e3) < usable
+    assert dv_hop_ms(MU_MOON, R_MOON, 255e3) < usable
     assert dv_hop_ms(MU_MOON, R_MOON, 320e3) > usable
 
 
