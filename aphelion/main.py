@@ -194,6 +194,11 @@ from aphelion.game import eva as eva_sim  # noqa: E402
 from aphelion.game import tileworld  # noqa: E402
 from aphelion.render import eva_art  # noqa: E402
 from aphelion.render.tile_art import TileRenderer  # noqa: E402
+from aphelion.sim.vessels import autostage as dd_stage  # noqa: E402
+from aphelion.sim.vessels.buildermath import stage_report  # noqa: E402
+from aphelion.sim.vessels.grid import GridVessel  # noqa: E402
+from aphelion.sim.vessels.structure import (  # noqa: E402
+    ascent_qsim, qalpha_limit_kpadeg, validate_e7)
 from aphelion.sim.environment.mars_climate import (  # noqa: E402
     MarsWeather, f_dust as mars_f_dust)
 from aphelion.sim.environment.space_env import (  # noqa: E402
@@ -675,7 +680,8 @@ def run(argv: list[str] | None = None) -> int:
     parser.add_argument("--scene", type=str, default="auto",
                         choices=["auto", "menu", "flight", "builder", "base",
                                  "research", "research_ed", "research_codex",
-                                 "ascent", "descent", "eva", "mine", "help",
+                                 "ascent", "descent", "eva", "mine",
+                                 "drydock", "help",
                                  "contracts", "crew", "pause", "planner"])
     args = parser.parse_args(argv)
     if args.headless:
@@ -944,6 +950,30 @@ def run(argv: list[str] | None = None) -> int:
     interior_home = None              # the BaseSite whose interior we walk
     interior_rooms: tuple = ()        # habitable module keys, build order
     interior_return_x = 0.0           # where on the surface we re-emerge
+    # Drydock 2.0 (06): the grid design room
+    dd_v = GridVessel()
+    dd_cursor = [4, 0]
+    dd_cat_classes = ("ALL", "ENGINE", "TANK", "STRUCT", "HAB", "ELEC",
+                      "MECH", "SHIELD")
+    dd_class_idx = 0
+    dd_cat_idx = 0
+    dd_mode = "vac"                   # readout Isp law: vac | sl | traj
+    dd_sim = None                     # last pre-flight ascent sim
+    dd_move_cd = 0.0
+    dd_err_idx = 0
+    dd_msg = "place parts — the readouts are live"
+
+    def dd_catalog():
+        cls = dd_cat_classes[dd_class_idx]
+        rows = [(pid, p) for pid, p in db.by_type("parts").items()
+                if "size" in p]
+        if cls != "ALL":
+            rows = [(pid, p) for pid, p in rows
+                    if p.get("class") == cls]
+        rows.sort(key=lambda kv: (kv[1].get("class", ""),
+                                  kv[1].get("tier", ""),
+                                  kv[1].get("catalog_id", "")))
+        return rows
     surface_open = False
     surface_cursor = 0
     base_cursor = 0
@@ -1020,6 +1050,24 @@ def run(argv: list[str] | None = None) -> int:
             eva_state.y = eva_tiles.ground_below(_mx + 2.5, _fy + 1.0)
             eva_camy = eva_state.y
         scene = "eva"
+    elif want == "drydock":             # QA: a two-stage demo on the grid
+        _ps = db.by_type("parts")
+        for _pid, _px, _py in (("core:engine_m2256", 2, 0),
+                               ("core:tank_ml_m", 2, 3),
+                               ("core:st_fin", 1, 0),
+                               ("core:st_fin", 4, 0),
+                               ("core:st_dc2", 2, 7),
+                               ("core:st_is3", 1, 8),
+                               ("core:engine_ml24", 2, 8),
+                               ("core:tank_ml_s", 2, 10),
+                               ("core:capsule_vela", 2, 12)):
+            dd_v.add(_pid, _ps[_pid], _px, _py)
+        dd_cursor = [5, 5]
+        _defs = dd_stage.to_stage_defs(dd_v)
+        _r0 = stage_report(_defs, mode="sl")[0]
+        dd_sim = ascent_qsim(_r0["thrust_kn"], _r0["mdot_kgps"],
+                             _r0["m0_t"], _defs[0].prop_t, 4.0)
+        scene = "drydock"
     autosave_acc = 0.0
     gold_flash = 0.0
     ascent_event_count = 0
@@ -1418,6 +1466,97 @@ def run(argv: list[str] | None = None) -> int:
                     elif event.key == pygame.K_ESCAPE:
                         prox.outcome = "aborted"
                         prox_done = True
+            elif scene == "drydock":
+                if event.type == pygame.KEYDOWN:
+                    rows_dd = dd_catalog()
+                    if event.key == pygame.K_TAB:
+                        dd_class_idx = (dd_class_idx + 1) \
+                            % len(dd_cat_classes)
+                        dd_cat_idx = 0
+                        audio.play("tick")
+                    elif event.key in (pygame.K_COMMA, pygame.K_PAGEUP):
+                        dd_cat_idx -= 1
+                        audio.play("tick")
+                    elif event.key in (pygame.K_PERIOD,
+                                       pygame.K_PAGEDOWN):
+                        dd_cat_idx += 1
+                        audio.play("tick")
+                    elif event.key in (pygame.K_RETURN, pygame.K_SPACE) \
+                            and rows_dd:
+                        pid_dd, spec_dd = rows_dd[dd_cat_idx
+                                                  % len(rows_dd)]
+                        if dd_v.add(pid_dd, spec_dd, dd_cursor[0],
+                                    dd_cursor[1]) is None:
+                            dd_msg = "600-part cap — the dock refuses"
+                        else:
+                            dd_msg = f"placed {spec_dd['name']}"
+                        audio.play("clunk")
+                    elif event.key in (pygame.K_x, pygame.K_DELETE):
+                        for i_dd, p_dd in enumerate(dd_v.parts):
+                            if tuple(dd_cursor) in p_dd.cells:
+                                dd_msg = f"removed {p_dd.spec['name']}"
+                                dd_v.remove(i_dd)
+                                audio.play("blip")
+                                break
+                    elif event.key == pygame.K_e:
+                        errs_dd = [e for e in dd_v.validate()
+                                   if e[1] is not None]
+                        if errs_dd:
+                            dd_err_idx = (dd_err_idx + 1) % len(errs_dd)
+                            code_dd, off_dd = errs_dd[dd_err_idx]
+                            dd_cursor = [dd_v.parts[off_dd].x,
+                                         dd_v.parts[off_dd].y]
+                            dd_msg = f"{code_dd} → " \
+                                f"{dd_v.parts[off_dd].spec['name']}"
+                            audio.play("warn")
+                    elif event.key == pygame.K_m:
+                        dd_mode = {"vac": "sl", "sl": "traj",
+                                   "traj": "vac"}[dd_mode]
+                        audio.play("tick")
+                    elif event.key == pygame.K_s:
+                        if dd_sim is not None:
+                            dd_sim = None
+                        else:
+                            defs_dd = dd_stage.to_stage_defs(dd_v)
+                            if defs_dd and defs_dd[0].engines \
+                                    and defs_dd[0].prop_t > 0:
+                                r0 = stage_report(defs_dd,
+                                                  mode="sl")[0]
+                                fr = max((p.w for p in dd_v.parts),
+                                         default=2) * 1.0
+                                dd_sim = ascent_qsim(
+                                    r0["thrust_kn"], r0["mdot_kgps"],
+                                    r0["m0_t"], defs_dd[0].prop_t, fr)
+                                dd_msg = "pre-flight ascent sim flown"
+                                audio.play("blip")
+                            else:
+                                dd_msg = ("the bottom stage needs an "
+                                          "engine and propellant")
+                    elif event.key == pygame.K_b:
+                        plan_dd = dd_stage.flyable_stack(dd_v)
+                        locked_dd = [pid for st in plan_dd for pid in st
+                                     if builder.locked(pid)]
+                        if not plan_dd:
+                            dd_msg = "nothing flyable on the grid yet"
+                        elif locked_dd:
+                            dd_msg = ("research locks: "
+                                      + ", ".join(sorted(
+                                          set(locked_dd))[:3]))
+                            audio.play("warn")
+                        elif dd_v.validate():
+                            dd_msg = "clear the validation list first"
+                            audio.play("warn")
+                        else:
+                            builder.load_stack(plan_dd)
+                            builder_open = True
+                            scene = "flight"
+                            toast = ("grid design sent to the pad — "
+                                     "assemble and launch from the "
+                                     "builder")
+                            toast_until = t + 8
+                            audio.play("paid")
+                    elif event.key == pygame.K_ESCAPE:
+                        scene = "flight"
             elif scene == "eva":
                 if event.type == pygame.KEYDOWN and eva_state is not None:
                     if event.key == pygame.K_SPACE:
@@ -3409,6 +3548,196 @@ def run(argv: list[str] | None = None) -> int:
             screen.blit(fpill, (fx0 - 18, size[1] - 59))
             screen.blit(foot, (fx0, size[1] - 53))
             bloom.apply(screen)
+            screen.blit(vig, (0, 0))
+            apply_fade()
+            pygame.display.flip()
+            frame_count += 1
+            if args.frames and frame_count >= args.frames:
+                running = False
+            continue
+
+        if scene == "drydock":
+            # ---- DRYDOCK 2.0: the grid design room (06 §2.13) ----
+            keys = pygame.key.get_pressed()
+            dd_move_cd = max(0.0, dd_move_cd - real_dt)
+            if dd_move_cd <= 0.0:
+                dxc = ((1 if keys[pygame.K_RIGHT] else 0)
+                       - (1 if keys[pygame.K_LEFT] else 0))
+                dyc = ((1 if keys[pygame.K_UP] else 0)
+                       - (1 if keys[pygame.K_DOWN] else 0))
+                if dxc or dyc:
+                    dd_cursor[0] = max(0, min(69, dd_cursor[0] + dxc))
+                    dd_cursor[1] = max(0, min(50, dd_cursor[1] + dyc))
+                    dd_move_cd = 0.09
+
+            screen.fill((6, 8, 14))
+            cs = 11
+            vx0, vy0 = 70, 636            # cell (0,0) bottom-left
+            for gx in range(0, 64):       # the grid bed
+                lx = vx0 + gx * cs
+                pygame.draw.line(screen, (16, 20, 30) if gx % 5 else
+                                 (24, 30, 44), (lx, vy0 - 52 * cs),
+                                 (lx, vy0))
+            for gy in range(0, 53):
+                ly = vy0 - gy * cs
+                pygame.draw.line(screen, (16, 20, 30) if gy % 5 else
+                                 (24, 30, 44), (vx0, ly),
+                                 (vx0 + 63 * cs, ly))
+            cls_col = {"STRUCT": (120, 124, 134), "TANK": (96, 138, 178),
+                       "ENGINE": (196, 122, 60), "HAB": (104, 164, 116),
+                       "ELEC": (188, 172, 80), "MECH": (148, 110, 170),
+                       "SHIELD": (84, 168, 178)}
+            for p_dd in dd_v.parts:
+                rx = vx0 + p_dd.x * cs
+                ry = vy0 - (p_dd.y + p_dd.h) * cs
+                col = cls_col.get(p_dd.spec.get("class", "STRUCT"),
+                                  (120, 124, 134))
+                pygame.draw.rect(screen, col,
+                                 (rx + 1, ry + 1, p_dd.w * cs - 2,
+                                  p_dd.h * cs - 2))
+                pygame.draw.rect(screen, (10, 12, 18),
+                                 (rx, ry, p_dd.w * cs, p_dd.h * cs), 1)
+                if p_dd.w * cs >= 30 and p_dd.h * cs >= 12:
+                    theme.draw_text(screen, rx + 2, ry + 1,
+                                    p_dd.spec.get("catalog_id", "")[:7],
+                                    color=(8, 10, 14), font="small")
+            # the ghost of the selected catalog part rides the cursor
+            rows_dd = dd_catalog()
+            sel_dd = rows_dd[dd_cat_idx % len(rows_dd)] if rows_dd \
+                else None
+            if sel_dd:
+                sw, sh = sel_dd[1].get("size", [1, 1])
+                pygame.draw.rect(
+                    screen, theme.COLORS["gold"],
+                    (vx0 + dd_cursor[0] * cs,
+                     vy0 - (dd_cursor[1] + int(sh)) * cs,
+                     int(sw) * cs, int(sh) * cs), 2)
+            # COM markers: wet gold dot, dry orange ring (06 §2.2)
+            if dd_v.parts:
+                wcx, wcy = dd_stage.wet_com(dd_v)
+                dcx, dcy = dd_v.com()
+                pygame.draw.circle(screen, theme.COLORS["gold"],
+                                   (int(vx0 + wcx * cs),
+                                    int(vy0 - wcy * cs)), 5)
+                pygame.draw.circle(screen, (220, 140, 60),
+                                   (int(vx0 + dcx * cs),
+                                    int(vy0 - dcy * cs)), 7, 2)
+
+            # ---- right panel: catalog + live readouts + validation ----
+            px0 = 790
+            screen.blit(theme.panel(470, 660, "DRYDOCK 2.0"), (px0, 10))
+            yy = 52
+            cls_dd = dd_cat_classes[dd_class_idx]
+            theme.draw_text(screen, px0 + 16, yy,
+                            f"CATALOG [{cls_dd}] — TAB class, ,/. part",
+                            color=theme.COLORS["gold"], font="small")
+            yy += 22
+            if rows_dd:
+                base_dd = dd_cat_idx % len(rows_dd)
+                for k in range(-2, 4):
+                    pid_k, p_k = rows_dd[(base_dd + k) % len(rows_dd)]
+                    sel_k = k == 0
+                    theme.draw_text(
+                        screen, px0 + 16, yy,
+                        f"{'>' if sel_k else ' '} "
+                        f"{p_k.get('catalog_id', ''):10.10s} "
+                        f"{p_k['name'][:24]:24.24s} {p_k['tier']}",
+                        color=(theme.COLORS["gold"] if sel_k
+                               else theme.COLORS["text_dim"]),
+                        font="small")
+                    yy += 18
+            yy += 8
+            defs_dd = dd_stage.to_stage_defs(dd_v)
+            rep_dd = stage_report(defs_dd, mode=dd_mode) if defs_dd \
+                else []
+            badge_dd = dd_stage.torque_badge(dd_v)
+            chips_dd = [
+                (f"parts {len(dd_v.parts)}/600", theme.COLORS["text"]),
+                (f"wet {sum(dd_stage.part_wet_t(p.spec) for p in dd_v.parts):,.1f} t",
+                 theme.COLORS["text_dim"]),
+                (f"${dd_stage.cost_musd(dd_v):,.0f}M",
+                 theme.COLORS["text_dim"]),
+                (badge_dd["badge"],
+                 {"GREEN": theme.COLORS["accent"],
+                  "YELLOW": theme.COLORS["warn"],
+                  "RED": theme.COLORS["danger"]}[badge_dd["badge"]]),
+            ]
+            chx_dd = px0 + 16
+            for ct, cc in chips_dd:
+                cs_chip = theme.chip(ct, cc)
+                screen.blit(cs_chip, (chx_dd, yy))
+                chx_dd += cs_chip.get_width() + 6
+            yy += 30
+            theme.draw_text(screen, px0 + 16, yy,
+                            f"STAGES ({dd_mode} Isp — M cycles)",
+                            color=theme.COLORS["gold"], font="small")
+            yy += 20
+            for si, r_dd in enumerate(rep_dd):
+                theme.draw_text(
+                    screen, px0 + 16, yy,
+                    f"S{si}  dv {r_dd['dv_ms']:6,.0f} m/s   "
+                    f"TWR {r_dd['twr_ignition']:4.2f}   "
+                    f"burn {r_dd['burn_s']:5,.0f} s",
+                    color=theme.COLORS["text"], font="small")
+                yy += 18
+            yy += 8
+            errs_dd = dd_v.validate()
+            theme.draw_text(screen, px0 + 16, yy,
+                            "VALIDATION — E jumps to the offender"
+                            if errs_dd else "VALIDATION — CLEAN",
+                            color=(theme.COLORS["danger"] if errs_dd
+                                   else theme.COLORS["accent"]),
+                            font="small")
+            yy += 20
+            for code_dd, off_dd in errs_dd[:6]:
+                nm = (dd_v.parts[off_dd].spec["name"][:28]
+                      if off_dd is not None else "whole vessel")
+                theme.draw_text(screen, px0 + 16, yy,
+                                f"{code_dd}  {nm}",
+                                color=theme.COLORS["danger"],
+                                font="small")
+                yy += 17
+            yy += 6
+            if dd_sim is not None:
+                # q / q·α traces with limit lines (06 §2.13)
+                gw, gh = 430, 110
+                gx0, gy0 = px0 + 20, yy
+                pygame.draw.rect(screen, (14, 18, 28),
+                                 (gx0, gy0, gw, gh))
+                qmax_dd = max(40.0, dd_sim["peak_q_kpa"] * 1.15)
+                tr = dd_sim["trace"]
+                tmax = max(1.0, tr[-1][0])
+                for series, colr in ((1, theme.COLORS["accent"]),
+                                     (2, theme.COLORS["warn"])):
+                    pts_dd = [(gx0 + tt / tmax * gw,
+                               gy0 + gh - min(1.0, val / (
+                                   qmax_dd if series == 1
+                                   else qalpha_limit_kpadeg(dd_v)))
+                               * gh)
+                              for tt, *vals in [(p[0], p[1], p[2])
+                                                for p in tr[::4]]
+                              for val in [vals[series - 1]]]
+                    if len(pts_dd) > 1:
+                        pygame.draw.lines(screen, colr, False,
+                                          pts_dd, 1)
+                bad_q = validate_e7(dd_v, dd_sim["peak_q_kpa"])
+                theme.draw_text(
+                    screen, gx0, gy0 + gh + 4,
+                    f"peak q {dd_sim['peak_q_kpa']:.0f} kPa   "
+                    f"q·α {dd_sim['peak_qalpha']:.0f}/"
+                    f"{qalpha_limit_kpadeg(dd_v):.0f}   "
+                    f"E7 {'FAIL ' + str(len(bad_q)) if bad_q else 'ok'}",
+                    color=(theme.COLORS["danger"] if bad_q
+                           else theme.COLORS["text_dim"]),
+                    font="small")
+            theme.draw_text(screen, 70, 24, dd_msg,
+                            color=theme.COLORS["accent"], font="small")
+            screen.blit(theme.footer(
+                size[0],
+                "ARROWS cursor   TAB class   ,/. part   ENTER place   "
+                "X remove   E offender   S ascent sim   M isp   "
+                "B send to pad   ESC back"),
+                (0, size[1] - theme.FOOTER_H))
             screen.blit(vig, (0, 0))
             apply_fade()
             pygame.display.flip()

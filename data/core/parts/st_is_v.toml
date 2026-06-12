@@ -8,3 +8,4 @@ class = "STRUCT"
 size = [3, 2]
 cost_musd = 0.5
 hot_stage = true
+fairing_interior = [3, 2]

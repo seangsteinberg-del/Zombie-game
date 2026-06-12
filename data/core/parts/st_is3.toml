@@ -7,3 +7,4 @@ catalog_id = "ST-IS3"
 class = "STRUCT"
 size = [3, 2]
 cost_musd = 0.3
+fairing_interior = [3, 2]

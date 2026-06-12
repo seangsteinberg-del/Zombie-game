@@ -220,7 +220,9 @@ class GridVessel:
                     continue
                 errs.append(("E4", j))
         # E5: plume impingement — exhaust column w wide, 6 m below the
-        # nozzle; RCS exempt; vented interstage in the column vents it
+        # nozzle; RCS exempt; vented interstage in the column vents it;
+        # a part that SEPARATES before ignition (a decoupler sits in the
+        # column between it and the engine) is no impingement
         for i, p in enumerate(self.parts):
             eng = p.spec.get("engine")
             if not eng or eng.get("rcs"):
@@ -234,9 +236,18 @@ class GridVessel:
             for j, o in enumerate(self.parts):
                 if j == i or _surface_mount(o.spec):
                     continue
-                if o.cells & col:
-                    errs.append(("E5", j))
-                    break
+                if not (o.cells & col):
+                    continue
+                if o.spec.get("decoupler") and o.y + o.h <= p.y:
+                    continue             # the staging plane itself
+                staged = any(
+                    d.spec.get("decoupler") and (d.cells & col)
+                    and o.y + o.h <= d.y and d.y < p.y
+                    for d in self.parts)
+                if staged:
+                    continue             # gone before this engine lights
+                errs.append(("E5", j))
+                break
         return errs
 
     # -- mass & geometry readouts (D3 builds on these) -----------------------------------
