@@ -232,6 +232,33 @@ def _drive_terrain_key(site: dict) -> str:
     return "regolith"
 
 
+def _fmt_bps(bps: float) -> str:
+    """Human link rate — Voyager bit/s up to optical Gbit/s (C wiring)."""
+    if bps >= 1e9:
+        return f"{bps / 1e9:,.1f} Gbit/s"
+    if bps >= 1e6:
+        return f"{bps / 1e6:,.1f} Mbit/s"
+    if bps >= 1e3:
+        return f"{bps / 1e3:,.0f} kbit/s"
+    return f"{bps:,.0f} bit/s"
+
+
+def _seg_blocked(ax: float, ay: float, bx: float, by: float,
+                 cx: float, cy: float, r: float) -> bool:
+    """True when the segment A→B passes through the disc at C (body
+    occlusion for the comms LOS callable). Endpoints inside the disc
+    don't count — their own body is abstracted by availability rules."""
+    dx, dy = bx - ax, by - ay
+    l2 = dx * dx + dy * dy
+    if l2 <= 0.0:
+        return False
+    u = ((cx - ax) * dx + (cy - ay) * dy) / l2
+    if u <= 0.0 or u >= 1.0:
+        return False
+    px, py = ax + u * dx, ay + u * dy
+    return math.hypot(px - cx, py - cy) < r
+
+
 def _corridor_advice(body_id: str, mu: float, radius: float, el,
                      beta: float,
                      rating_w_m2: float) -> list[tuple[str, str]]:
@@ -959,7 +986,8 @@ def run(argv: list[str] | None = None) -> int:
                                  "ascent", "descent", "eva", "mine",
                                  "drive", "dive",
                                  "drydock", "proxops", "aboard", "help",
-                                 "contracts", "crew", "pause", "planner"])
+                                 "contracts", "crew", "pause", "planner",
+                                 "comms"])
     args = parser.parse_args(argv)
     if args.headless:
         os.environ["SDL_VIDEODRIVER"] = "dummy"
@@ -1294,6 +1322,7 @@ def run(argv: list[str] | None = None) -> int:
     # O wiring: corridor advisor verdicts, recomputed at most hourly per
     # encounter (the bisection runs ~25 fly_entry passes — never per frame)
     corridor_cache = {"key": None, "lines": []}
+    net_overlay = False               # C wiring: J toggles the comms map
     # V5 dive scene state (Titan seas)
     dive_gv = None
     dive_av = None
@@ -1318,6 +1347,7 @@ def run(argv: list[str] | None = None) -> int:
     drive_stuck = 0.0
     drive_attempts = 0
     drive_warn_t = -1e9
+    drive_eta = 1.0                   # L-13 teleop efficiency (1 = crewed)
     # colony scene state
     base_focus = "construct"          # or "modules"
     module_cursor = 0
@@ -1333,7 +1363,7 @@ def run(argv: list[str] | None = None) -> int:
         contracts_open = True
     elif want == "crew":
         crew_open = True
-    elif want == "planner":             # QA: a stack in LEO so rows quote
+    elif want in ("planner", "comms"):  # QA: a stack in LEO so rows quote
         from aphelion.sim.vessels.vessel import Vessel as _V
         _rows = [_V.fueled_row(db, "core:engine_ml111"),
                  _V.fueled_row(db, "core:tank_ml_s"),
@@ -1344,10 +1374,14 @@ def run(argv: list[str] | None = None) -> int:
                                 tr.circular_speed(_bq.mu, _rq), 0.0, _bq.mu)
         vessels.append(FleetVessel(tree, "core:earth", _el,
                                    _V(db, _rows, stage_plan=[[0, 1, 2]]),
-                                   "PLANNER-QA", next_vid))
+                                   "PLANNER-QA" if want == "planner"
+                                   else "RELAY-QA", next_vid))
         next_vid += 1
         active_idx = len(vessels) - 1
-        planner_open = True
+        if want == "planner":
+            planner_open = True
+        else:
+            net_overlay = True
     elif want == "pause":
         pause_open = True
     elif want == "research_ed":
@@ -1629,6 +1663,121 @@ def run(argv: list[str] | None = None) -> int:
             lam_cache.clear()
         lam_cache[key] = out
         return out
+
+    # C wiring: the comms network (16 §3.1 over 13 §3.11). DSN root rides
+    # Earth; every vessel mounts the integrated avionics omni (UT-AV note,
+    # linkbudget §2.1) + a 0.5 m HGA when crew-rated; bases mount an
+    # MRO-class 3 m dish. Rebuilt at ~2 s wall cadence, routes memoized —
+    # nothing here runs per frame.
+    from aphelion.sim.network import graph as netg
+    from aphelion.sim.network.linkbudget import PARTS as NET_PARTS
+    from aphelion.sim.vehicles.control import teleop_eta_driving
+
+    comms_cache: dict = {"at": -1e9, "graph": None, "pos": {}, "routes": {}}
+
+    def comms_now(t0: float) -> dict:
+        if (time.time() - comms_cache["at"] < 2.0
+                and comms_cache["graph"] is not None):
+            return comms_cache
+        bpos: dict[str, tuple[float, float]] = {}
+        for bid in db.bodies:
+            bx0, by0, _, _ = tree.state_in_root(bid, t0)
+            bpos[bid] = (bx0, by0)
+        pos: dict[str, tuple[float, float, str | None]] = {}
+        nodes: list = []
+        ex0, ey0 = bpos["core:earth"]
+        nodes.append(netg.dsn_root((ex0, ey0)))
+        pos[netg.ROOT_UID] = (ex0, ey0, "core:earth")
+        for v in vessels:
+            fx0, fy0 = bpos.get(v.frame_id, (0.0, 0.0))
+            if v.landed_at is not None:
+                # on the surface: a site-keyed bearing keeps ground links
+                # at honest ground distances (never co-located)
+                _r0 = tree.body(v.frame_id).radius
+                _h0 = (zlib.crc32(v.landed_at.encode()) % 628) / 100.0
+                x0 = fx0 + _r0 * math.cos(_h0)
+                y0 = fy0 + _r0 * math.sin(_h0)
+                att = v.frame_id
+            else:
+                lx0, ly0, _, _ = v.state(t0)
+                x0, y0, att = fx0 + lx0, fy0 + ly0, None
+            crewed_rated = any(db.parts[r.part_id]["type"] == "crew"
+                               for r in v.vessel.rows)
+            parts = (("CM-OMNI", "UT-DISH-S") if crewed_rated
+                     else ("CM-OMNI",))
+            uid = f"v{v.vid}"
+            nodes.append(netg.CommsNode(uid, (x0, y0), parts, ("UT-AV",)))
+            pos[uid] = (x0, y0, att)
+        for b in bases:
+            bid = SITES[b.site_id]["body"]
+            bx0, by0 = bpos.get(bid, (0.0, 0.0))
+            _r0 = tree.body(bid).radius
+            _h0 = (zlib.crc32(b.site_id.encode()) % 628) / 100.0
+            uid = f"base:{b.name}"
+            nodes.append(netg.CommsNode(
+                uid, (bx0 + _r0 * math.cos(_h0),
+                      by0 + _r0 * math.sin(_h0)),
+                ("UT-DISH-M",), ("UT-AV",), kind="base"))
+            pos[uid] = (bx0 + _r0 * math.cos(_h0),
+                        by0 + _r0 * math.sin(_h0), bid)
+        occ = [(bid, bpos[bid], tree.body(bid).radius)
+               for bid in bpos if bid != "core:sun"]
+        sx0, sy0 = bpos["core:sun"]
+
+        def los(a_uid: str, b_uid: str) -> bool:
+            ax0, ay0, abody = pos[a_uid]
+            bx1, by1, bbody = pos[b_uid]
+            for bid, (cx0, cy0), r0 in occ:
+                if bid == abody or bid == bbody:
+                    continue            # attached body: availability rules
+                if _seg_blocked(ax0, ay0, bx1, by1, cx0, cy0, r0):
+                    return False
+            return True
+
+        def env(tx_uid: str, rx_uid: str):
+            # L-7 solar conjunction: separation (peer vs Sun) at the RX
+            # endpoint; local links (< 0.1 AU) never graze the corona
+            rxx, rxy, _ = pos[rx_uid]
+            txx, txy, _ = pos[tx_uid]
+            v2x, v2y = txx - rxx, txy - rxy
+            n2 = math.hypot(v2x, v2y)
+            if n2 < 1.5e10:
+                return netg.CLEAR_ENV
+            v1x, v1y = sx0 - rxx, sy0 - rxy
+            n1 = math.hypot(v1x, v1y)
+            if n1 <= 0.0:
+                return netg.CLEAR_ENV
+            cosd = max(-1.0, min(1.0,
+                                 (v1x * v2x + v1y * v2y) / (n1 * n2)))
+            return netg.LinkEnv(
+                sep_sun_rx_deg=math.degrees(math.acos(cosd)))
+
+        g = netg.CommsGraph(los=los, env=env)
+        for n in nodes:
+            g.add(n)
+        comms_cache.update(at=time.time(), graph=g, pos=pos, routes={})
+        return comms_cache
+
+    def comms_route(uid: str, t0: float, floor: bool = False):
+        """Route to the DSN root for one node, memoized per rebuild."""
+        cc = comms_now(t0)
+        key = (uid, floor)
+        if key not in cc["routes"]:
+            cc["routes"][key] = (
+                cc["graph"].route_to_root(uid, floor_only=floor)
+                if uid in cc["pos"] else None)
+        return cc["routes"][key]
+
+    def comms_label(uid: str) -> str:
+        if uid == netg.ROOT_UID:
+            return "DSN"
+        if uid.startswith("base:"):
+            return uid[5:]
+        if uid.startswith("v"):
+            for v in vessels:
+                if f"v{v.vid}" == uid:
+                    return v.name
+        return uid
 
     def closest_approach(av0, tgt: str, t0: float) -> tuple[float, float]:
         """(min distance m, when) sampling the prediction over ≤30 days —
@@ -2603,7 +2752,43 @@ def run(argv: list[str] | None = None) -> int:
                     elif action[0] == "drive":
                         gv_d = next((g for g in ground_vehicles
                                      if g.vid == action[1]), None)
-                        if gv_d is not None:
+                        # L-13 teleop gate: no crew on site = the rover is
+                        # driven from Earth over the live path — refuse
+                        # when the link can't carry a joystick
+                        _tele_no = ""
+                        drive_eta = 1.0
+                        if gv_d is not None and not av0.crew:
+                            _rt_d = comms_route(f"v{av0.vid}", t)
+                            if _rt_d is None:
+                                _tele_no = "no live path to the site"
+                            else:
+                                _eta_d = teleop_eta_driving(_rt_d.rtt_s)
+                                _gain_d = min(
+                                    (min(NET_PARTS[h.tx_part]["gain"],
+                                         NET_PARTS[h.rx_part]["gain"])
+                                     for h in _rt_d.hops), default=0.0)
+                                if not netg.teleop_ok(_rt_d.rate_bps,
+                                                      _eta_d, _gain_d):
+                                    if _eta_d < 0.2:
+                                        _tele_no = (
+                                            f"RTT {theme.fmt_duration(_rt_d.rtt_s)}"
+                                            f" puts η at {_eta_d:.2f} "
+                                            f"(< 0.2) — too far to joystick")
+                                    elif _rt_d.rate_bps < 0.5e6:
+                                        _tele_no = (
+                                            f"live path "
+                                            f"{_fmt_bps(_rt_d.rate_bps)} "
+                                            f"< 0.5 Mbit/s")
+                                    else:
+                                        _tele_no = ("an omni relay leg — "
+                                                    "CM-PROX class needed")
+                                else:
+                                    drive_eta = _eta_d
+                        if gv_d is not None and _tele_no:
+                            toast = f"TELEOP REFUSED: {_tele_no}"
+                            toast_until = t + 8
+                            audio.play("warn")
+                        elif gv_d is not None:
                             drive_gv, drive_av = gv_d, av0
                             drive_x = gv_d.park_x_m
                             drive_v, drive_face = 0.0, 1
@@ -2611,8 +2796,10 @@ def run(argv: list[str] | None = None) -> int:
                             drive_tiles, drive_tr = None, None
                             surface_open = False
                             scene = "drive"
+                            _tele_tag = ("" if av0.crew else
+                                         f"  TELEOP η {drive_eta:.2f}")
                             toast = (f"{gv_d.name} POWERED UP — A/D "
-                                     f"drive, E park & dismount")
+                                     f"drive, E park & dismount{_tele_tag}")
                             toast_until = t + 8
                             audio.play("clunk")
                     elif action[0] == "dive":
@@ -3270,6 +3457,13 @@ def run(argv: list[str] | None = None) -> int:
                         node = None
                         warp_to_node = False
                         toast, toast_until = "node cancelled", t + 4
+                elif event.key == pygame.K_j:
+                    net_overlay = not net_overlay
+                    if net_overlay:
+                        toast, toast_until = (
+                            "COMMS NETWORK — every node's route home, "
+                            "rate-colored; J closes", t + 6)
+                    audio.play("tick")
                 elif node is not None and not node["armed"] and event.key in (
                         pygame.K_UP, pygame.K_DOWN, pygame.K_LEFT, pygame.K_RIGHT,
                         pygame.K_LEFTBRACKET, pygame.K_RIGHTBRACKET,
@@ -4927,7 +5121,8 @@ def run(argv: list[str] | None = None) -> int:
             if drive_stuck > 0.0:
                 mv = 0
             v_lim = (locomotion.v_max_ms(g_d, "raw")
-                     * getattr(terr_d, "speed_mult", 1.0))
+                     * getattr(terr_d, "speed_mult", 1.0)
+                     * drive_eta)      # L-13: teleop crawls with light lag
             tgt_v = mv * v_lim
             step_a = 2.4 * real_dt
             drive_v += max(-step_a, min(step_a, tgt_v - drive_v))
@@ -6409,6 +6604,23 @@ def run(argv: list[str] | None = None) -> int:
             cs = theme.chip(chip_txt, chip_col)
             screen.blit(cs, (chx, 51))
             chx += cs.get_width() + 8
+        if av is not None:
+            # C wiring: the link chip — the program's thread home (L-1..5)
+            _uidc = f"v{av.vid}"
+            _rtc = comms_route(_uidc, t)
+            if _rtc is not None and _rtc.rate_bps >= 1e6:
+                _ltxt, _lcol = (f"link {_fmt_bps(_rtc.rate_bps)}",
+                                theme.COLORS["good"])
+            elif _rtc is not None and _rtc.rate_bps > 0.0:
+                _ltxt, _lcol = (f"link {_fmt_bps(_rtc.rate_bps)}",
+                                theme.COLORS["warn"])
+            elif comms_route(_uidc, t, floor=True) is not None:
+                _ltxt, _lcol = "link FLOOR", theme.COLORS["warn"]
+            else:
+                _ltxt, _lcol = "link LOST", theme.COLORS["danger"]
+            cs = theme.chip(_ltxt + "  (J)", _lcol)
+            screen.blit(cs, (chx, 51))
+            chx += cs.get_width() + 8
         theme.draw_text(screen, chx + 8, 54,
                         " | ".join(c.description[:30]
                                    for c in open_contracts[:2])
@@ -6544,6 +6756,29 @@ def run(argv: list[str] | None = None) -> int:
                         + ("   E docks" if in_env else ""),
                         theme.COLORS["good"] if in_env
                         else theme.COLORS["accent"]))
+        if av is not None:
+            # C wiring: the link home, with route + light-time truth
+            _rtn = comms_route(f"v{av.vid}", t)
+            if _rtn is None:
+                _fln = comms_route(f"v{av.vid}", t, floor=True)
+                nav_lines.append((
+                    "LINK: P0 floor only — commands crawl, no science"
+                    if _fln is not None else
+                    "LINK LOST — no path to DSN (occlusion/conjunction)",
+                    theme.COLORS["warn"] if _fln is not None
+                    else theme.COLORS["danger"]))
+            else:
+                _rtt_txt = (f"{_rtn.rtt_s * 1e3:,.0f} ms"
+                            if _rtn.rtt_s < 1.0
+                            else theme.fmt_duration(_rtn.rtt_s))
+                _hopn = max(0, len(_rtn.path) - 2)
+                _vian = (f" via {comms_label(_rtn.path[1])}"
+                         if _hopn >= 1 else " direct")
+                nav_lines.append((
+                    f"LINK {_fmt_bps(_rtn.rate_bps)} · RTT {_rtt_txt}"
+                    f"{_vian}",
+                    theme.COLORS["good"] if _rtn.rate_bps >= 1e6
+                    else theme.COLORS["warn"]))
         if nav_lines:
             npan = theme.panel(354, 34 + 20 * len(nav_lines), "NAV")
             nx0, ny0 = size[0] - 364, 84
@@ -6623,6 +6858,76 @@ def run(argv: list[str] | None = None) -> int:
                 f"{act_progress(program)} toward the next act   ·   "
                 "UP/DOWN scroll   O/ESC close",
                 color=theme.COLORS["text_dim"], font="small")
+
+        if net_overlay:
+            # C wiring: the comms map (16 §3.1) — every node's Dijkstra
+            # route home, rate-colored in the art bible's nav cyan
+            _cc = comms_now(t)
+
+            def _clip_seg(ax1, ay1, bx1, by1, m=2000.0):
+                # Liang–Barsky to a sane box: pygame chokes on the huge
+                # coords world_to_screen returns for far nodes when zoomed
+                t0c, t1c = 0.0, 1.0
+                dx1, dy1 = bx1 - ax1, by1 - ay1
+                for p1, q1 in ((-dx1, ax1 + m), (dx1, size[0] + m - ax1),
+                               (-dy1, ay1 + m), (dy1, size[1] + m - ay1)):
+                    if p1 == 0.0:
+                        if q1 < 0.0:
+                            return None
+                        continue
+                    r1 = q1 / p1
+                    if p1 < 0.0:
+                        if r1 > t1c:
+                            return None
+                        t0c = max(t0c, r1)
+                    else:
+                        if r1 < t0c:
+                            return None
+                        t1c = min(t1c, r1)
+                return (ax1 + t0c * dx1, ay1 + t0c * dy1,
+                        ax1 + t1c * dx1, ay1 + t1c * dy1)
+
+            _act_uid = f"v{av.vid}" if av is not None else None
+            _seen_e: set = set()
+            for _uid in _cc["pos"]:
+                _rt0 = comms_route(_uid, t)
+                if _rt0 is None:
+                    continue
+                _hot = _uid == _act_uid
+                for _h in _rt0.hops:
+                    _ek = (_h.tx_uid, _h.rx_uid)
+                    if _ek in _seen_e and not _hot:
+                        continue
+                    _seen_e.add(_ek)
+                    _pa = cam.world_to_screen(*_cc["pos"][_h.tx_uid][:2])
+                    _pb = cam.world_to_screen(*_cc["pos"][_h.rx_uid][:2])
+                    _seg = _clip_seg(_pa[0], _pa[1], _pb[0], _pb[1])
+                    if _seg is None:
+                        continue
+                    _col = ((96, 205, 195) if _h.rate_bps >= 1e6 else
+                            (70, 145, 150) if _h.rate_bps >= 1e3 else
+                            (88, 96, 116))
+                    if _hot:
+                        pygame.draw.line(
+                            screen, (140, 235, 225),
+                            (_seg[0], _seg[1]), (_seg[2], _seg[3]), 2)
+                    else:
+                        pygame.draw.aaline(
+                            screen, _col,
+                            (_seg[0], _seg[1]), (_seg[2], _seg[3]))
+            for _uid, (_nx, _ny, _) in _cc["pos"].items():
+                _np = cam.world_to_screen(_nx, _ny)
+                if not (-40 < _np[0] < size[0] + 40
+                        and -40 < _np[1] < size[1] + 40):
+                    continue
+                _live = comms_route(_uid, t) is not None
+                pygame.draw.circle(
+                    screen, (130, 225, 215) if _live else (110, 80, 80),
+                    (int(_np[0]), int(_np[1])), 4, 1)
+                screen.blit(font.render(
+                    comms_label(_uid), True,
+                    (115, 175, 175) if _live else (150, 100, 100)),
+                    (_np[0] + 7, _np[1] + 5))
 
         if planner_open:
             prows = planner_rows_for(av, t)
