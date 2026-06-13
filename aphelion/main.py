@@ -7126,7 +7126,7 @@ def run(argv: list[str] | None = None) -> int:
                 if _present:
                     from aphelion.sim.habitat.food import BODY_RESERVE_KCAL
                     cm = crew[_present[interior_dossier % len(_present)]]
-                    dw, dh = 360, 326
+                    dw, dh = 360, 374
                     dx, dyp = 24, 80
                     screen.blit(theme.panel(dw, dh, "CREW DOSSIER"), (dx, dyp))
                     yy = dyp + 44
@@ -7196,7 +7196,37 @@ def run(argv: list[str] | None = None) -> int:
                         f"NOW: {_wb['activity']}"
                         + (f" → {_wb['station']}" if _wb.get("moving") else ""),
                         color=theme.COLORS["text"], font="small")
-                    yy += 20
+                    yy += 18
+                    # the living-crew needs: only what's actually pressing,
+                    # straight off the shipboard sim (rest/food/hygiene/company)
+                    _nd = shipb.need(cm.name)
+                    _press = []
+                    if _nd.get("sleep_debt_h", 0.0) > 2.0:
+                        _press.append(f"rest {_nd['sleep_debt_h']:.0f}h owed")
+                    if _nd.get("last_meal_h", 0.0) > 8.0:
+                        _press.append(f"hungry {_nd['last_meal_h']:.0f}h")
+                    if _nd.get("hygiene_d", 0.0) > 1.5:
+                        _press.append(f"unwashed {_nd['hygiene_d']:.0f}d")
+                    if _nd.get("social", 0.0) > 0.6:
+                        _press.append("starved for company")
+                    if _nd.get("ex_debt_h", 0.0) > 6.0:
+                        _press.append("needs the treadmill")
+                    _ntxt = ", ".join(_press[:3]) if _press \
+                        else "rested · fed · content"
+                    theme.draw_text(
+                        screen, dx + 16, yy, "NEEDS: " + _ntxt,
+                        color=(theme.COLORS["warn"] if _press
+                               else theme.COLORS["good"]), font="small")
+                    yy += 17
+                    _foe = next((a["b"] if a["a"] == cm.name else a["a"]
+                                 for a in getattr(shipb, "arguments", [])
+                                 if cm.name in (a["a"], a["b"])), None)
+                    if _foe is not None:
+                        theme.draw_text(
+                            screen, dx + 16, yy, f"AT ODDS WITH {_foe}",
+                            color=theme.COLORS["danger"], font="small")
+                        yy += 17
+                    yy += 3
                     theme.draw_text(
                         screen, dx + 16, yy,
                         f"C — next crew  ({interior_dossier + 1}"
