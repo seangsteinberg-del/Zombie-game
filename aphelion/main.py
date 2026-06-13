@@ -1334,6 +1334,8 @@ def run(argv: list[str] | None = None) -> int:
     interior_x = 2.0                  # walker x inside the hab strip, m
     interior_home = None              # the BaseSite whose interior we walk
     interior_vessel = None            # ... or the flying stack we board (T)
+    shipb = None                      # Shipboard life sim for this interior
+    shipb_id = None                   # identity of the place shipb models
     interior_rooms: tuple = ()        # habitable module keys, build order
     interior_labels: tuple = ()       # vessel mode: (part name, info) rows
     interior_return_x = 0.0           # where on the surface we re-emerge
@@ -2620,10 +2622,13 @@ def run(argv: list[str] | None = None) -> int:
                         base_screen = False
             elif scene == "interior":
                 if event.type == pygame.KEYDOWN:
-                    from aphelion.render.interior_art import ROOM_W
-                    ppm_i = 24.0
+                    from aphelion.render.interior_art import PPM, ROOM_W
+                    ppm_i = float(PPM)
+                    _st_e = (shipb.nearest_station(interior_x)
+                             if shipb is not None else None)
                     if event.key == pygame.K_e:
                         if interior_x < ROOM_W / ppm_i:      # the airlock
+                            shipb, shipb_id = None, None     # rebuild next
                             if interior_vessel is not None:
                                 scene = "flight"
                                 interior_vessel = None
@@ -2636,6 +2641,34 @@ def run(argv: list[str] | None = None) -> int:
                                 toast = "back on the surface"
                                 toast_until = t + 5
                                 audio.play("clunk")
+                        elif _st_e is not None and _st_e["verbs"]:
+                            # run the station: cook/scan/repair/research/...
+                            _vb = _st_e["verbs"][0]
+                            _res = shipb.verb(_vb, _st_e["id"], t,
+                                              context={"skill_cap": 3,
+                                                       "flyby": False})
+                            if not _res["ok"]:
+                                toast = (f"{_st_e['type'].replace('_', ' ')}"
+                                         f": {_res.get('reason', 'not now')}")
+                                toast_until = t + 5
+                                audio.play("warn")
+                            else:
+                                _eff = _res.get("effects")
+                                if _eff and _eff[0] == "repair" \
+                                        and interior_home is not None:
+                                    _cn = getattr(interior_home, "cond", None)
+                                    if isinstance(_cn, dict):
+                                        _cn[_eff[1]] = min(
+                                            1.0, _cn.get(_eff[1], 1.0)
+                                            + _eff[2] / 100.0)
+                                elif _eff and _eff[0] == "science":
+                                    research.earn_science(_eff[1])
+                                toast = (_res["events"][0]["text"]
+                                         if _res.get("events") else
+                                         f"{_vb} done")
+                                toast_until = t + 7
+                                audio.play("paid" if _vb in (
+                                    "cook", "research", "gaze") else "blip")
                         else:
                             room_i = int(interior_x * ppm_i // ROOM_W) - 1
                             if (interior_vessel is not None
@@ -2658,6 +2691,18 @@ def run(argv: list[str] | None = None) -> int:
                                              f" kW")
                                     toast_until = t + 7
                                     audio.play("blip")
+                    elif event.key == pygame.K_t and shipb is not None:
+                        # the duty roster: each crew's current activity + ETA
+                        _lines_r = []
+                        for _rn in inhabitants[:8]:
+                            _wb = shipb.whereabouts(_rn)
+                            _lines_r.append(
+                                f"{_rn}: {_wb['activity']}"
+                                + (f" → {_wb['station']}"
+                                   if _wb['moving'] else ""))
+                        toast = "  ·  ".join(_lines_r)[:120] or "no crew"
+                        toast_until = t + 8
+                        audio.play("tick")
                     elif event.key == pygame.K_ESCAPE:
                         toast = "exit through the airlock (far left, E)"
                         toast_until = t + 5
@@ -5992,6 +6037,41 @@ def run(argv: list[str] | None = None) -> int:
                 place_name = interior_home.name
             floating = g_in < 1.0
 
+            # ---- LIVING INTERIORS: the shipboard life sim runs the room ----
+            from aphelion.game import shipboard as shipb_mod
+            from aphelion.render import interior_art as iart
+            _place = interior_vessel if interior_vessel is not None \
+                else interior_home
+            if shipb is None or shipb_id != id(_place):
+                _sb_crew = {n: crew[n] for n in inhabitants if n in crew}
+                shipb = shipb_mod.Shipboard(interior_rooms, _sb_crew,
+                                            spin_g=g_in, t0=t)
+                shipb_id = id(_place)
+            # context: cupola flyby bonus near a body, base module cond,
+            # the morale floor the habitat affords (window/plants/g)
+            _flyby = (interior_vessel is not None
+                      and interior_vessel.landed_at is None
+                      and tree.body(interior_vessel.frame_id).radius
+                      * 4.0 > math.hypot(*interior_vessel.state(t)[:2]))
+            _mcond = ({m.module_id: getattr(interior_home, "cond", {}).get(
+                          m.module_id, 1.0) * 100.0
+                       for m in interior_home.net.modules}
+                      if interior_home is not None else {})
+            _sb_ctx = {"morale_base": morale_target({
+                "window": "cupola" in [s["type"] for s in shipb.stations],
+                "plants": any(s["module_kind"] in ("greenhouse", "bio_farm")
+                              for s in shipb.stations),
+                "g_eff": g_in, "vol_m3": 30.0}),
+                "skill_cap": 3,
+                "flyby": _flyby, "module_cond": _mcond}
+            for _ev_sb in shipb.step(t, EVA_TIME_FACTOR * real_dt, _sb_ctx):
+                if _ev_sb.get("class", 4) <= 3:
+                    toast = _ev_sb["text"]
+                    toast_until = t + 7
+                    audio.play("warn" if _ev_sb["class"] <= 2 else "tick")
+                if _ev_sb.get("chronicle"):
+                    chron.add(t, "WONDER", _ev_sb["text"][:120], cls=4)
+
             # deep space drifts behind the hull cutaway (slow parallax)
             bdrop = space_backdrop(size)
             bx_off = -int((interior_x * ppm_i * 0.25)
@@ -6003,17 +6083,47 @@ def run(argv: list[str] | None = None) -> int:
             ox = size[0] / 2 - interior_x * ppm_i * scale_i
             oy = size[1] / 2 - sh / 2
             screen.blit(strip_big, (ox, oy))
-            # crew share the player's sprite scale — humans, not pixels.
-            # Floating = a DRIFT pose (frame 0, slow tumble), never a
-            # mid-air walk cycle (ART-DIRECTION §4)
-            for ri, rname in enumerate(inhabitants[:6]):
-                rx_m = (7.0 + (ri + 1) * (total_m - 10.0) / 7.0
-                        + 0.8 * math.sin(ui_t * 0.7 + ri * 2.1))
+            # station dressing (live consoles, LEDs, the amber ring under
+            # the nearest interactable) drawn on a native-res overlay so
+            # the depth-fleet fixtures sit exactly on the strip when scaled
+            _near_sb = shipb.nearest_station(interior_x)
+            _ovl = pygame.Surface(strip.get_size(), pygame.SRCALPHA)
+            _scr_kind = {"galley": "schedule", "bunk": "schedule",
+                         "med_bay": "medical", "comms_desk": "comms",
+                         "science_bench": "plot", "maint_panel": "plot",
+                         "cupola": "plot", "exercise": "plot",
+                         "hygiene": "comms"}
+            for st_sb in shipb.stations:
+                _sx_n = int(st_sb["strip_x_m"] * ppm_i)
+                iart.station_screen(
+                    _ovl, _sx_n - 22, FLOOR_Y - 78, 44, 30,
+                    _scr_kind.get(st_sb["type"], "plot"))
+                iart.status_led(
+                    _ovl, _sx_n + 26, FLOOR_Y - 70,
+                    "alert" if st_sb["attention"] else
+                    "busy" if st_sb["active"] else "ok")
+                if _near_sb is not None and st_sb["id"] == _near_sb["id"]:
+                    iart.station_ring(
+                        _ovl, _sx_n, FLOOR_Y, w=110,
+                        pulse=0.6 + 0.4 * math.sin(ui_t * 3.2))
+            _ovl_big = pygame.transform.scale(_ovl, strip_big.get_size())
+            screen.blit(_ovl_big, (ox, oy))
+            # the residents, placed and posed by the life sim — sleeping
+            # in the bunks, on the rack, seated at the benches (not evenly
+            # spaced floaters). Floating = a DRIFT pose (ART-DIRECTION §4)
+            for ri, rname in enumerate(inhabitants[:8]):
+                wb = shipb.whereabouts(rname)
+                rx_m = wb["x_m"]
+                _pose = wb["pose"]
                 fy = (44 + 22 * math.sin(ui_t * 0.9 + ri * 1.7)
-                      if floating else 0)
-                cspr = eva_art.astronaut(0, -1 if ri % 2 else 1,
-                                         False, h_px=148)
-                if floating:
+                      if floating and _pose != "sleep_bag" else 0)
+                _facing = (1 if wb["target_x_m"] >= rx_m else -1)
+                cspr = eva_art.astronaut(
+                    int(ui_t * 5) % 4 if wb["moving"] else 0,
+                    _facing, False, h_px=148)
+                if _pose == "sleep_bag":
+                    cspr = pygame.transform.rotozoom(cspr, 90.0, 0.92)
+                elif floating:
                     cspr = pygame.transform.rotozoom(
                         cspr, 9.0 * math.sin(ui_t * 0.5 + ri * 1.3), 1.0)
                 screen.blit(cspr, (ox + rx_m * ppm_i * scale_i
@@ -6031,9 +6141,18 @@ def run(argv: list[str] | None = None) -> int:
             screen.blit(aspr, (size[0] / 2 - aspr.get_width() / 2,
                                oy + FLOOR_Y * scale_i - aspr.get_height()
                                - fy_me))
-            # room label + prompt
+            # room label + station prompt (E runs the nearest verb)
             room_i = int(interior_x * ppm_i // ROOM_W) - 1
-            if room_i < 0:
+            _verb_lbl = {"cook": "COOK A MEAL", "scan": "MEDICAL SCAN",
+                         "repair": "SERVICE THE MODULE",
+                         "research": "WORK A SAMPLE",
+                         "gaze": "TAKE IN THE VIEW", "wash": "WASH UP",
+                         "work_out": "HIT THE RACK"}
+            if _near_sb is not None and _near_sb["verbs"]:
+                _v0 = _near_sb["verbs"][0]
+                label = (f"{_near_sb['type'].replace('_', ' ').upper()}"
+                         f"   ·   E — {_verb_lbl.get(_v0, _v0.upper())}")
+            elif room_i < 0:
                 label = ("AIRLOCK — E returns to the flight deck"
                          if interior_vessel is not None else
                          "AIRLOCK — E exits to the surface")
@@ -6044,25 +6163,41 @@ def run(argv: list[str] | None = None) -> int:
             else:
                 label = (interior_rooms[room_i].replace("_", " ").upper()
                          + "   ·   E console")
-            theme.draw_text(screen, size[0] / 2 - 120, int(oy) - 26, label,
+            theme.draw_text(screen, size[0] / 2 - 140, int(oy) - 26, label,
                             color=theme.COLORS["gold"], font="ui_small")
+            # who is doing what, and the room's morale pulse
+            _moods = [crew[n].morale for n in inhabitants if n in crew]
+            _mood = sum(_moods) / len(_moods) if _moods else 70.0
             chips_in = [(f"INSIDE  {place_name}", theme.COLORS["text"]),
                         (f"{'crew' if interior_vessel is not None else 'residents'}"
-                         f" {len(inhabitants)}", theme.COLORS["text_dim"])]
+                         f" {len(inhabitants)}", theme.COLORS["text_dim"]),
+                        (f"morale {_mood:.0f}",
+                         theme.COLORS["good"] if _mood >= 65 else
+                         theme.COLORS["warn"] if _mood >= 45 else
+                         theme.COLORS["danger"])]
             if interior_vessel is not None:
                 chips_in.append(
                     (f"{g_in:.1f} m/s² spin gravity" if not floating
                      else "0 g — handrails", theme.COLORS["accent"]))
-            else:
-                chips_in.append((f"beds {interior_home.beds()}",
-                                 theme.COLORS["text_dim"]))
             chx_i = 10
             for chip_txt, chip_col in chips_in:
                 cs = theme.chip(chip_txt, chip_col)
                 screen.blit(cs, (chx_i, 8))
                 chx_i += cs.get_width() + 8
+            # the duty roster: a glance at what the crew are up to right now
+            _acts = {}
+            for rn in inhabitants:
+                _acts[shipb.whereabouts(rn)["activity"]] = \
+                    _acts.get(shipb.whereabouts(rn)["activity"], 0) + 1
+            if _acts:
+                theme.draw_text(
+                    screen, 10, 44,
+                    "  ".join(f"{n}× {a}" for a, n in sorted(
+                        _acts.items(), key=lambda kv: -kv[1])),
+                    color=theme.COLORS["text_dim"], font="small")
             screen.blit(theme.footer(
-                size[0], "A/D walk   E console / airlock"),
+                size[0], "A/D walk   E console / run station   "
+                         "T roster   airlock (far left, E)"),
                 (0, size[1] - theme.FOOTER_H))
             screen.blit(vig, (0, 0))
             present_frame()
