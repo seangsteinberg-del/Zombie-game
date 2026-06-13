@@ -6831,6 +6831,26 @@ def run(argv: list[str] | None = None) -> int:
                               acts_mod.FIRST_BY_ID[_fid].name,
                               numbers={"prestige": acts_mod.first_prestige(
                                   _fid, S_acts)})
+            # ACT CHAPTERS (G-13/C-3): when the five-act spine advances on
+            # the earned-Firsts set, write the ACT_CHAPTER card. Derived
+            # from the chronicle's own ACT_CHAPTER count so it is idempotent
+            # across save/load with no extra persisted state.
+            _cur_act = acts_mod.current_act(S_acts, firsts_earned)
+            _chapters = sum(1 for _e in chron.entries
+                            if _e.kind == "ACT_CHAPTER")
+            while _chapters < _cur_act - 1:
+                _chapters += 1
+                _act_def = acts_mod.ACT_BY_NO.get(_chapters + 1)
+                _act_name = (_act_def.theater if _act_def else
+                             f"Act {_chapters + 1}")
+                chron.chapter(
+                    t, f"Act {acts_mod.ACT_ROMAN.get(_chapters + 1, '')}"
+                       f" — {_act_name}")
+                toast = (f"A NEW CHAPTER: Act "
+                         f"{acts_mod.ACT_ROMAN.get(_chapters + 1, '')} "
+                         f"— {_act_name}")
+                toast_until = t + 12
+                audio.play("paid")
             # alert taxonomy sweeps: contract deadlines (E-9 T-90/30/7)
             # and the G-9 runway death-spiral ladder
             alerts_mod.deadline_sweep(abus, program.contracts, t)
