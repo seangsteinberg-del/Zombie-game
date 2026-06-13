@@ -1343,6 +1343,9 @@ def run(argv: list[str] | None = None) -> int:
         bases.append(BaseSite("Peary Base", 0.0, campaign_rng))
         bases[-1].crew.append("J. Okafor")     # QA: a resident for the
         base_screen = True                     # humans-v2 hourly path
+        if os.environ.get("APH_QA_FAIL") == "1":   # QA: distress visuals
+            for _qi, _qm in enumerate(bases[-1].net.modules):
+                _qm.state = "FAILED"
     boot_ascent = want == "ascent"
     if args.warp:
         warp_idx = min(args.warp, len(_WARP_LADDER) - 1)
@@ -8331,6 +8334,24 @@ def run(argv: list[str] | None = None) -> int:
                 col = state_cols.get(m.state, theme.COLORS["text"])
                 pulse = (0.55 + 0.45 * math.sin(ui_t * 4.0 + mi)
                          if m.state != "OFF" else 0.25)
+                # a module in distress shows it: a rising smoke wisp, and a
+                # red strobe halo when it has outright FAILED
+                if m.state in ("FAILED", "STARVED", "BLOCKED"):
+                    if m.state == "FAILED":
+                        _strobe = 0.5 + 0.5 * math.sin(ui_t * 9.0 + mi)
+                        _gl = pygame.Surface((28, 28), pygame.SRCALPHA)
+                        pygame.draw.circle(_gl, (222, 72, 50,
+                                                 int(130 * _strobe)),
+                                           (14, 14), 14)
+                        screen.blit(_gl, (int(sx_b) - 14, my0 - 22))
+                    for _pq in range(3):
+                        _ph = (ui_t * 0.55 + _pq * 0.34 + mi * 0.2) % 1.0
+                        _puff = pygame.Surface((20, 20), pygame.SRCALPHA)
+                        pygame.draw.circle(
+                            _puff, (88, 88, 94, int(72 * (1.0 - _ph))),
+                            (10, 10), int(3 + 6 * _ph))
+                        screen.blit(_puff, (int(sx_b - 10 + 7 * math.sin(
+                            _ph * 4 + mi)), int(my0 - 4 - 36 * _ph)))
                 pygame.draw.circle(screen, tuple(int(c * pulse) for c in col),
                                    (int(sx_b), my0 - 8), 5)
                 if key == "tank_farm":     # aggregate storage fill readout
