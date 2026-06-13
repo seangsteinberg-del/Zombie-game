@@ -1922,6 +1922,7 @@ def run(argv: list[str] | None = None) -> int:
     shake = 0.0                    # camera shake (ignition/staging/loss/max-q)
     flash = 0.0                    # white-out flash (vehicle loss)
     ascent_boomed = False          # explosion VFX fired for this outcome
+    spent_stages: list = []        # jettisoned stages tumbling away (VFX)
 
     # descent scene state (the landing, FLOWN)
     descent: LiveDescent | None = None
@@ -4534,6 +4535,26 @@ def run(argv: list[str] | None = None) -> int:
             rspr = rot_cache[rkey]
             rx = size[0] // 2 - rspr.get_width() // 2 + sox
             ry = rocket_y - rspr.get_height() // 2 - int(12 * rs) + soy
+
+            def _spawn_spent_stage():
+                _ssw = max(20, rspr.get_width())
+                _ssh = max(46, int(_ssw * 2.2))
+                _ssp = pygame.Surface((_ssw, _ssh), pygame.SRCALPHA)
+                _br = int(_ssw * 0.32)
+                pygame.draw.rect(_ssp, (150, 152, 158),
+                                 (2, 7, _ssw - 4, _ssh - 24), border_radius=_br)
+                pygame.draw.rect(_ssp, (92, 94, 100),
+                                 (2, 7, _ssw - 4, _ssh - 24), 1,
+                                 border_radius=_br)
+                pygame.draw.rect(_ssp, (44, 46, 52), (2, 5, _ssw - 4, 5))
+                pygame.draw.polygon(_ssp, (58, 60, 68), [
+                    (_ssw * 0.32, _ssh - 18), (_ssw * 0.68, _ssh - 18),
+                    (_ssw * 0.84, _ssh - 2), (_ssw * 0.16, _ssh - 2)])
+                spent_stages.append({
+                    "x": float(size[0] // 2),
+                    "y": float(ry + rspr.get_height() * 0.7),
+                    "vx": 16.0, "vy": 34.0, "rot": 0.0,
+                    "vrot": 75.0, "age": 0.0, "spr": _ssp})
             # ground anchors to the rocket's BASE so the vehicle never
             # draws buried in the terrain at low altitude
             ground_y = ry + rspr.get_height() + int(max(live.h, 0.0)
@@ -4592,6 +4613,27 @@ def run(argv: list[str] | None = None) -> int:
                                     (int(pad_x - pad_scale * PAD_W / 2.0),
                                      int(ground_y - pad_scale
                                          * (PAD_GROUND_Y + 12))))
+            # spent stages tumble away (drawn behind the live stack)
+            if os.environ.get("APH_QA_STAGE") == "1" and not spent_stages:
+                _spawn_spent_stage()
+                spent_stages[-1]["x"] = size[0] * 0.40   # QA: against the sky
+                spent_stages[-1]["y"] = 170.0
+            _kept_ss = []
+            for _se in spent_stages:
+                _se["age"] += real_dt
+                if _se["age"] > 3.6:
+                    continue
+                _se["vy"] += 55.0 * real_dt
+                _se["x"] += _se["vx"] * real_dt
+                _se["y"] += _se["vy"] * real_dt
+                _se["rot"] += _se["vrot"] * real_dt
+                _kept_ss.append(_se)
+                _scl = max(0.32, 1.0 - _se["age"] * 0.17)
+                _sr = pygame.transform.rotozoom(_se["spr"], _se["rot"], _scl)
+                _sr.set_alpha(int(255 * max(0.0, 1.0 - _se["age"] / 3.6)))
+                screen.blit(_sr, (int(_se["x"] - _sr.get_width() / 2),
+                                  int(_se["y"] - _sr.get_height() / 2)))
+            spent_stages = _kept_ss
             if not (live.outcome == "lost" and ascent_boomed):
                 screen.blit(rspr, (rx, ry))
             # ---- the pad campaign, drawn (launch_art over the count) ----
@@ -4687,6 +4729,7 @@ def run(argv: list[str] | None = None) -> int:
                                             color=(220, 224, 232))
                         shake = max(shake, 0.6)
                         audio.play("stage")
+                        _spawn_spent_stage()    # tumbles away behind the stack
                     elif "MECO" in ev_line or "CIRC" in ev_line:
                         audio.play("soi")
                 ascent_event_count = len(live.events)
