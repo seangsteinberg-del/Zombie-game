@@ -1091,6 +1091,11 @@ def run(argv: list[str] | None = None) -> int:
     save_dir = default_save_dir()
     qs_path = save_dir / "quicksave.aph"
     as_path = save_dir / "autosave.aph"
+    # Z: autosave ROTATION — three slots round-robin so a crash mid-write
+    # (or a corrupt newest) never costs more than one cycle; latest_save
+    # still finds the newest by mtime across all of them.
+    AUTOSAVE_SLOTS = 3
+    autosave_idx = 0
 
     def latest_save():
         saves = sorted(save_dir.glob("*.aph"),
@@ -6243,7 +6248,9 @@ def run(argv: list[str] | None = None) -> int:
             if autosave_acc >= 300.0:        # five real minutes
                 autosave_acc = 0.0
                 try:
-                    do_quicksave(as_path, "AUTOSAVED")
+                    _slot = (save_dir / f"autosave-{autosave_idx}.aph")
+                    autosave_idx = (autosave_idx + 1) % AUTOSAVE_SLOTS
+                    do_quicksave(_slot, "AUTOSAVED")
                     toast, toast_until = "autosaved", clock.t + 3.0
                 except Exception:
                     pass

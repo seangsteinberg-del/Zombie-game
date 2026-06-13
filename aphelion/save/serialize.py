@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import zlib
 from pathlib import Path
 
@@ -114,8 +115,14 @@ def build_save(*, t: float, vessels: dict[str, Vessel] | None = None,
 
 
 def write_save(path: str | Path, save: dict) -> None:
+    # atomic: serialize to a temp file in the same directory, then
+    # os.replace it into place — a crash mid-write leaves the previous
+    # save intact instead of truncating it (Z hardening, 13 §3.15).
     raw = json.dumps(save, separators=(",", ":"), sort_keys=True).encode("utf-8")
-    Path(path).write_bytes(zlib.compress(raw, level=6))
+    path = Path(path)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_bytes(zlib.compress(raw, level=6))
+    os.replace(tmp, path)
 
 
 def read_save(path: str | Path) -> dict:
