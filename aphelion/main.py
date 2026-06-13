@@ -10266,6 +10266,29 @@ def run(argv: list[str] | None = None) -> int:
                     bits.append("[SPECULATIVE]")
                 if nd.get("era"):
                     bits.append("ERA-DEFINING")
+                # WHAT YOU GET: the reason to spend the science — the parts
+                # and capabilities this node unlocks, resolved to real names
+                from aphelion.game.basebuild import CATALOG as _BCAT
+
+                def _uname(u):
+                    if u in db.parts:
+                        return db.parts[u].get("name", u)
+                    if u in _BCAT:
+                        return _BCAT[u].get("name", u)
+                    return u.split(":")[-1].replace("_", " ")
+                _unl = nd.get("unlocks", []) or nd.get("unlock", [])
+                _utxt = None
+                if _unl:
+                    _utxt = ("unlocks: "
+                             + ", ".join(_uname(u) for u in _unl[:4])
+                             + (f"  +{len(_unl) - 4} more"
+                                if len(_unl) > 4 else ""))
+                elif nd.get("effect"):
+                    _utxt = nd["effect"]
+                if _utxt:
+                    theme.draw_text(screen, px0 + 24, py0 + ph - 72,
+                                    ("▸ " + _utxt)[:168],
+                                    color=theme.COLORS["gold"], font="small")
                 theme.draw_text(screen, px0 + 24, py0 + ph - 50,
                                 (nd["name"] + "   ·   "
                                  + "   ".join(bits))[:158],
