@@ -986,9 +986,9 @@ def run(argv: list[str] | None = None) -> int:
                                  "research", "research_ed", "research_codex",
                                  "ascent", "descent", "eva", "mine",
                                  "drive", "dive",
-                                 "drydock", "proxops", "aboard", "help",
-                                 "contracts", "crew", "pause", "planner",
-                                 "comms", "countdown"])
+                                 "drydock", "proxops", "aboard", "homebase",
+                                 "help", "contracts", "crew", "pause",
+                                 "planner", "comms", "countdown"])
     args = parser.parse_args(argv)
     if args.headless:
         os.environ["SDL_VIDEODRIVER"] = "dummy"
@@ -1384,6 +1384,7 @@ def run(argv: list[str] | None = None) -> int:
     interior_panel = os.environ.get("APH_QA_PANEL") == "1"   # TAB console
     interior_dossier = 0 if os.environ.get("APH_QA_DOSSIER") == "1" else -1
     interior_stores = os.environ.get("APH_QA_STORES") == "1"  # L manifest
+    interior_toggle_req = False       # SPACE in systems console -> toggle mod
     # Drydock 2.0 (06): the grid design room
     dd_v = GridVessel()
     dd_cursor = [4, 0]
@@ -1611,6 +1612,37 @@ def run(argv: list[str] | None = None) -> int:
         dd_sim = ascent_qsim(_r0["thrust_kn"], _r0["mdot_kgps"],
                              _r0["m0_t"], _defs[0].prop_t, 4.0)
         scene = "drydock"
+    elif want == "homebase":            # QA: walk a crewed surface colony
+        from aphelion.game.basebuild import add_module
+        from aphelion.game.crew import CrewMember
+        from aphelion.sim.ledger.network import Buffer as _Buf
+        from aphelion.render.interior_art import HABITABLE as _HAB
+        hb = BaseSite("Peary Base", 0.0, campaign_rng)
+        for _hk in ("hab_module", "med_bay", "greenhouse", "science_lab"):
+            add_module(hb.net, _hk, SITES[hb.site_id],
+                       serial=len(hb.built))
+            hb.built.append(_hk)
+        # a resident crew, present in the global roster for vitals/dossier
+        for _nm, _role, _sk in (("T. Eze", "engineer", 2),
+                                ("Dr. I. Whitfield", "medic", 3),
+                                ("O. Banda", "agronomist", 2)):
+            if _nm not in crew:
+                crew[_nm] = CrewMember(_nm, _role, _sk)
+            hb.crew.append(_nm)
+        # stock the stores so the consumable ETAs read like a live colony
+        for _res, _lvl, _cap in (("FoodRations", 480.0, 4_000.0),
+                                 ("Oxygen", 1_400.0, 60_000.0),
+                                 ("Water", 5_200.0, 30_000.0),
+                                 ("MedSupplies", 180.0, 2_000.0)):
+            if _res in hb.net.buffers:
+                hb.net.buffers[_res].level = _lvl
+            else:
+                hb.net.buffers[_res] = _Buf(level=_lvl, capacity=_cap)
+        bases.append(hb)
+        interior_home = hb
+        interior_rooms = tuple(k for k in hb.built if k in _HAB)
+        interior_x = float(os.environ.get("APH_QA_IX", "10.0"))
+        scene = "interior"
     autosave_acc = 0.0
     gold_flash = 0.0
     ascent_event_count = 0
@@ -2815,6 +2847,10 @@ def run(argv: list[str] | None = None) -> int:
                         # L: toggle the LIFE SUPPORT / STORES manifest
                         interior_stores = not interior_stores
                         audio.play("blip")
+                    elif (event.key == pygame.K_SPACE
+                          and interior_panel and interior_home is not None):
+                        # SPACE in the systems console: operate this module
+                        interior_toggle_req = True
                     elif event.key == pygame.K_c:
                         # C: page through full crew dossiers (live vitals)
                         _present = [n for n in inhabitants if n in crew]
@@ -6819,6 +6855,8 @@ def run(argv: list[str] | None = None) -> int:
             def _room_of(xm):
                 return int(xm * ppm_i // ROOM_W) - 1
             if interior_panel:
+                _toggle_now = interior_toggle_req   # consume this frame
+                interior_toggle_req = False
                 pw, ph = 322, 322
                 pxp, pyp = size[0] - pw - 16, 64
                 screen.blit(theme.panel(pw, ph, "MODULE SYSTEMS"), (pxp, pyp))
@@ -6867,7 +6905,22 @@ def run(argv: list[str] | None = None) -> int:
                         f"{mod.power_kw:,.1f} kW "
                         f"({'draw' if mod.power_kw >= 0 else 'gen'})",
                         color=theme.COLORS["text"], font="small")
-                    yy += 22
+                    yy += 20
+                    # operate it from the console — a real control with a
+                    # live effect on the colony grid (09 P-1 dispatch)
+                    _on = mod.state.upper() in ("RUNNING", "STARVED",
+                                                "BLOCKED")
+                    if mod.state.upper() != "FAILED":
+                        theme.draw_text(
+                            screen, pxp + 16, yy,
+                            "SPACE — shut down" if _on
+                            else "SPACE — bring online",
+                            color=theme.COLORS["gold"], font="small")
+                        yy += 20
+                    if _toggle_now and mod.state.upper() != "FAILED":
+                        toast = interior_home.toggle_module(mod.module_id, t)
+                        toast_until = t + 5
+                        audio.play("clunk")
                 elif (interior_vessel is not None
                       and 0 <= room_i < len(interior_labels)):
                     # vessel module: surface the part's role description
