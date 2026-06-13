@@ -8074,49 +8074,72 @@ def run(argv: list[str] | None = None) -> int:
             lpan = theme.panel(880, 584, "CONTRACT LEDGER")
             lx0, ly0 = size[0] // 2 - 440, size[1] // 2 - 292
             screen.blit(lpan, (lx0, ly0))
-            lines3: list[tuple[str, tuple]] = []
+            # structured rows: act dividers + per-contract status dot, desc,
+            # right-aligned payout, status badge, with subtle row striping
+            rows3: list[dict] = []
             by_id = {c.contract_id: c for c in program.contracts}
             for act in (1, 2, 3, 4):
                 roman = ("I", "II", "III", "IV")[act - 1]
-                lines3.append((
-                    f"ACT {roman}"
-                    + ("" if _au(act, program)
-                       else "   — locked: complete 60% of the act before"),
-                    theme.COLORS["gold"]))
+                rows3.append({"kind": "act", "roman": roman,
+                              "open": _au(act, program)})
                 for spec in (s for s in _SPECS if s.act == act):
                     c = by_id.get(spec.cid)
-                    if c is None:
-                        lines3.append((
-                            f"   {spec.desc[:46]:48s}"
-                            f"${spec.payout_m:>6,.0f}M   —",
-                            theme.COLORS["text_dim"]))
+                    if c is None:                       # not yet offered
+                        rows3.append({"kind": "con", "desc": spec.desc,
+                                      "pay": spec.payout_m, "status": "—",
+                                      "dot": (70, 76, 92),
+                                      "col": theme.COLORS["text_dim"]})
                         continue
                     if c.completed_t is not None:
-                        status, col3 = "PAID ✓", theme.COLORS["good"]
+                        status, dot = "PAID", theme.COLORS["good"]
+                        col3 = theme.COLORS["good"]
                     elif c.failed:
-                        status = ("FAILED — renegotiation pending"
-                                  if c.retries < 2 else "FAILED — final")
-                        col3 = theme.COLORS["danger"]
+                        status = ("FAILED · reneg" if c.retries < 2
+                                  else "FAILED · final")
+                        dot = col3 = theme.COLORS["danger"]
                     else:
                         rem = c.deadline_s - t
-                        status = f"due in {theme.fmt_duration(rem)}"
+                        status = f"due {theme.fmt_duration(rem)}"
                         col3 = (theme.COLORS["warn"]
                                 if rem < spec.years * _YEAR * 0.25
                                 else theme.COLORS["text"])
+                        dot = col3
                         if c.retries:
-                            status += f"  (renegotiated x{c.retries})"
-                    lines3.append((
-                        f"   {c.description[:46]:48s}"
-                        f"${c.payout / 1e6:>6,.0f}M   {status}", col3))
+                            status += f" ·x{c.retries}"
+                    rows3.append({"kind": "con",
+                                  "desc": c.description, "pay": c.payout / 1e6,
+                                  "status": status, "dot": dot, "col": col3})
             max_rows = 24
             contracts_scroll = max(0, min(contracts_scroll,
-                                          max(0, len(lines3) - max_rows)))
-            ly = ly0 + 36
-            for txt3, col3 in lines3[contracts_scroll:
-                                     contracts_scroll + max_rows]:
-                theme.draw_text(screen, lx0 + 18, ly, txt3, color=col3,
-                                font="small")
-                ly += 22
+                                          max(0, len(rows3) - max_rows)))
+            ly = ly0 + 34
+            _ri = 0
+            for r3 in rows3[contracts_scroll:contracts_scroll + max_rows]:
+                if r3["kind"] == "act":
+                    pygame.draw.line(screen, (60, 66, 82), (lx0 + 16, ly + 16),
+                                     (lx0 + 862, ly + 16), 1)
+                    theme.draw_text(
+                        screen, lx0 + 18, ly,
+                        f"ACT {r3['roman']}"
+                        + ("" if r3["open"]
+                           else "   — locked: complete 60% of the act first"),
+                        color=theme.COLORS["gold"], font="ui_small")
+                    ly += 24
+                else:
+                    if _ri % 2 == 0:                    # row stripe
+                        _bg = pygame.Surface((846, 21), pygame.SRCALPHA)
+                        _bg.fill((255, 255, 255, 6))
+                        screen.blit(_bg, (lx0 + 16, ly - 3))
+                    pygame.draw.circle(screen, r3["dot"], (lx0 + 26, ly + 6), 4)
+                    theme.draw_text(screen, lx0 + 40, ly, r3["desc"][:50],
+                                    color=r3["col"], font="small")
+                    theme.draw_text(screen, lx0 + 580, ly,
+                                    f"${r3['pay']:>6,.0f}M",
+                                    color=theme.COLORS["gold"], font="small")
+                    theme.draw_text(screen, lx0 + 668, ly, r3["status"][:24],
+                                    color=r3["col"], font="small")
+                    _ri += 1
+                    ly += 21
             theme.draw_text(
                 screen, lx0 + 18, ly0 + 556,
                 f"{act_progress(program)} toward the next act   ·   "
