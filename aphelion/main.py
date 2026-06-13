@@ -6245,11 +6245,20 @@ def run(argv: list[str] | None = None) -> int:
                     pygame.draw.line(screen, _gpd.dark,
                                      (int(_tsx - _rw / 2), _tsy + 3),
                                      (int(_tsx + _rw / 2), _tsy + 3))
+            # contact shadows for every surface object (matches the EVA pass)
+            def _gshadow_d(cx, gy, w0):
+                sw = max(10, int(w0 * (1.2 + 0.9 * (1.0 - _dl_d))))
+                s = pygame.Surface((sw, 16), pygame.SRCALPHA)
+                pygame.draw.ellipse(s, (0, 0, 0, 118), s.get_rect())
+                screen.blit(s, (int(cx - sw * 0.42), int(gy - 8)))
+
             # the lander + colony share the cross-section
             stack_d = [[drive_av.vessel.rows[i].part_id for i in st]
                        for st in drive_av.vessel.stage_plan]
             lspr_d = pygame.transform.rotozoom(vessel_sprite(db, stack_d),
                                                0.0, 0.6)
+            _gshadow_d(_sxd(0.0), _syd(drive_tiles.surface_y(0.0)),
+                       lspr_d.get_width())
             screen.blit(lspr_d, (_sxd(0.0) - lspr_d.get_width() / 2,
                                  _syd(drive_tiles.surface_y(0.0))
                                  - lspr_d.get_height()))
@@ -6260,6 +6269,8 @@ def run(argv: list[str] | None = None) -> int:
                 for bi, bx in eva_sim.module_positions(
                         home_dv.built).items():
                     spr = module_sprite(home_dv.built[bi])
+                    _gshadow_d(_sxd(bx), _syd(drive_tiles.surface_y(bx)),
+                               spr.get_width())
                     screen.blit(spr,
                                 (_sxd(bx) - spr.get_width() / 2,
                                  _syd(drive_tiles.surface_y(bx))
@@ -6540,11 +6551,20 @@ def run(argv: list[str] | None = None) -> int:
                         (rsx - rr * ppm / 2, _sy(rwx) - rr * ppm * 0.35,
                          rr * ppm, rr * ppm * 0.55))
 
+            # one contact shadow for every surface object — the sun rides
+            # upper-left so each pool offsets right and lengthens at low sun
+            def _gshadow(cx, gy, w0):
+                sw = max(10, int(w0 * (1.2 + 0.9 * (1.0 - _dl_e))))
+                s = pygame.Surface((sw, 16), pygame.SRCALPHA)
+                pygame.draw.ellipse(s, (0, 0, 0, 118), s.get_rect())
+                screen.blit(s, (int(cx - sw * 0.42), int(gy - 8)))
+
             # the lander you walked out of (x = 0)
             stack_e = [[eva_av.vessel.rows[i].part_id for i in st]
                        for st in eva_av.vessel.stage_plan]
             lspr = pygame.transform.rotozoom(vessel_sprite(db, stack_e),
                                              0.0, 0.6)
+            _gshadow(_sx(0.0), _sy(0.0), lspr.get_width())
             screen.blit(lspr, (_sx(0.0) - lspr.get_width() / 2,
                                _sy(0.0) - lspr.get_height()))
             # the colony, walkable end to end
@@ -6554,6 +6574,7 @@ def run(argv: list[str] | None = None) -> int:
                 from aphelion.render.base_art import module_sprite
                 for bi, bx in eva_sim.module_positions(home_b.built).items():
                     spr = module_sprite(home_b.built[bi])
+                    _gshadow(_sx(bx), _sy(bx), spr.get_width())
                     screen.blit(spr, (_sx(bx) - spr.get_width() / 2,
                                       _sy(bx) - spr.get_height()))
             pend_e = [a for a in site_e.get("anomalies", [])
