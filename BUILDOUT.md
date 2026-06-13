@@ -32,6 +32,16 @@ bible doc, implementable without re-reading the bible). DECISIONS.md wins confli
 
 Statuses: PENDING → IN PROGRESS → DONE (commit hash). Update this table every chunk.
 
+## DEPTH-AUDIT PASS (2026-06-13 overnight): 8-agent adversarial audit of every wired subsystem vs its buildspec. Orbital came back CLEAN. Fixed:
+- **dive** (b1a6b5b): THE CONTACT (180 m) + hull crush (300 m) were unreachable — depth capped ~175 m; deepened trenches to ~311 m. Contact milestone was set on SPAWN (lost if you surfaced early); now locks only when the FIRST fires.
+- **aboard** (9b728fa): shipboard got BARE room keys → repair/LED hit a phantom `machine_shop-1` not the real `machine_shop_0`; now passes real module ids. Seeded real food/medsupplies/samples stores. Killed the morale double-step on interior exit.
+- **comms** (0e5b1b9): CM-PROX was never fitted → uncrewed teleop was structurally impossible (omni capped 256 kbit/s, gain 1). Now every vessel fits CM-PROX; Moon rover teleops, Mars-direct still refused on light-lag.
+- **campaign** (10ebff1): stale deadline/runway alerts pinned warp forever after the obligation cleared; now resolved on contract-discharge / runway-recovery. alerts_seen/runway_state reset on new-game/load.
+- **dive discoveries** (e612300): ocean worlds now `acquire_discovery` dsc11/12/14 (real content ids; gate vh07/is19/hb07), not just flat sci.
+- **act chapters** (f93d72e): ACT_CHAPTER Chronicle cards now fire on act transitions (C-3), idempotent across save/load.
+- **small batch** (3ad558f): launch commit-prompt label, recycle hold release, wear terrain-key aliases (ice/road no longer 1.0×), dive park_x_m persist, EVA QA/​fallback share the cached world, pressurized-rover 1.5 kW ECLSS.
+KNOWN DEPTH GAPS left as noted items (larger/riskier, not regressions): cumulative-extraction tracking (prod_hwm is a buffer-level proxy; the "Volatiles" First has no producer); the v2 five-act exit-milestone gate is built but contract gating still rides the v1 60% gate via LEGACY_ACT_GATE; weather scrub realizes ~2.5× the 0.02 target (intra-day drift inflates it); countdown engine-out is scripted, not tied to a real LiveAscent flameout; L-11 node-ops/freighter link gate has no live consumer.
+
 ## DEPTH² PASS (directive 2026-06-13: "my standards are miles higher")
 
 DONE above = systems + canon physics exist. It does NOT mean the experience meets
