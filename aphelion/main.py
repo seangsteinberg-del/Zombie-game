@@ -1903,7 +1903,8 @@ def run(argv: list[str] | None = None) -> int:
     live_stack: list[list[str]] = []
     launch_cost = 0.0
     cdown = None                   # the launch campaign (pad launches)
-    cd_warp = 16.0                 # countdown clock rate (./, adjust)
+    cd_warp = 24.0                 # countdown clock rate (./, adjust)
+    cd_skip = False                # SPACE: blast the quiet count to the finale
     cd_lines: list = []            # comm-loop caption bar
     cd_ignited_fx = -1e9           # ui_t of ignition (ice-shed window)
     pending_crew: list[str] = []
@@ -1983,7 +1984,8 @@ def run(argv: list[str] | None = None) -> int:
         if want == "countdown":          # the pad at T-35 s, count running
             cdown = cd_mod.Countdown(
                 cd_mod.summarize_vessel(_vq, "QA-1"), "site:canaveral",
-                0.0, "launch:qa:0", clock_s=-35.0)
+                0.0, "launch:qa:0",
+                clock_s=float(os.environ.get("APH_QA_CLOCK", "-35.0")))
             cd_warp = 1.0
         else:
             live.ignite()
@@ -2196,6 +2198,14 @@ def run(argv: list[str] | None = None) -> int:
                                     + " — ENTER accepts the risk")
                                 toast_until = t + 7
                                 audio.play("warn")
+                        elif cdown.phase == "count":
+                            # skip the quiet count: blast ahead, stopping
+                            # at any hold/constraint and at the T-10 commit
+                            cd_skip = True
+                            toast = ("SKIPPING AHEAD — stops at any hold "
+                                     "or the launch commit")
+                            toast_until = t + 4
+                            audio.play("tick")
                     elif event.key == pygame.K_RETURN:
                         if cdown.phase == "hold":
                             if cdown.request_resume(accept_risk=True):
@@ -2215,9 +2225,10 @@ def run(argv: list[str] | None = None) -> int:
                             toast_until = t + 5
                             audio.play("warn")
                     elif event.key == pygame.K_PERIOD:
-                        cd_warp = min(cd_warp * 2.0, 64.0)
+                        cd_warp = min(cd_warp * 2.0, 128.0)
                     elif event.key == pygame.K_COMMA:
                         cd_warp = max(cd_warp / 2.0, 1.0)
+                        cd_skip = False
                     elif event.key == pygame.K_ESCAPE:
                         _nxt_cd = cdown.scrub()
                         _nx_txt = (f" — next clean window in "
@@ -3664,7 +3675,7 @@ def run(argv: list[str] | None = None) -> int:
                                     pending_crew),
                                 "site:canaveral", t,
                                 f"launch:{next_vid}:{int(t // 86400)}")
-                            cd_warp, cd_lines = 16.0, []
+                            cd_warp, cd_lines, cd_skip = 24.0, [], False
                             audio.play("blip")
             elif event.type == pygame.KEYDOWN:
                 shift = event.mod & pygame.KMOD_SHIFT
@@ -4181,7 +4192,7 @@ def run(argv: list[str] | None = None) -> int:
         if ascent_abort and live is not None:
             program.earn(t, launch_cost, "launch revert")
             live = None
-            cdown, cd_lines = None, []
+            cdown, cd_lines, cd_skip = None, [], False
             scene = "flight"
             builder_open = True
             builder.message = "launch reverted — funds refunded"
@@ -4253,7 +4264,7 @@ def run(argv: list[str] | None = None) -> int:
                 toast_until = t + 8.0
                 audio.play("alarm")
             live = None
-            cdown, cd_lines = None, []
+            cdown, cd_lines, cd_skip = None, [], False
             ascent_av = None
             ascent_body_id = "core:earth"
             scene = "flight"
@@ -4365,16 +4376,25 @@ def run(argv: list[str] | None = None) -> int:
             if cdown is not None and not live.ignited \
                     and cdown.phase in ("count", "hold", "terminal"):
                 if cdown.phase in ("count", "terminal"):
-                    if cdown.clock_s > -75.0:      # cinematic auto-slow
-                        cd_warp = min(cd_warp, 4.0)
-                    if cdown.clock_s > -16.0:
-                        cd_warp = min(cd_warp, 1.0)
+                    if cd_skip and cdown.clock_s < -40.0:
+                        cd_warp = 150.0            # blast the quiet count
+                    else:
+                        cd_skip = False
+                        # cinematic auto-slow: the final-prep minute eases
+                        # down, the terminal count runs (near) real-time
+                        if cdown.clock_s > -40.0:
+                            cd_warp = min(cd_warp, 6.0)
+                        if cdown.clock_s > -11.0:
+                            cd_warp = min(cd_warp, 1.0)
+                _ph_was = cdown.phase
                 for _e_cd in cdown.step(real_dt * cd_warp):
                     if _e_cd.get("cls", 4) <= 3:
                         toast = _e_cd["text"]
                         toast_until = t + 6
                         audio.play("alarm" if _e_cd["cls"] <= 2
                                    else "warn")
+                if cdown.phase == "hold" and _ph_was != "hold":
+                    cd_skip = False                # a hold interrupts the skip
                 cd_lines.extend(cdown.pop_chatter())
                 del cd_lines[:-6]
                 clock.advance_analytic(clock.t + real_dt * cd_warp)
@@ -4572,11 +4592,12 @@ def run(argv: list[str] | None = None) -> int:
                     screen.set_clip(pygame.Rect(0, 0, size[0],
                                                 min(size[1],
                                                     ground_y + 10)))
+                _plsc = 1.0 + 0.7 * max(0.0, 1.0 - live.h / 600.0)
                 launch_art.draw_plume(
                     screen, (ccx + ex * hh, ccy + ey * hh),
                     math.degrees(math.atan2(-ey, ex)),
                     live.throttle_eff, _rho_h / 1.225,
-                    vac=live.stages_spent > 0, t=ui_t)
+                    scale=_plsc, vac=live.stages_spent > 0, t=ui_t)
                 screen.set_clip(None)
                 n_fl = int(2 + 10 * live.throttle_eff)
                 particles.emit_burn(ccx + ex * hh, ccy + ey * hh, ex, ey,
@@ -4660,7 +4681,10 @@ def run(argv: list[str] | None = None) -> int:
                     else theme.COLORS["gold"])
                 screen.blit(big, (size[0] // 2 - big.get_width() // 2, 92))
                 _ph_txt = {
-                    "count": f"COUNT RUNNING  ·  {cd_warp:.0f}x",
+                    "count": (f"SKIPPING AHEAD  ·  {cd_warp:.0f}x"
+                              if cd_skip else
+                              f"COUNT RUNNING  ·  {cd_warp:.0f}x   "
+                              "(SPACE skip ahead · ./, warp)"),
                     "hold": ("HOLDING — "
                              + ("; ".join(stc["hold_reasons"])[:74]
                                 or "station poll")

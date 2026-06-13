@@ -428,23 +428,45 @@ def draw_ice_shed(surf: pygame.Surface, rect: pygame.Rect, t: float,
 
 def draw_trench_glow(surf: pygame.Surface, geom: PadGeom,
                      throttle: float, t: float) -> None:
-    """Flame-trench bounce light — a genuine emitter (bloom legal)."""
+    """Flame-trench fireball — the launch's bloom hero. The plume itself
+    points down the trench and is clipped at the deck, so THIS is the
+    fire the player sees on the pad: a white-hot heart, a warm dome, live
+    flame tongues splashing both ways out of the trench, and apron spill.
+    Genuine additive emitter (bloom-legal); flicker keeps it alive."""
     if throttle <= 0.0:
         return
-    flick = 0.84 + 0.10 * math.sin(t * 47.0) + 0.06 * math.sin(t * 23.0)
+    x, y = geom.pad_x, geom.deck_y
+    ADD = pygame.BLEND_RGB_ADD
+    flick = 0.80 + 0.13 * math.sin(t * 47.0) + 0.07 * math.sin(t * 23.0)
     base = throttle * flick
-    core = _add_sprite(26, (255, 214, 150), 0.75 * base)
-    surf.blit(core, (geom.pad_x - 26, geom.deck_y - 16),
-              special_flags=pygame.BLEND_RGB_ADD)
-    wide = _add_sprite(64, (255, 168, 92), 0.32 * base)
-    surf.blit(wide, (geom.pad_x - 64, geom.deck_y - 36),
-              special_flags=pygame.BLEND_RGB_ADD)
-    # warm spill along the apron, both directions out of the trench
-    spill = _add_sprite(40, (255, 190, 120), 0.22 * base)
+    # white-hot heart at the engine bells (blooms hardest)
+    surf.blit(_add_sprite(24, (255, 250, 236), 1.15 * base),
+              (x - 24, y - 22), special_flags=ADD)
+    surf.blit(_add_sprite(48, (255, 224, 162), 1.0 * base),
+              (x - 48, y - 32), special_flags=ADD)
+    # broad warm dome of bounce light up the vehicle skirt
+    surf.blit(_add_sprite(120, (255, 170, 94), 0.46 * base),
+              (x - 120, y - 76), special_flags=ADD)
+    # flame tongues licking OUT of the trench low along the deck, both
+    # ways, each flickering its own length so it reads as live fire
     for side in (-1, 1):
-        surf.blit(spill, (geom.pad_x + side * 60 - 40,
-                          geom.deck_y - 26),
-                  special_flags=pygame.BLEND_RGB_ADD)
+        for j in range(4):
+            fl = 0.5 + 0.5 * math.sin(t * (29.0 + 8.0 * j)
+                                      + side * 1.7 + j)
+            reach = (26 + 27 * j) * (0.45 + 0.55 * fl)
+            r = int(17 + 8 * j)
+            col = ((255, 240, 200), (255, 214, 150), (255, 178, 104),
+                   (250, 142, 78))[j]
+            surf.blit(_add_sprite(r, col,
+                                  (0.74 - 0.13 * j) * base
+                                  * (0.55 + 0.45 * fl)),
+                      (int(x + side * reach) - r, y - 12 - j * 3),
+                      special_flags=ADD)
+    # warm spill pooled on the apron either side of the trench
+    spill = _add_sprite(58, (255, 188, 118), 0.24 * base)
+    for side in (-1, 1):
+        surf.blit(spill, (x + side * 74 - 58, y - 18),
+                  special_flags=ADD)
 
 
 def draw_deluge(surf: pygame.Surface, geom: PadGeom, t_since: float,
@@ -456,28 +478,31 @@ def draw_deluge(surf: pygame.Surface, geom: PadGeom, t_since: float,
         return
     y = geom.deck_y
     grow = min(1.0, t_since / 2.2)            # cloud establishes ~2 s
-    warm = 0.65 * throttle
-    # back layer first (high, cool), then front rolls (low, warm)
+    warm = 1.0 * throttle                     # flame underlights the base
+    # translucent rolling smoke: a soft high backdrop, then lower billows
+    # that roll OUTWARD and stay grey (never the white wall that buries
+    # the vehicle). Underlit warm on the trench side while the engines
+    # burn, cool grey up top. Alphas kept low so the fire reads through.
     for layer, (h_up, a_top, tint) in enumerate((
-            (1.45, 76, (208, 212, 220)),
-            (1.0, 104, (225, 228, 234)),
-            (0.62, 128, (240, 242, 246)))):
+            (1.9, 60, (150, 156, 168)),       # high, soft, cool backdrop
+            (1.10, 74, (174, 180, 192)),
+            (0.55, 86, (198, 204, 214)))):     # low rolling billows
         for side in (-1, 1):
-            for slot in range(12):
+            for slot in range(16):
                 period = 1.7 + 0.9 * _r01(f"st|{layer}|{side}|{slot}")
                 phase = period * _r01(f"stp|{layer}|{side}|{slot}")
                 age = (t_since * 0.9 + phase) % period
                 u = age / period
-                reach = (24 + 130 * grow) * (0.10 + 0.90 * u)
-                x = geom.pad_x + side * (8 + reach
+                reach = (32 + 172 * grow) * (0.12 + 0.88 * u)
+                x = geom.pad_x + side * (12 + reach
                                          + 7 * math.sin(slot * 2.2))
-                rise = (10 + 46 * grow * h_up) * (u ** 1.4) \
-                    + 8 * math.sin(slot * 1.7)
-                r = int((8 + 26 * u + 12 * grow) * (0.8 + 0.25 * h_up))
+                rise = (8 + 38 * grow * h_up) * (u ** 1.3) \
+                    + 7 * math.sin(slot * 1.7)
+                r = int((9 + 27 * u + 12 * grow) * (0.8 + 0.25 * h_up))
                 spr = _puff_sprite(
                     max(3, r), tint,
-                    warm_side=warm * max(0.0, 1.0 - u) if side > 0
-                    else 0.0, key=f"steam{slot % 3}{side}")
+                    warm_side=warm * max(0.0, 1.0 - u * 1.15),
+                    key=f"steam{slot % 3}{side}")
                 if side < 0:
                     spr = pygame.transform.flip(spr, True, False)
                 a = int(a_top * (1.0 - u * u) * min(1.0, t_since * 2.0))
