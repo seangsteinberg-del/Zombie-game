@@ -5298,7 +5298,7 @@ def run(argv: list[str] | None = None) -> int:
             bloom.apply(screen)
 
             # ---- HUD ----
-            screen.blit(theme.panel(258, 236, "PROX-OPS"), (16, 16))
+            screen.blit(theme.panel(258, 260, "PROX-OPS"), (16, 16))
             hx, hy = 32, 52
             cl = prox.closing_ms
             for txt, col in (
@@ -5323,6 +5323,26 @@ def run(argv: list[str] | None = None) -> int:
                      else theme.COLORS["warn"])):
                 theme.draw_text(screen, hx, hy, txt, color=col, font="small")
                 hy += 21
+            # ---- DOCKING verdict: will this approach capture, or bounce the
+            #      ring? closing rate judged against the port's soft limit ----
+            if prox.range_m < 60.0 and prox.outcome is None:
+                _capl = prox.capture_limit_ms
+                if cl <= 0.001:
+                    _dv, _dc = "HOLDING — not closing", theme.COLORS["text_dim"]
+                elif cl <= _capl:
+                    _dv, _dc = "SOFT DOCK", theme.COLORS["good"]
+                elif cl <= _capl * 3.0:
+                    _dv, _dc = "FAST — EASE OFF", theme.COLORS["warn"]
+                else:
+                    _dv, _dc = "TOO FAST — WILL BOUNCE", theme.COLORS["danger"]
+                theme.draw_text(screen, hx, hy, _dv, color=_dc, font="small")
+                if prox.range_m < 12.0:
+                    _bigp = font_med.render(_dv, True, _dc)
+                    if _dc == theme.COLORS["good"] or int(ui_t * 4) % 2 == 0:
+                        screen.blit(
+                            _bigp, (size[0] // 2 - _bigp.get_width() // 2,
+                                    size[1] - 160))
+            hy += 22
             theme.draw_text(screen, hx, hy + 2, "RCS",
                             color=theme.COLORS["text_dim"], font="small")
             screen.blit(theme.bar(170, 10,
