@@ -8632,6 +8632,26 @@ def run(argv: list[str] | None = None) -> int:
                 screen.blit(vspr, (int(_bsx(vx_m) - vspr.get_width() / 2),
                                    int(_bsy(vx_m) - vspr.get_height())))
 
+            # Mars dust: a deterministic seasonal storm cycle veils the site
+            # in drifting wind-blown haze (atmospheric dusty worlds only)
+            _dust_i = 0.0
+            if site_def["body"] == "core:mars":
+                _phd = (t / 86_400.0) * 0.21
+                _dust_i = min(1.0, max(0.0, 0.55 + 0.45 * math.sin(_phd)
+                                       + 0.25 * math.sin(_phd * 5.3) - 0.62)
+                              * 1.7)
+            if os.environ.get("APH_QA_DUST"):
+                _dust_i = float(os.environ["APH_QA_DUST"])
+            if _dust_i > 0.05:
+                _veil = pygame.Surface((size[0], scene_h), pygame.SRCALPHA)
+                _veil.fill((188, 134, 92, int(120 * _dust_i)))
+                for _wi in range(int(16 * _dust_i)):
+                    _wy = (_wi * 173 + ui_t * (70 + _wi % 50)) % scene_h
+                    _wx = (ui_t * 240 + _wi * 91) % (size[0] + 220) - 110
+                    pygame.draw.line(_veil, (216, 172, 124, int(96 * _dust_i)),
+                                     (_wx, _wy), (_wx + 90, _wy + 7), 2)
+                screen.blit(_veil, (0, 0))
+
             # header strip: identity line + status chips
             screen.blit(theme.panel(size[0], 54), (0, 0))
             emitted, capacity = thermal_balance_kw(site_b.net)
