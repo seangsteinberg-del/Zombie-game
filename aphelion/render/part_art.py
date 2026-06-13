@@ -321,6 +321,20 @@ def _hab(s, w, h, spec, *, glow=(255, 224, 170), portholes=True, mli=True):
     cid = spec.get("catalog_id", "")
     inflatable = "INF" in cid
     lo, hi = (196, 198, 202), (236, 240, 244)
+    if w > h * 2.4:        # wide ring/hab SEGMENT — a horizontal hull, not a
+        s.blit(_cyl(w - 2, h - 2, lo, hi), (1, 1))      # vertical can w/ domes
+        pygame.draw.rect(s, _FRAME, (1, 1, w - 2, h - 2), 1)
+        for ex in (1, w - 5):                            # end ring frames
+            pygame.draw.rect(s, (120, 124, 134), (ex, 1, 4, h - 2))
+        n = max(3, int(w / 40))
+        for i in range(n):                               # window band
+            wx = int(w * (i + 0.5) / n)
+            pygame.draw.circle(s, _GLASS, (wx, h // 2), max(2, h // 5))
+            pygame.draw.circle(s, (90, 96, 110), (wx, h // 2), max(2, h // 5), 1)
+            pygame.draw.circle(s, glow, (wx, h // 2), max(1, h // 10))
+        pygame.draw.line(s, _GOLD, (6, int(h * 0.2)), (w - 6, int(h * 0.2)), 1)
+        pygame.draw.line(s, _GOLD, (6, int(h * 0.8)), (w - 6, int(h * 0.8)), 1)
+        return
     if inflatable:                                 # bulged fabric segments
         seg = max(2, int(h / max(1, round(h / 26))))
         y = 1
