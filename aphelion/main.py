@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import colorsys
 import hashlib
+import zlib
 import json
 import math
 import os
@@ -197,6 +198,8 @@ from aphelion.render import eva_art  # noqa: E402
 from aphelion.render import glpost  # noqa: E402
 from aphelion.render import vehicle_art  # noqa: E402
 from aphelion.sim.vehicles import locomotion  # noqa: E402
+from aphelion.sim.vehicles import marine  # noqa: E402
+from aphelion.sim.vehicles import wear as vwear  # noqa: E402
 from aphelion.render.tile_art import TileRenderer  # noqa: E402
 from aphelion.sim.vessels import autostage as dd_stage  # noqa: E402
 from aphelion.sim.vessels.buildermath import stage_report  # noqa: E402
@@ -285,14 +288,15 @@ def _surface_options(av, bases, db=None,
         # V5: vehicles parked at this site + the base motor pool
         for gv in vehicles:
             if gv.site_id == av.landed_at:
+                kind_v = gv.catalog_id.rsplit(":", 1)[-1]
+                verb_v = ("dive" if kind_v in ("sub_t", "boat_t")
+                          else "drive")
                 opts.append((
-                    ("drive", gv.vid),
-                    f"DRIVE {gv.name}   "
-                    f"({gv.catalog_id.rsplit(':', 1)[-1].upper()}, charge "
+                    (verb_v, gv.vid),
+                    f"{verb_v.upper()} {gv.name}   "
+                    f"({kind_v.upper()}, charge "
                     f"{100.0 * gv.energy_kwh / max(gv.pack_kwh, 1e-9):.0f}%"
-                    f", cond {100.0 * gv.cond:.0f}%"
-                    + (", EMBEDDED" if getattr(gv, "stuck", False) else "")
-                    + ")"))
+                    f", cond {100.0 * gv.cond:.0f}%)"))
         if home is not None and db is not None:
             from aphelion.game import motorpool as _mp
             vrows = db.by_type("vehicles")
@@ -885,7 +889,7 @@ def run(argv: list[str] | None = None) -> int:
                         choices=["auto", "menu", "flight", "builder", "base",
                                  "research", "research_ed", "research_codex",
                                  "ascent", "descent", "eva", "mine",
-                                 "drive",
+                                 "drive", "dive",
                                  "drydock", "proxops", "aboard", "help",
                                  "contracts", "crew", "pause", "planner"])
     args = parser.parse_args(argv)
@@ -1219,6 +1223,18 @@ def run(argv: list[str] | None = None) -> int:
     planner_cursor = 0
     warp_to_node = False
     ca_cache = {"at": -1e9, "tgt": None, "d": None, "t": 0.0}
+    # V5 dive scene state (Titan seas)
+    dive_gv = None
+    dive_av = None
+    dive_x = 200.0                    # m along the sea section
+    dive_depth = 0.0
+    dive_vx = 0.0
+    dive_vz = 0.0
+    dive_face = 1
+    dive_warn_t = -1e9
+    dive_painted: set = set()         # sonar-mapped 50 m cells (DSC-14)
+    dive_ping_t = -1e9
+    dive_bg_cache: dict = {}
     # V5 drive scene state
     drive_gv = None                   # GroundVehicle at the wheel
     drive_av = None                   # the landed vessel anchoring the site
@@ -1318,6 +1334,34 @@ def run(argv: list[str] | None = None) -> int:
         drive_av = _fvq
         drive_x = 24.0
         scene = "drive"
+    elif want == "dive":                # QA: SUB-T in a Titan sea
+        from aphelion.sim.vessels.vessel import Vessel as _V
+        _rows = [_V.fueled_row(db, "core:engine_ml111"),
+                 _V.fueled_row(db, "core:tank_ml_s"),
+                 _V.fueled_row(db, "core:capsule_vela")]
+        _tsid = next((s for s, v in SITES.items()
+                      if v.get("body") == "core:titan"), None) or "site:peary"
+        _tb = tree.body(SITES[_tsid]["body"])
+        _rq = _tb.radius + 100e3
+        _el = state_to_elements(_rq, 0.0, 0.0,
+                                tr.circular_speed(_tb.mu, _rq), 0.0, _tb.mu)
+        _fvq = FleetVessel(tree, SITES[_tsid]["body"], _el,
+                           _V(db, _rows, stage_plan=[[0, 1, 2]]),
+                           "DIVE-QA", next_vid, crew=["V. Ainsworth"])
+        next_vid += 1
+        _fvq.land_at(_tsid, SITES[_tsid], 0.0)
+        vessels.append(_fvq)
+        from aphelion.game import motorpool as _mpq
+        dive_gv = _mpq.GroundVehicle(
+            vid=901, catalog_id="core:sub_t", name="MAKO-QA",
+            body=SITES[_tsid]["body"], site_id=_tsid, pack_kwh=20.0,
+            energy_kwh=18.0, rtg_we=330.0, park_x_m=20.0)
+        dive_gv.dry_t = 1.5
+        ground_vehicles.append(dive_gv)
+        dive_av = _fvq
+        dive_x = 200.0
+        dive_depth = 12.0
+        scene = "dive"
     elif want == "drydock":             # QA: a two-stage demo on the grid
         _ps = db.by_type("parts")
         for _pid, _px, _py in (("core:engine_m2256", 2, 0),
@@ -1982,6 +2026,36 @@ def run(argv: list[str] | None = None) -> int:
                             audio.play("paid")
                     elif event.key == pygame.K_ESCAPE:
                         scene = "flight"
+            elif scene == "dive":
+                if event.type == pygame.KEYDOWN and dive_gv is not None:
+                    if event.key in (pygame.K_e, pygame.K_ESCAPE):
+                        if dive_depth > 3.0 and event.key == pygame.K_e:
+                            toast = (f"{dive_depth:,.0f} m down — blow "
+                                     f"ballast (W) and surface first")
+                            toast_until = t + 5
+                            audio.play("warn")
+                        else:
+                            toast = (f"{dive_gv.name} MOORED — hull "
+                                     f"{100.0 * dive_gv.cond:.0f}%, "
+                                     f"{len(dive_painted) * 50} m of "
+                                     f"seafloor mapped")
+                            toast_until = t + 7
+                            dive_gv, dive_av = None, None
+                            scene = "flight"
+                            audio.play("clunk")
+                    elif event.key == pygame.K_q:
+                        dive_ping_t = t
+                        audio.play("blip")
+                        cell_q = int(dive_x // 50.0)
+                        new_q = [c for c in (cell_q - 1, cell_q, cell_q + 1)
+                                 if c not in dive_painted]
+                        if new_q:
+                            dive_painted.update(new_q)
+                            research.earn_science(2.0 * len(new_q))
+                            toast = (f"SONAR SWATH MAPPED "
+                                     f"(+{2 * len(new_q)} sci, DSC-14 "
+                                     f"bathymetry)")
+                            toast_until = t + 5
             elif scene == "drive":
                 if event.type == pygame.KEYDOWN and drive_gv is not None:
                     if event.key in (pygame.K_e, pygame.K_ESCAPE):
@@ -2408,6 +2482,21 @@ def run(argv: list[str] | None = None) -> int:
                             scene = "drive"
                             toast = (f"{gv_d.name} POWERED UP — A/D "
                                      f"drive, E park & dismount")
+                            toast_until = t + 8
+                            audio.play("clunk")
+                    elif action[0] == "dive":
+                        gv_d = next((g for g in ground_vehicles
+                                     if g.vid == action[1]), None)
+                        if gv_d is not None:
+                            dive_gv, dive_av = gv_d, av0
+                            dive_x = gv_d.park_x_m * 10.0
+                            dive_depth, dive_vx, dive_vz = 0.0, 0.0, 0.0
+                            dive_face = 1
+                            dive_painted = set()
+                            surface_open = False
+                            scene = "dive"
+                            toast = (f"{gv_d.name} CASTS OFF — A/D thrust, "
+                                     f"W/S ballast, Q sonar, E surfaces")
                             toast_until = t + 8
                             audio.play("clunk")
                     elif action[0] == "mp_no":
@@ -4483,6 +4572,196 @@ def run(argv: list[str] | None = None) -> int:
                 "B send to pad   Y yard blueprint   ESC back"),
                 (0, size[1] - theme.FOOTER_H))
             screen.blit(vig, (0, 0))
+            present_frame()
+            frame_count += 1
+            if args.frames and frame_count >= args.frames:
+                running = False
+            continue
+
+        if scene == "dive" and dive_gv is not None and dive_av is not None:
+            # ---- THE DIVE (V5): a Titan sea by RTG light (10 §2.7) ----
+            clock.advance_analytic(clock.t + EVA_TIME_FACTOR * real_dt)
+            t = clock.t
+            keys = pygame.key.get_pressed()
+            mvx = ((keys[pygame.K_d] or keys[pygame.K_RIGHT])
+                   - (keys[pygame.K_a] or keys[pygame.K_LEFT]))
+            mvz = ((keys[pygame.K_s] or keys[pygame.K_DOWN])
+                   - (keys[pygame.K_w] or keys[pygame.K_UP]))
+            # SUB-T closes at ~1 m/s on 50 W prop; ballast pumps ±0.5 m/s
+            dive_vx += max(-0.8 * real_dt, min(0.8 * real_dt,
+                                               mvx * 1.0 - dive_vx))
+            dive_vz += max(-0.6 * real_dt, min(0.6 * real_dt,
+                                               mvz * 0.5 - dive_vz))
+            if mvx:
+                dive_face = mvx
+            sid_v = f"{dive_av.landed_at}|sea"
+
+            def _floor_m(wx: float) -> float:
+                s1 = (zlib.crc32(sid_v.encode()) % 628) / 100.0
+                return max(15.0, min(280.0,
+                                     90.0 + 55.0 * math.sin(wx * 0.011 + s1)
+                                     + 24.0 * math.sin(wx * 0.041 + 2 * s1)
+                                     + 9.0 * math.sin(wx * 0.13 + 3 * s1)))
+
+            dt_sim = real_dt * EVA_TIME_FACTOR
+            dive_x += dive_vx * dt_sim
+            floor_here = _floor_m(dive_x)
+            dive_depth = max(0.0, min(floor_here - 2.5,
+                                      dive_depth + dive_vz * dt_sim))
+            # hull clock: pressure vs the H1 rating (V-21)
+            p_now = marine.pressure_pa(dive_depth)
+            p_rated = marine.pressure_pa(300.0)
+            hull_frac = p_now / p_rated
+            if hull_frac > 1.0:
+                dive_gv.cond = max(0.0, dive_gv.cond
+                                   - marine.OVERPRESSURE_LEAK_PER_MIN
+                                   * ((hull_frac - 1.0) * 10.0)
+                                   * (dt_sim / 60.0))
+                if t - dive_warn_t > 4.0:
+                    dive_warn_t = t
+                    toast = (f"HULL OVER RATING ({dive_depth:,.0f} m) — "
+                             f"leaking {100 * dive_gv.cond:.0f}%; CLIMB")
+                    toast_until = t + 4
+                    audio.play("alarm")
+                if dive_gv.cond <= 0.0:
+                    ground_vehicles.remove(dive_gv)
+                    toast = (f"{dive_gv.name} CRUSHED at "
+                             f"{dive_depth:,.0f} m — hull failure")
+                    toast_until = t + 12
+                    dive_gv, dive_av = None, None
+                    scene = "flight"
+                    audio.play("boom")
+                    continue
+            # hull wear ticks per dive-hour (V-24c)
+            dive_gv.cond = max(0.0, dive_gv.cond
+                               - vwear.dc_hull(dt_sim / 3600.0))
+
+            # ---- draw: methane gloom by depth ----
+            bkt = int(dive_depth // 8)
+            bgd = dive_bg_cache.get(bkt)
+            if bgd is None:
+                bgd = pygame.Surface(size)
+                f0 = max(0.0, 1.0 - bkt * 8.0 / 240.0)
+                top = (int(8 + 40 * f0), int(22 + 52 * f0),
+                       int(26 + 44 * f0))
+                bot = (max(2, top[0] - 14), max(4, top[1] - 22),
+                       max(6, top[2] - 18))
+                for yy in range(0, size[1], 4):
+                    fy2 = yy / size[1]
+                    cc = tuple(int(top[c] + (bot[c] - top[c]) * fy2)
+                               for c in range(3))
+                    pygame.draw.rect(bgd, cc, (0, yy, size[0], 4))
+                dive_bg_cache[bkt] = bgd
+            screen.blit(bgd, (0, 0))
+            ppm_v = 6.0
+            cy_px = size[1] * 0.42
+
+            def _sxv(wx: float) -> float:
+                return size[0] / 2.0 + (wx - dive_x) * ppm_v
+
+            def _syv2(d_m: float) -> float:
+                return cy_px + (d_m - dive_depth) * ppm_v
+
+            # surface shimmer when shallow
+            if dive_depth < 35.0:
+                sy0 = _syv2(0.0)
+                for k in range(4):
+                    a_s = max(0, 70 - k * 18 - int(dive_depth))
+                    if a_s > 0 and -40 < sy0 + k * 3 < size[1]:
+                        srf = pygame.Surface((size[0], 2), pygame.SRCALPHA)
+                        srf.fill((150, 190, 200, a_s))
+                        screen.blit(srf, (0, sy0 + k * 3))
+            # marine snow (deterministic drift)
+            for i in range(46):
+                px_s = (i * 173.31 + t * (2.0 + i % 5)) % (size[0] + 40) - 20
+                py_s = (i * 97.7 + t * (5.0 + i % 7)) % (size[1] + 30) - 15
+                b_s = 60 + (i * 37) % 70
+                screen.fill((b_s, b_s + 8, b_s + 6),
+                            (int(px_s), int(py_s), 2, 2),
+                            special_flags=pygame.BLEND_ADD)
+            # the sea floor: silhouette polygon + sonar-lit crest
+            pts_f = [(x_px, _syv2(_floor_m(dive_x
+                                           + (x_px - size[0] / 2) / ppm_v)))
+                     for x_px in range(-8, size[0] + 9, 16)]
+            poly_f = pts_f + [(size[0] + 8, size[1] + 8), (-8, size[1] + 8)]
+            pygame.draw.polygon(screen, (14, 18, 20), poly_f)
+            ping_age = t - dive_ping_t
+            crest_c = ((120, 220, 200) if ping_age < 5.0
+                       else (40, 56, 56))
+            pygame.draw.lines(screen, crest_c, False, pts_f,
+                              2 if ping_age < 5.0 else 1)
+            if ping_age < 2.2:                      # expanding ping ring
+                pygame.draw.circle(
+                    screen, (90, 200, 180),
+                    (int(size[0] / 2), int(cy_px)),
+                    int(30 + ping_age * 220), 2)
+            # headlight + the boat
+            beam = vehicle_art.headlight_beam(20.0, dive_face)
+            bx_v = (size[0] / 2 if dive_face > 0
+                    else size[0] / 2 - beam.get_width())
+            screen.blit(beam, (bx_v, cy_px - beam.get_height() / 2),
+                        special_flags=pygame.BLEND_ADD)
+            sspr_v = vehicle_art.vehicle_sprite(dive_gv.catalog_id, 16.0,
+                                                dive_face)
+            rock_v = 2.5 * math.sin(t * 0.6)
+            sspr_v = pygame.transform.rotozoom(sspr_v, rock_v, 1.0)
+            screen.blit(sspr_v, (size[0] / 2 - sspr_v.get_width() / 2,
+                                 cy_px - sspr_v.get_height() / 2))
+            if abs(dive_vx) > 0.1 or abs(dive_vz) > 0.1:  # prop bubbles
+                for k in range(5):
+                    bx2 = (size[0] / 2 - dive_face
+                           * (sspr_v.get_width() / 2 + 6 + k * 7
+                              + (t * 40) % 7))
+                    by2 = cy_px + 4 * math.sin(t * 7 + k * 1.7)
+                    pygame.draw.circle(screen, (70, 110, 110),
+                                       (int(bx2), int(by2)), 1 + k % 2)
+
+            # depth tape (right edge) + hull bar
+            tape_x = size[0] - 56
+            pygame.draw.line(screen, (70, 90, 92), (tape_x, 40),
+                             (tape_x, size[1] - 60), 1)
+            for dm in range(0, 320, 20):
+                ty = _syv2(float(dm))
+                if 30 < ty < size[1] - 50:
+                    pygame.draw.line(screen, (90, 116, 118),
+                                     (tape_x - 6, ty), (tape_x, ty), 1)
+                    theme.draw_text(screen, tape_x + 6, ty - 7, f"{dm}",
+                                    color=theme.COLORS["text_dim"],
+                                    font="small")
+            ry = _syv2(300.0)
+            if 30 < ry < size[1] - 50:
+                pygame.draw.line(screen, theme.COLORS["danger"],
+                                 (tape_x - 10, ry), (tape_x + 34, ry), 2)
+            pygame.draw.polygon(screen, theme.COLORS["accent"],
+                                ((tape_x - 14, cy_px), (tape_x - 6, cy_px - 5),
+                                 (tape_x - 6, cy_px + 5)))
+            chips_v = [
+                (dive_gv.name, theme.COLORS["text"]),
+                (f"depth {dive_depth:5.0f} m", theme.COLORS["accent"]),
+                (f"hull {100.0 * min(hull_frac, 1.5):3.0f}% of rating",
+                 theme.COLORS["danger"] if hull_frac > 1.0 else
+                 theme.COLORS["warn"] if hull_frac > 0.85 else
+                 theme.COLORS["text_dim"]),
+                (f"{abs(dive_vx):3.1f} m/s", theme.COLORS["text_dim"]),
+                (f"cond {100.0 * dive_gv.cond:3.0f}%",
+                 theme.COLORS["warn"] if dive_gv.cond < 0.5
+                 else theme.COLORS["text_dim"]),
+                (f"mapped {len(dive_painted) * 50} m",
+                 theme.COLORS["text_dim"]),
+                ("RTG 330 We" if dive_gv.rtg_we > 0 else "BATTERY",
+                 theme.COLORS["text_dim"]),
+            ]
+            chx_v = 10
+            for chip_txt, chip_col in chips_v:
+                cs = theme.chip(chip_txt, chip_col)
+                screen.blit(cs, (chx_v, 8))
+                chx_v += cs.get_width() + 8
+            screen.blit(theme.footer(
+                size[0], "A/D thrust   W/S ballast   Q sonar ping   "
+                         "E surface & moor"),
+                (0, size[1] - theme.FOOTER_H))
+            screen.blit(vig, (0, 0))
+            apply_flash()
             present_frame()
             frame_count += 1
             if args.frames and frame_count >= args.frames:
