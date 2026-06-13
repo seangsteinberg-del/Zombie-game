@@ -1337,6 +1337,10 @@ def run(argv: list[str] | None = None) -> int:
     scene = "menu" if want == "menu" else "flight"
     if want == "builder":
         builder_open = True
+        if os.environ.get("APH_QA_STACK") == "1":   # QA: a demo vessel
+            builder.load_stack([["core:engine_m2256", "core:tank_ml_m",
+                                 "core:st_dc2", "core:engine_ml24",
+                                 "core:tank_ml_s", "core:capsule_vela"]])
     elif want == "research":
         research_open = True
     elif want == "base":
@@ -8973,6 +8977,21 @@ def run(argv: list[str] | None = None) -> int:
                 total_dv = sum(s["dv_vac"] for s in stats)
                 cost = builder.price(vessel)
                 h_m, d_m = vessel_metrics(db, builder.stack)
+                # MISSION REACH vs the canon Δv map (01 §1.2): can it get there?
+                _DESTS_B = (("LEO", 9400), ("Earth escape", 12600),
+                            ("Venus transfer", 12880), ("Mars transfer", 12990),
+                            ("Mars orbit", 13040), ("GEO", 13300),
+                            ("lunar orbit", 13340), ("Mars surface", 13640),
+                            ("a near-Earth asteroid", 14400),
+                            ("the lunar surface", 15240),
+                            ("Jupiter transfer", 15700))
+                _reach_b = [d for d in _DESTS_B if total_dv >= d[1]]
+                _nxt_b = next((d for d in _DESTS_B if total_dv < d[1]), None)
+                _reach_txt = (f"reaches {_reach_b[-1][0]}" if _reach_b
+                              else f"+{9400 - total_dv:,.0f} m/s to orbit")
+                _reach_col = (theme.COLORS["accent"] if not _reach_b
+                              else theme.COLORS["good"] if not _nxt_b
+                              else theme.COLORS["gold"])
                 for ci, (txt, col) in enumerate((
                         (f"dv {total_dv:,.0f} m/s", theme.COLORS["good"]),
                         (f"{vessel.total_mass_kg()/1e3:,.1f} t   "
@@ -8980,8 +8999,9 @@ def run(argv: list[str] | None = None) -> int:
                          theme.COLORS["accent"]),
                         (f"${cost/1e6:,.0f}M of ${program.funds/1e6:,.0f}M",
                          theme.COLORS["gold"] if cost <= program.funds
-                         else theme.COLORS["danger"]))):
-                    screen.blit(theme.chip(txt, col), (sx0, size[1] - 138 + ci * 26))
+                         else theme.COLORS["danger"]),
+                        (_reach_txt, _reach_col))):
+                    screen.blit(theme.chip(txt, col), (sx0, size[1] - 164 + ci * 26))
                 # the rocket, as large as the bay allows (crisp nearest)
                 vspr = vessel_sprite(db, builder.stack)
                 if vspr.get_width() > 4:
