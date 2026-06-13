@@ -6982,6 +6982,46 @@ def run(argv: list[str] | None = None) -> int:
                         f"({'draw' if mod.power_kw >= 0 else 'gen'})",
                         color=theme.COLORS["text"], font="small")
                     yy += 20
+                    # PROCESS: what this module actually turns into what, per
+                    # day, straight off its ledger recipe — so every module
+                    # reads as deliberate, not just a box with a light
+                    _dps = mod.rate_kgps * 86_400.0
+                    _ins = [(r, s * _dps) for r, s in mod.inputs.items()
+                            if s * _dps > 0.05]
+                    _outs = [(r, s * _dps) for r, s in mod.outputs.items()
+                             if s * _dps > 0.05]
+                    if _ins or _outs:
+                        theme.draw_text(screen, pxp + 16, yy, "PROCESS /day",
+                                        color=theme.COLORS["gold"],
+                                        font="small")
+                        yy += 17
+                        for _lbl, _items, _c in (
+                                ("uses ", _ins, theme.COLORS["text_dim"]),
+                                ("makes", _outs, theme.COLORS["good"])):
+                            if not _items:
+                                continue
+                            theme.draw_text(
+                                screen, pxp + 16, yy,
+                                _lbl + "  " + "   ".join(
+                                    f"{v:,.1f} {r[:9]}"
+                                    for r, v in _items[:2]),
+                                color=_c, font="small")
+                            yy += 16
+                        yy += 3
+                    elif mkey:
+                        _ROLE = {
+                            "hab_module": "crew quarters — sleep & off-duty",
+                            "med_bay": "medical — scans & treatment",
+                            "science_lab": "research bench — sample work",
+                            "machine_shop": "fabrication floor",
+                            "cupola": "the view — morale",
+                        }
+                        if mkey in _ROLE:
+                            theme.draw_text(screen, pxp + 16, yy,
+                                            _ROLE[mkey],
+                                            color=theme.COLORS["text_dim"],
+                                            font="small")
+                            yy += 20
                     # operate it from the console — a real control with a
                     # live effect on the colony grid (09 P-1 dispatch)
                     _on = mod.state.upper() in ("RUNNING", "STARVED",
