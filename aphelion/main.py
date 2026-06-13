@@ -5114,6 +5114,9 @@ def run(argv: list[str] | None = None) -> int:
             chy = cy0 - int(prox.x * sc)
             # RCS puffs: cold-gas jets fire opposite the commanded accel,
             # at the chaser, fading fast — clear feedback that you thrusted
+            if os.environ.get("APH_QA_RCS") == "1":     # QA: force RCS puffs
+                prox_rcs.append([1.0 if frame_count % 6 < 3 else -1.0,
+                                 0.5, 0.0])
             _kept_rcs = []
             for _rc in prox_rcs:
                 _rc[2] += real_dt
