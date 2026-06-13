@@ -8069,6 +8069,40 @@ def run(argv: list[str] | None = None) -> int:
             screen.fill((6, 8, 14))      # opaque: the map fully yields
             screen.blit(sky_strip(site_def["kind"], size[0], scene_h,
                                   daylight * site_def["solar"]), (0, 0))
+            # CELESTIAL LAYER: the parent world hanging over the site (an
+            # Earthrise over a lunar base, Jupiter looming over Europa) plus
+            # the sun disk camera-left — the sky becomes a place, not a void.
+            from aphelion.render.base_art import kind_palette as _kpal
+            from aphelion.ui.theme import _mix as _mixc, _seed as _seedc
+            _airless_b = _kpal(site_def["kind"])[4]
+            try:
+                _pid_b = tree.body(site_def["body"]).parent
+                _is_moon = (_pid_b is not None
+                            and tree.body(_pid_b).parent is not None)
+            except Exception:
+                _pid_b, _is_moon = None, False
+            if _is_moon:
+                _psp = body_sprite(_pid_b, 150, sun_angle=3.5)
+                screen.blit(_psp, (int(size[0] * 0.72 - _psp.get_width() / 2),
+                                   int(scene_h * 0.20 - _psp.get_height() / 2)))
+            if daylight > 0.28:           # the sun, when it's above the horizon
+                _ssp = sun_sprite(38 if _airless_b else 28)
+                screen.blit(_ssp, (int(size[0] * 0.13 - _ssp.get_width() / 2),
+                                   int(scene_h * 0.30 - _ssp.get_height() / 2)))
+            # parallax ridge silhouettes — distant relief behind the colony
+            _hpal = _kpal(site_def["kind"])
+            _rngh = np.random.default_rng(_seedc(site_b.site_id + "skyline"))
+            for amp, base_f, mixf in ((20, 0.50, 0.34), (34, 0.60, 0.6)):
+                col_h = _mixc(_hpal[0], (8, 9, 14) if _airless_b
+                              else _hpal[2], 1.0 - mixf)
+                col_h = _mixc(col_h, (0, 0, 0), 0.32 if _airless_b else 0.12)
+                nseg = 11
+                hs = [int(scene_h * base_f + _rngh.integers(-amp, amp + 1))
+                      for _ in range(nseg)]
+                pts = [(0, scene_h)] + [
+                    (int(size[0] * i / (nseg - 1)), hs[i])
+                    for i in range(nseg)] + [(size[0], scene_h)]
+                pygame.draw.polygon(screen, col_h, pts)
             # ONE WORLD: the colony is a pulled-back camera over the SAME
             # tile cross-section you walk in EVA — real strata, the tunnels
             # you dug, modules at their real ground coordinates. F2 just
@@ -8091,6 +8125,26 @@ def run(argv: list[str] | None = None) -> int:
 
             def _bsy(wx: float) -> float:
                 return y0_b - (tiles_b.surface_y(wx) - cam_cy) * ppm_b
+
+            # surface scatter: boulders strewn on the real ground break the
+            # flat tile horizon; each grounded by a sun-left contact shadow
+            _rock_lo = _mixc(_hpal[0], (0, 0, 0), 0.18)
+            _rock_hi = _mixc(_hpal[1], (255, 255, 255), 0.12)
+            _rngr = np.random.default_rng(_seedc(site_b.site_id + "rocks"))
+            for _ in range(16):
+                wx_r = cam_cx + _rngr.uniform(-0.55, 0.55) * (span_b + 60.0)
+                sx_r, sy_r = _bsx(wx_r), _bsy(wx_r)
+                if not (-10 < sx_r < size[0] + 10):
+                    continue
+                r_r = int(_rngr.integers(2, 6))
+                pygame.draw.ellipse(screen, (8, 9, 13),
+                                    (int(sx_r - r_r), int(sy_r - 1),
+                                     int(r_r * 3.0), max(2, r_r)))
+                pygame.draw.circle(screen, _rock_lo,
+                                   (int(sx_r), int(sy_r - r_r // 2)), r_r)
+                pygame.draw.circle(screen, _rock_hi,
+                                   (int(sx_r - 1), int(sy_r - r_r // 2 - 1)),
+                                   max(1, r_r - 2))
 
             state_cols = {"RUNNING": theme.COLORS["good"],
                           "FAILED": theme.COLORS["danger"],
