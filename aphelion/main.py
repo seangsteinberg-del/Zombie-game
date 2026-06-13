@@ -1301,6 +1301,29 @@ def run(argv: list[str] | None = None) -> int:
         write_campaign(path or qs_path, snap)
         return label
 
+    # ONE WORLD: every view of a surface site reads the SAME tile world.
+    # slope_sigma comes from the sector data with ONE default everywhere
+    # (the drive/EVA mismatch — 4.0 vs 8.0 — is gone), and the TileWorld
+    # (with its dug tunnels) is cached per sector so the colony command
+    # view, the EVA walk, and the drive scene are literally one place.
+    site_tiles_cache: dict = {}
+
+    def site_slope(sector_id: str) -> float:
+        return float(db.by_type("sectors").get(sector_id, {}).get(
+            "slope_sigma", 4.0))
+
+    def tiles_for(sector_id: str, kind: str, body: str):
+        """Cached (TileWorld, TileRenderer) for a sector — one world
+        shared by colony/EVA/drive; dug tunnels persist through explore."""
+        got = site_tiles_cache.get(sector_id)
+        if got is None:
+            tw = tileworld.TileWorld(
+                sector_id, site_slope(sector_id), kind,
+                dug=explore.setdefault("dug", {}).get(sector_id, []))
+            got = (tw, TileRenderer(tw, ground_palette(body)))
+            site_tiles_cache[sector_id] = got
+        return got
+
     want = args.scene
     if want == "auto":
         want = "flight" if (args.frames or args.headless) else "menu"
@@ -2899,18 +2922,14 @@ def run(argv: list[str] | None = None) -> int:
                         g_loc = body_w.mu / (body_w.radius ** 2)
                         sec_id = SITES[av0.landed_at].get(
                             "sector_id", av0.landed_at)
-                        slope = db.by_type("sectors").get(
-                            sec_id, {}).get("slope_sigma", 4.0)
-                        eva_tiles = tileworld.TileWorld(
-                            sec_id, slope,
+                        # ONE WORLD: walk the SAME cached tile world the
+                        # colony command view shows — dig here, see it there
+                        eva_tiles, eva_tr = tiles_for(
+                            sec_id,
                             SITES[av0.landed_at].get("kind", "regolith"),
-                            dug=explore.setdefault("dug", {}).get(
-                                sec_id, []))
-                        eva_tr = TileRenderer(
-                            eva_tiles,
-                            ground_palette(SITES[av0.landed_at]["body"]))
+                            SITES[av0.landed_at]["body"])
                         eva_state = eva_sim.EvaState(
-                            sec_id, slope, g_loc, av0.crew[0],
+                            sec_id, site_slope(sec_id), g_loc, av0.crew[0],
                             tiles=eva_tiles)
                         eva_av = av0
                         eva_camy = eva_state.y
@@ -5570,10 +5589,9 @@ def run(argv: list[str] | None = None) -> int:
                                             locomotion.TERRAIN["regolith"])
             if drive_tiles is None:
                 sec_d = site_d.get("sector_id", drive_av.landed_at)
-                drive_tiles = tileworld.TileWorld(
-                    sec_d, 4.0, site_d.get("kind", "regolith"),
-                    dug=explore.setdefault("dug", {}).get(sec_d, []))
-                drive_tr = TileRenderer(drive_tiles, ground_palette(body_d))
+                # ONE WORLD: the same cached tile world EVA/colony use
+                drive_tiles, drive_tr = tiles_for(
+                    sec_d, site_d.get("kind", "regolith"), body_d)
                 drive_camy = drive_tiles.surface_y(drive_x)
 
             keys = pygame.key.get_pressed()
@@ -7622,9 +7640,29 @@ def run(argv: list[str] | None = None) -> int:
             screen.fill((6, 8, 14))      # opaque: the map fully yields
             screen.blit(sky_strip(site_def["kind"], size[0], scene_h,
                                   daylight * site_def["solar"]), (0, 0))
-            terr, ridge = terrain_strip(site_b.site_id, site_def["kind"],
-                                        size[0], 300)
-            screen.blit(terr, (0, scene_h - 300))
+            # ONE WORLD: the colony is a pulled-back camera over the SAME
+            # tile cross-section you walk in EVA — real strata, the tunnels
+            # you dug, modules at their real ground coordinates. F2 just
+            # zooms out; stepping out (EVA) zooms back in to a walker.
+            sec_b = site_def.get("sector_id", site_b.site_id)
+            tiles_b, tr_b = tiles_for(sec_b, site_def["kind"],
+                                      site_def["body"])
+            mod_x = eva_sim.module_positions([m.module_id for m in mods])
+            xs_b = list(mod_x.values()) or [28.0]
+            span_b = max(xs_b) - min(xs_b)
+            cam_cx = 0.5 * (min(xs_b) + max(xs_b))
+            ppm_b = max(2.4, min(9.0, size[0] / max(span_b + 70.0, 90.0)))
+            y0_b = scene_h - 54
+            cam_cy = tiles_b.surface_y(cam_cx)
+            tr_b.draw(screen, cam_cx, cam_cy, (size[0], scene_h), ppm_b,
+                      y0_b)
+
+            def _bsx(wx: float) -> float:
+                return size[0] / 2.0 + (wx - cam_cx) * ppm_b
+
+            def _bsy(wx: float) -> float:
+                return y0_b - (tiles_b.surface_y(wx) - cam_cy) * ppm_b
+
             state_cols = {"RUNNING": theme.COLORS["good"],
                           "FAILED": theme.COLORS["danger"],
                           "STARVED": theme.COLORS["warn"],
@@ -7634,18 +7672,24 @@ def run(argv: list[str] | None = None) -> int:
             for mi, m in enumerate(mods):
                 key = m.module_id.rsplit("_", 1)[0]
                 spr = module_sprite(key)
-                mx0 = 56 + mi * 102
-                gy = (scene_h - 300
-                      + ridge[min(mx0 + 44, size[0] - 1)])
+                bx_b = mod_x.get(mi, 28.0 + 16.0 * mi)
                 bob = (int(2.0 * math.sin(ui_t * 3.0 + mi))
                        if key == "drill_ice" and m.state == "RUNNING" else 0)
-                my0 = gy - spr.get_height() + 10 + bob
+                sx_b = _bsx(bx_b)
+                sy_b = _bsy(bx_b) + 6 + bob       # base sits on the ground
+                mx0 = int(sx_b - spr.get_width() / 2)
+                my0 = int(sy_b - spr.get_height())
+                # contact shadow grounds the structure (art bible rule 0)
+                _sh = pygame.Surface((spr.get_width(), 10), pygame.SRCALPHA)
+                pygame.draw.ellipse(_sh, (0, 0, 0, 90),
+                                    (0, 0, spr.get_width(), 10))
+                screen.blit(_sh, (mx0, int(sy_b) - 5))
                 screen.blit(spr, (mx0, my0))
                 col = state_cols.get(m.state, theme.COLORS["text"])
                 pulse = (0.55 + 0.45 * math.sin(ui_t * 4.0 + mi)
                          if m.state != "OFF" else 0.25)
                 pygame.draw.circle(screen, tuple(int(c * pulse) for c in col),
-                                   (mx0 + 44, my0 - 8), 5)
+                                   (int(sx_b), my0 - 8), 5)
                 if key == "tank_farm":     # aggregate storage fill readout
                     tot = sum(b2.level for r2, b2 in
                               site_b.net.buffers.items() if r2 != "Battery")
@@ -7656,19 +7700,27 @@ def run(argv: list[str] | None = None) -> int:
                                 (mx0 + 12, my0 + spr.get_height() - 4))
                 if mi == mod_sel and mods:
                     pygame.draw.rect(screen, theme.COLORS["gold"],
-                                     (mx0 - 4, my0 - 16, 96, spr.get_height()
-                                      + 24), 1)
+                                     (mx0 - 4, my0 - 16, spr.get_width() + 8,
+                                      spr.get_height() + 24), 1)
                 overlay_rects["base"].append(
-                    (pygame.Rect(mx0 - 4, my0 - 16, 96,
+                    (pygame.Rect(mx0 - 4, my0 - 16, spr.get_width() + 8,
                                  spr.get_height() + 24), 30_000 + mi))
-            # residents stroll between the structures
+            # residents stroll the real ground between the structures
             for wi, wname in enumerate(site_b.crew[:6]):
-                span = max(len(mods), 1) * 102
-                wx = 70 + int((wi * 97 + ui_t * 11.0) % max(span, 120))
-                wy = (scene_h - 300
-                      + ridge[min(wx, size[0] - 1)] - 16)
-                screen.blit(walker_sprite(wname, int(ui_t * 2.0) + wi),
-                            (wx, wy))
+                wx_m = (min(xs_b) - 6.0
+                        + (wi * 13.0 + ui_t * 1.6)
+                        % max(span_b + 12.0, 18.0))
+                wspr = walker_sprite(wname, int(ui_t * 2.0) + wi)
+                screen.blit(wspr, (int(_bsx(wx_m) - wspr.get_width() / 2),
+                                   int(_bsy(wx_m) - wspr.get_height())))
+            # vehicles parked at the site sit on the same ground
+            for gv_b in ground_vehicles:
+                if gv_b.site_id != site_b.site_id:
+                    continue
+                vspr = vehicle_art.vehicle_sprite(gv_b.catalog_id, 7.0, 1)
+                vx_m = max(8.0, min(gv_b.park_x_m, max(xs_b) + 20.0))
+                screen.blit(vspr, (int(_bsx(vx_m) - vspr.get_width() / 2),
+                                   int(_bsy(vx_m) - vspr.get_height())))
 
             # header strip: identity line + status chips
             screen.blit(theme.panel(size[0], 54), (0, 0))
