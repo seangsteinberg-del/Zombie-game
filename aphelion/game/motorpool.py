@@ -41,6 +41,7 @@ class GroundVehicle:
     tracks: bool = False
     crewed: bool = False
     bricked_events: int = 0
+    park_x_m: float = 26.0           # position on the site cross-section
 
     # -- driving (called by the drive scene per sim step) -----------------
 
@@ -97,7 +98,8 @@ class GroundVehicle:
                 "odo_km": self.odo_km, "cargo_t": self.cargo_t,
                 "rtg_we": self.rtg_we, "tracks": self.tracks,
                 "crewed": self.crewed, "dry_t": self.dry_t,
-                "bricked_events": self.bricked_events}
+                "bricked_events": self.bricked_events,
+                "park_x_m": self.park_x_m}
 
     @staticmethod
     def from_dict(d: dict) -> "GroundVehicle":
@@ -111,7 +113,8 @@ class GroundVehicle:
             rtg_we=float(d.get("rtg_we", 0.0)),
             tracks=bool(d.get("tracks", False)),
             crewed=bool(d.get("crewed", False)),
-            bricked_events=int(d.get("bricked_events", 0)))
+            bricked_events=int(d.get("bricked_events", 0)),
+            park_x_m=float(d.get("park_x_m", 26.0)))
         gv.dry_t = float(d.get("dry_t", 1.0))
         return gv
 

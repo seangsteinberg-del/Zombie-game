@@ -195,6 +195,8 @@ from aphelion.game import eva as eva_sim  # noqa: E402
 from aphelion.game import tileworld  # noqa: E402
 from aphelion.render import eva_art  # noqa: E402
 from aphelion.render import glpost  # noqa: E402
+from aphelion.render import vehicle_art  # noqa: E402
+from aphelion.sim.vehicles import locomotion  # noqa: E402
 from aphelion.render.tile_art import TileRenderer  # noqa: E402
 from aphelion.sim.vessels import autostage as dd_stage  # noqa: E402
 from aphelion.sim.vessels.buildermath import stage_report  # noqa: E402
@@ -210,8 +212,26 @@ from aphelion.sim.environment.space_env import (  # noqa: E402
     SpeSchedule, spe_distance_factor)
 
 
+def _drive_terrain_key(site: dict) -> str:
+    """Map a landing site onto the 10 §2.1 terrain table (V5 driving)."""
+    kind = str(site.get("kind", "")).lower()
+    body = str(site.get("body", ""))
+    if "dune" in kind:
+        return "dune"
+    if "ice" in kind or "psr" in kind:
+        return "ice_plain"
+    if body.endswith("mars"):
+        return "duricrust"
+    if body.endswith("titan"):
+        return "titan_shore"
+    if body.endswith("earth"):
+        return "earth_road"
+    return "regolith"
+
+
 def _surface_options(av, bases, db=None,
-                     investigated=frozenset()) -> list[tuple[tuple, str]]:
+                     investigated=frozenset(),
+                     vehicles=()) -> list[tuple[tuple, str]]:
     """Context actions for the surface-ops panel (G)."""
     opts: list[tuple[tuple, str]] = []
     if av.landed_at is not None:
@@ -262,6 +282,36 @@ def _surface_options(av, bases, db=None,
                 opts.append((("unload_cargo",),
                              f"UNLOAD CARGO TO BASE   "
                              f"({av.cargo_kg / 1e3:,.1f} t aboard)"))
+        # V5: vehicles parked at this site + the base motor pool
+        for gv in vehicles:
+            if gv.site_id == av.landed_at:
+                opts.append((
+                    ("drive", gv.vid),
+                    f"DRIVE {gv.name}   "
+                    f"({gv.catalog_id.rsplit(':', 1)[-1].upper()}, charge "
+                    f"{100.0 * gv.energy_kwh / max(gv.pack_kwh, 1e-9):.0f}%"
+                    f", cond {100.0 * gv.cond:.0f}%"
+                    + (", EMBEDDED" if getattr(gv, "stuck", False) else "")
+                    + ")"))
+        if home is not None and db is not None:
+            from aphelion.game import motorpool as _mp
+            vrows = db.by_type("vehicles")
+            for cid in ("core:rvr_lrv", "core:rvr_press"):
+                row = vrows.get(cid)
+                if row is None:
+                    continue
+                dry = float(row.get("dry_t", 1.0))
+                ok_b, why_b = _mp.can_build(home, dry)
+                bill = _mp.build_bill_t(dry)
+                if ok_b:
+                    opts.append((("mp_build", cid),
+                                 f"MOTOR POOL: BUILD {row.get('name', cid).upper()}   "
+                                 f"({bill['MachineParts']:.2f} t MachParts"
+                                 f" + {bill['Electronics']:.2f} t Elec)"))
+                else:
+                    opts.append((("mp_no", why_b),
+                                 f"MOTOR POOL: {row.get('name', cid).upper()}"
+                                 f"   [{why_b}]"))
     else:
         body = av.tree.body(av.frame_id)
         g_local = body.mu / (body.radius ** 2)
@@ -835,6 +885,7 @@ def run(argv: list[str] | None = None) -> int:
                         choices=["auto", "menu", "flight", "builder", "base",
                                  "research", "research_ed", "research_codex",
                                  "ascent", "descent", "eva", "mine",
+                                 "drive",
                                  "drydock", "proxops", "aboard", "help",
                                  "contracts", "crew", "pause", "planner"])
     args = parser.parse_args(argv)
@@ -1002,10 +1053,12 @@ def run(argv: list[str] | None = None) -> int:
                     milestones=got["milestones"], tutorial=tut,
                     builder_stack=got.get("builder_stack", []),
                     yard_designs=got.get("yard_designs", []),
+                    ground_vehicles=got.get("ground_vehicles", []),
                     difficulty=got.get("difficulty", "DIRECTOR"))
 
     def campaign_tuple(st: dict):
         """One unpack shape for new game, quickload, and startup."""
+        from aphelion.game import motorpool
         b = Builder(db, st["research"])
         if st.get("builder_stack"):
             b.load_stack(st["builder_stack"])
@@ -1019,11 +1072,13 @@ def run(argv: list[str] | None = None) -> int:
                                       "survey_progress": {}, "flags": [],
                                       "dug": {}, "deposits": {}},
                 list(st.get("yard_designs") or []),
+                [motorpool.GroundVehicle.from_dict(d)
+                 for d in (st.get("ground_vehicles") or [])],
                 None, 0, False, False, False, False, False, 0.0, "", 0.0)
 
     (clock, vessels, active_idx, next_vid, program, campaign_rng, bases,
      crew, research, visited, visited_surface, milestones, tutorial, builder,
-     difficulty, explore, yard_designs,
+     difficulty, explore, yard_designs, ground_vehicles,
      node, warp_idx, paused, base_screen, builder_open, research_open,
      crew_warned, last_dose_t, toast, toast_until) = \
         campaign_tuple(fresh_campaign())
@@ -1073,7 +1128,7 @@ def run(argv: list[str] | None = None) -> int:
             milestones=milestones, bases=bases,
             tutorial_done=tutorial.completed, rng=campaign_rng,
             builder_stack=builder.stack, difficulty=difficulty,
-            yard_designs=yard_designs,
+            yard_designs=yard_designs, ground_vehicles=ground_vehicles,
             tutorial_state={"rail": tutorial.rail, "index": tutorial.index,
                             "visible": tutorial.visible,
                             "done": sorted(tutorial.done_rails)},
@@ -1164,6 +1219,18 @@ def run(argv: list[str] | None = None) -> int:
     planner_cursor = 0
     warp_to_node = False
     ca_cache = {"at": -1e9, "tgt": None, "d": None, "t": 0.0}
+    # V5 drive scene state
+    drive_gv = None                   # GroundVehicle at the wheel
+    drive_av = None                   # the landed vessel anchoring the site
+    drive_v = 0.0                     # m/s, signed
+    drive_x = 26.0                    # m along the site cross-section
+    drive_face = 1
+    drive_tiles = None
+    drive_tr = None
+    drive_camy = 0.0
+    drive_stuck = 0.0
+    drive_attempts = 0
+    drive_warn_t = -1e9
     # colony scene state
     base_focus = "construct"          # or "modules"
     module_cursor = 0
@@ -1225,6 +1292,32 @@ def run(argv: list[str] | None = None) -> int:
             eva_state.y = eva_tiles.ground_below(_mx + 2.5, _fy + 1.0)
             eva_camy = eva_state.y
         scene = "eva"
+    elif want == "drive":               # QA: an LRV parked at Peary
+        from aphelion.sim.vessels.vessel import Vessel as _V
+        _rows = [_V.fueled_row(db, "core:engine_ml111"),
+                 _V.fueled_row(db, "core:tank_ml_s"),
+                 _V.fueled_row(db, "core:capsule_vela")]
+        _bq = tree.body("core:moon")
+        _rq = _bq.radius + 100e3
+        _el = state_to_elements(_rq, 0.0, 0.0,
+                                tr.circular_speed(_bq.mu, _rq), 0.0, _bq.mu)
+        _fvq = FleetVessel(tree, "core:moon", _el,
+                           _V(db, _rows, stage_plan=[[0, 1, 2]]),
+                           "DRIVE-QA", next_vid, crew=["V. Ainsworth"])
+        next_vid += 1
+        _fvq.land_at("site:peary", SITES["site:peary"], 0.0)
+        vessels.append(_fvq)
+        from aphelion.game import motorpool as _mpq
+        drive_gv = _mpq.GroundVehicle(
+            vid=900, catalog_id="core:rvr_lrv", name="LRV-QA",
+            body="core:moon", site_id="site:peary", pack_kwh=8.7,
+            energy_kwh=7.4, park_x_m=24.0)
+        drive_gv.dry_t = 0.21
+        drive_gv.cargo_t = 0.46
+        ground_vehicles.append(drive_gv)
+        drive_av = _fvq
+        drive_x = 24.0
+        scene = "drive"
     elif want == "drydock":             # QA: a two-stage demo on the grid
         _ps = db.by_type("parts")
         for _pid, _px, _py in (("core:engine_m2256", 2, 0),
@@ -1889,6 +1982,40 @@ def run(argv: list[str] | None = None) -> int:
                             audio.play("paid")
                     elif event.key == pygame.K_ESCAPE:
                         scene = "flight"
+            elif scene == "drive":
+                if event.type == pygame.KEYDOWN and drive_gv is not None:
+                    if event.key in (pygame.K_e, pygame.K_ESCAPE):
+                        drive_gv.park_x_m = drive_x
+                        toast = (f"{drive_gv.name} PARKED — odo "
+                                 f"{drive_gv.odo_km:,.1f} km, charge "
+                                 f"{100.0 * drive_gv.energy_kwh / max(drive_gv.pack_kwh, 1e-9):.0f}%"
+                                 f", cond {100.0 * drive_gv.cond:.0f}%")
+                        toast_until = t + 7
+                        drive_gv, drive_av = None, None
+                        drive_tiles, drive_tr = None, None
+                        scene = "flight"
+                        audio.play("clunk")
+                    elif event.key == pygame.K_x and drive_stuck > 0.0:
+                        import zlib as _z
+                        drive_attempts += 1
+                        bdy_x = tree.body(
+                            SITES[drive_av.landed_at]["body"])
+                        g_x = bdy_x.mu / bdy_x.radius ** 2
+                        # escape attempt burns 3x energy (10 fail row 2)
+                        drive_gv.drive(0.03, g_x, "dune", v_kmh=2.0)
+                        roll = _z.crc32(
+                            f"{drive_gv.vid}|{drive_attempts}|"
+                            f"{int(drive_gv.odo_km * 10)}".encode()) % 100
+                        if roll < 30:
+                            drive_stuck = 0.0
+                            toast = "WHEELS FREE — easy on the throttle"
+                            toast_until = t + 6
+                            audio.play("paid")
+                        else:
+                            toast = (f"still embedded (attempt "
+                                     f"{drive_attempts}) — X to rock it")
+                            toast_until = t + 4
+                            audio.play("thud")
             elif scene == "eva":
                 if event.type == pygame.KEYDOWN and eva_state is not None:
                     if event.key == pygame.K_SPACE:
@@ -2218,7 +2345,8 @@ def run(argv: list[str] | None = None) -> int:
             elif event.type == pygame.KEYDOWN and surface_open:
                 av0 = vessels[active_idx % len(vessels)] if vessels else None
                 opts = (_surface_options(av0, bases, db,
-                                         explore["investigated"])
+                                         explore["investigated"],
+                                         ground_vehicles)
                         if av0 else [])
                 if event.key in (pygame.K_ESCAPE, pygame.K_g) or not opts:
                     surface_open = False
@@ -2267,6 +2395,52 @@ def run(argv: list[str] | None = None) -> int:
                                  f"the lander")
                         toast_until = t + 8
                         audio.play("clunk")
+                    elif action[0] == "drive":
+                        gv_d = next((g for g in ground_vehicles
+                                     if g.vid == action[1]), None)
+                        if gv_d is not None:
+                            drive_gv, drive_av = gv_d, av0
+                            drive_x = gv_d.park_x_m
+                            drive_v, drive_face = 0.0, 1
+                            drive_stuck, drive_attempts = 0.0, 0
+                            drive_tiles, drive_tr = None, None
+                            surface_open = False
+                            scene = "drive"
+                            toast = (f"{gv_d.name} POWERED UP — A/D "
+                                     f"drive, E park & dismount")
+                            toast_until = t + 8
+                            audio.play("clunk")
+                    elif action[0] == "mp_no":
+                        toast = f"MOTOR POOL: {action[1]}"
+                        toast_until = t + 6
+                        audio.play("warn")
+                    elif action[0] == "mp_build":
+                        from aphelion.game import motorpool as _mp
+                        home_v = next((b for b in bases
+                                       if b.site_id == av0.landed_at), None)
+                        row_v = db.by_type("vehicles").get(action[1], {})
+                        st_v = _mp.row_stats(row_v)
+                        if home_v is not None:
+                            _mp.debit_build(home_v, st_v["dry_t"])
+                            next_vid += 1
+                            gv_n = _mp.GroundVehicle(
+                                vid=next_vid, catalog_id=action[1],
+                                name=(f"{row_v.get('name', 'Rover')}"
+                                      f"-{next_vid}"),
+                                body=SITES[av0.landed_at]["body"],
+                                site_id=av0.landed_at,
+                                pack_kwh=st_v["pack_kwh"],
+                                energy_kwh=st_v["pack_kwh"] * 0.85,
+                                rtg_we=st_v["rtg_we"],
+                                tracks=st_v["tracks"],
+                                crewed=st_v["crewed"],
+                                park_x_m=22.0 + 8.0 * len(ground_vehicles))
+                            gv_n.dry_t = st_v["dry_t"]
+                            ground_vehicles.append(gv_n)
+                            toast = (f"{gv_n.name} ASSEMBLED at the "
+                                     f"motor pool — parts debited")
+                            toast_until = t + 9
+                            audio.play("paid")
                     elif action[0] == "investigate":
                         aid = action[1]
                         an = db.by_type("anomalies")[aid]
@@ -3297,7 +3471,8 @@ def run(argv: list[str] | None = None) -> int:
         if start_new:
             (clock, vessels, active_idx, next_vid, program, campaign_rng,
              bases, crew, research, visited, visited_surface, milestones,
-             tutorial, builder, difficulty, explore, yard_designs, node,
+             tutorial, builder, difficulty, explore, yard_designs,
+             ground_vehicles, node,
              warp_idx, paused,
              base_screen, builder_open, research_open, crew_warned,
              last_dose_t, toast,
@@ -3314,7 +3489,8 @@ def run(argv: list[str] | None = None) -> int:
                     (clock, vessels, active_idx, next_vid, program,
                      campaign_rng, bases, crew, research, visited,
                      visited_surface, milestones, tutorial, builder,
-                     difficulty, explore, yard_designs, node,
+                     difficulty, explore, yard_designs, ground_vehicles,
+                     node,
                      warp_idx, paused, base_screen, builder_open,
                      research_open, crew_warned, last_dose_t, toast,
                      toast_until) = campaign_tuple(loaded_campaign())
@@ -4307,6 +4483,201 @@ def run(argv: list[str] | None = None) -> int:
                 "B send to pad   Y yard blueprint   ESC back"),
                 (0, size[1] - theme.FOOTER_H))
             screen.blit(vig, (0, 0))
+            present_frame()
+            frame_count += 1
+            if args.frames and frame_count >= args.frames:
+                running = False
+            continue
+
+        if scene == "drive" and drive_gv is not None and drive_av is not None:
+            # ---- THE DRIVE (V5): the V-laws under your right foot ----
+            clock.advance_analytic(clock.t + EVA_TIME_FACTOR * real_dt)
+            t = clock.t
+            site_d = SITES[drive_av.landed_at]
+            body_d = site_d["body"]
+            _bd = tree.body(body_d)
+            g_d = _bd.mu / _bd.radius ** 2
+            terr_key = _drive_terrain_key(site_d)
+            terr_d = locomotion.TERRAIN.get(terr_key,
+                                            locomotion.TERRAIN["regolith"])
+            if drive_tiles is None:
+                sec_d = site_d.get("sector_id", drive_av.landed_at)
+                drive_tiles = tileworld.TileWorld(
+                    sec_d, 4.0, site_d.get("kind", "regolith"),
+                    dug=explore.setdefault("dug", {}).get(sec_d, []))
+                drive_tr = TileRenderer(drive_tiles, ground_palette(body_d))
+                drive_camy = drive_tiles.surface_y(drive_x)
+
+            keys = pygame.key.get_pressed()
+            mv = 0
+            if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+                mv -= 1
+            if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+                mv += 1
+            if drive_stuck > 0.0:
+                mv = 0
+            v_lim = (locomotion.v_max_ms(g_d, "raw")
+                     * getattr(terr_d, "speed_mult", 1.0))
+            tgt_v = mv * v_lim
+            step_a = 2.4 * real_dt
+            drive_v += max(-step_a, min(step_a, tgt_v - drive_v))
+            if mv == 0 and abs(drive_v) < 0.05:
+                drive_v = 0.0
+            if mv:
+                drive_face = mv
+            # V-6: the slope ahead refuses you past the traction limit
+            rise_d = (drive_tiles.surface_y(drive_x + drive_face * 2.0)
+                      - drive_tiles.surface_y(drive_x))
+            slope_d = abs(math.degrees(math.atan2(rise_d, 2.0)))
+            th_max = locomotion.theta_max_deg(terr_d.mu, terr_d.crr)
+            if mv and rise_d > 0 and slope_d > th_max:
+                drive_v = 0.0
+                if t - drive_warn_t > 4.0:
+                    drive_warn_t = t
+                    toast = (f"SLOPE {slope_d:.0f}° > traction limit "
+                             f"{th_max:.0f}° on {terr_key} — go around")
+                    toast_until = t + 4
+                    audio.play("warn")
+            dx_d = drive_v * real_dt * EVA_TIME_FACTOR
+            if abs(dx_d) > 1e-6:
+                km_pre = drive_gv.odo_km
+                ok_d = drive_gv.drive(
+                    abs(dx_d) / 1000.0, g_d, terr_key,
+                    v_kmh=max(abs(drive_v) * 3.6, 0.5),
+                    hotel_kw=0.15 if drive_gv.crewed else 0.06,
+                    dust_body=body_d.rsplit(":", 1)[-1])
+                if not ok_d:
+                    drive_v = 0.0
+                    if t - drive_warn_t > 6.0:
+                        drive_warn_t = t
+                        toast = ("BATTERY FLAT — E dismounts; recharge "
+                                 "comes from base stores")
+                        toast_until = t + 8
+                        audio.play("alarm")
+                else:
+                    drive_x = max(2.0,
+                                  min(getattr(drive_tiles, "width_m",
+                                              2000.0) - 2.0,
+                                      drive_x + dx_d))
+                    if int(drive_gv.odo_km) != int(km_pre):
+                        import zlib as _z
+                        p_g = locomotion.p_ground_pa(
+                            drive_gv.mass_t * 1000.0, g_d, 4, 0.05)
+                        if locomotion.embedding_risk(terr_key, p_g) and (
+                                _z.crc32(
+                                    f"{drive_gv.vid}|"
+                                    f"{int(drive_gv.odo_km)}".encode())
+                                % 100) < 5:
+                            drive_stuck = 1.0
+                            drive_attempts = 0
+                            drive_v = 0.0
+                            toast = ("EMBEDDED — wheels dug in (the "
+                                     "Spirit special). X to rock free")
+                            toast_until = t + 8
+                            audio.play("thud")
+
+            ppm = 16.0
+            h_ground = 470
+            camx_d = drive_x
+            surf_d = drive_tiles.surface_y(drive_x)
+            drive_camy += (surf_d - drive_camy) * min(1.0, 6.0 * real_dt)
+
+            screen.fill((4, 6, 12))
+            if site_d.get("aero") or body_d in _ATMO_BODIES:
+                dsky = sky_surface(size, body_d)
+                dsky.set_alpha(255)
+                screen.blit(dsky, (0, 0))
+            else:
+                starfield.draw(screen, cam)
+                dsky = sky_surface(size, body_d)
+                dsky.set_alpha(70)
+                screen.blit(dsky, (0, 0))
+            for ridge_s, fac in ridge_layers(body_d, size[0]):
+                rx = -((camx_d * ppm * fac * 0.25) % RIDGE_PAD)
+                screen.blit(ridge_s,
+                            (rx, h_ground + drive_camy * ppm
+                             - ridge_s.get_height() - 36))
+
+            def _syd(wy: float) -> float:
+                return h_ground - (wy - drive_camy) * ppm
+
+            def _sxd(wx: float) -> float:
+                return size[0] / 2.0 + (wx - camx_d) * ppm
+
+            drive_tr.draw(screen, camx_d, drive_camy, size, ppm, h_ground)
+            # the lander + colony share the cross-section
+            stack_d = [[drive_av.vessel.rows[i].part_id for i in st]
+                       for st in drive_av.vessel.stage_plan]
+            lspr_d = pygame.transform.rotozoom(vessel_sprite(db, stack_d),
+                                               0.0, 0.6)
+            screen.blit(lspr_d, (_sxd(0.0) - lspr_d.get_width() / 2,
+                                 _syd(drive_tiles.surface_y(0.0))
+                                 - lspr_d.get_height()))
+            home_dv = next((b for b in bases
+                            if b.site_id == drive_av.landed_at), None)
+            if home_dv is not None:
+                from aphelion.render.base_art import module_sprite
+                for bi, bx in eva_sim.module_positions(
+                        home_dv.built).items():
+                    spr = module_sprite(home_dv.built[bi])
+                    screen.blit(spr,
+                                (_sxd(bx) - spr.get_width() / 2,
+                                 _syd(drive_tiles.surface_y(bx))
+                                 - spr.get_height()))
+
+            # the vehicle: grounded by its contact shadow (rule zero)
+            vppm = 22.0
+            vspr = vehicle_art.vehicle_sprite(drive_gv.catalog_id, vppm,
+                                              drive_face)
+            v_top = _syd(surf_d) - vspr.get_height() + 6
+            shw = int(vspr.get_width() * 0.92)
+            shs = pygame.Surface((shw, 14), pygame.SRCALPHA)
+            pygame.draw.ellipse(shs, (0, 0, 0, 84), (0, 0, shw, 14))
+            screen.blit(shs, (size[0] / 2 - shw / 2,
+                              v_top + vspr.get_height() - 10))
+            if drive_stuck > 0.0:                   # nose-down when dug in
+                vspr = pygame.transform.rotozoom(vspr, -6 * drive_face, 1.0)
+            screen.blit(vspr, (size[0] / 2 - vspr.get_width() / 2, v_top))
+
+            prompt_d = ("X — ROCK FREE" if drive_stuck > 0.0
+                        else "E — PARK & DISMOUNT")
+            theme.draw_text(screen, size[0] / 2 - 64, v_top - 22, prompt_d,
+                            color=theme.COLORS["gold"], font="ui_small")
+
+            chg = (100.0 * drive_gv.energy_kwh
+                   / max(drive_gv.pack_kwh, 1e-9))
+            e_now = drive_gv.e_km(g_d, terr_key,
+                                  v_kmh=max(abs(drive_v) * 3.6, 5.0),
+                                  hotel_kw=0.15 if drive_gv.crewed
+                                  else 0.06)
+            rng_km = (float("inf") if drive_gv.rtg_we > 0.0
+                      else drive_gv.energy_kwh / max(e_now, 1e-9))
+            chips_d = [
+                (drive_gv.name, theme.COLORS["text"]),
+                (f"{abs(drive_v) * 3.6:4.1f} km/h", theme.COLORS["accent"]),
+                (f"chg {chg:3.0f}%",
+                 theme.COLORS["danger"] if chg < 15 else
+                 theme.COLORS["warn"] if chg < 35 else
+                 theme.COLORS["text_dim"]),
+                ("range ∞" if rng_km == float("inf")
+                 else f"range {rng_km:,.0f} km", theme.COLORS["text_dim"]),
+                (f"cond {100.0 * drive_gv.cond:3.0f}%",
+                 theme.COLORS["warn"] if drive_gv.cond < 0.5
+                 else theme.COLORS["text_dim"]),
+                (f"odo {drive_gv.odo_km:,.1f} km", theme.COLORS["text_dim"]),
+                (f"{terr_key} · slope {slope_d:.0f}°",
+                 theme.COLORS["text_dim"]),
+            ]
+            chx_d = 10
+            for chip_txt, chip_col in chips_d:
+                cs = theme.chip(chip_txt, chip_col)
+                screen.blit(cs, (chx_d, 8))
+                chx_d += cs.get_width() + 8
+            screen.blit(theme.footer(
+                size[0], "A/D drive   E park & dismount   X rock free"),
+                (0, size[1] - theme.FOOTER_H))
+            screen.blit(vig, (0, 0))
+            apply_flash()
             present_frame()
             frame_count += 1
             if args.frames and frame_count >= args.frames:
@@ -6326,7 +6697,8 @@ def run(argv: list[str] | None = None) -> int:
                     color=theme.COLORS["text_dim"], font="small")
 
         if surface_open and av is not None:
-            opts = _surface_options(av, bases, db, explore["investigated"])
+            opts = _surface_options(av, bases, db, explore["investigated"],
+                                    ground_vehicles)
             max_rows = 14                       # 18-sector worlds scroll
             n_rows = max(min(len(opts), max_rows), 1)
             spanel = theme.panel(640, 96 + 30 * n_rows, "SURFACE OPERATIONS")
