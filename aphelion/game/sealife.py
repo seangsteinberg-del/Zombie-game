@@ -54,11 +54,12 @@ OCEAN_BY_BODY: dict[str, str] = {
     "core:europa": "water",         # subsurface water ocean — vents
     "core:enceladus": "water",      # south-polar plume ocean — vents
 }
-# the staged-organics discovery each ocean feeds (11 §5 dsc table)
+# the staged-organics discovery each ocean feeds (11 §5 dsc table) —
+# the FULL content ids so the orchestrator can acquire_discovery directly
 DSC_BY_BODY: dict[str, str] = {
-    "core:titan": "dsc14",          # Titan Sea Floor Survey (arc II)
-    "core:europa": "dsc11",         # Europa Ocean Water (arc I)
-    "core:enceladus": "dsc12",      # Enceladus Plume Sampling
+    "core:titan": "core:dsc14_titan_sea_floor",
+    "core:europa": "core:dsc11_europa_ocean_water",
+    "core:enceladus": "core:dsc12_enceladus_plume",
 }
 
 # science payout by tier (orchestrator -> research.earn_science). Modest

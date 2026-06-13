@@ -5456,6 +5456,12 @@ def run(argv: list[str] | None = None) -> int:
                     if _ikey not in explore["investigated"]:
                         explore["investigated"].add(_ikey)
                         research.earn_science(_sci_s)
+                        # location-gated Discovery (11 §5): the ocean's
+                        # dsc11/12/14 first tranche, gating vh07/is19/hb07
+                        if _tier_s >= 1 and _dsc_s:
+                            _dsci = research.acquire_discovery(db, _dsc_s, t)
+                            if _dsci > 0.0:
+                                _sci_s += _dsci
                         _ent_s = next((en for en in dive_sea
                                        if en.get("id") == _eid_s), None)
                         if _ent_s is not None and sealife.is_first(_ent_s):

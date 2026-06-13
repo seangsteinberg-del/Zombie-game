@@ -94,9 +94,10 @@ def test_depth_bands_gate_tiers():
 
 
 def test_discovery_dsc_mapping():
-    assert sl.DSC_BY_BODY["core:titan"] == "dsc14"
-    assert sl.DSC_BY_BODY["core:europa"] == "dsc11"
-    assert sl.DSC_BY_BODY["core:enceladus"] == "dsc12"
+    # full content ids so the orchestrator can acquire_discovery directly
+    assert sl.DSC_BY_BODY["core:titan"] == "core:dsc14_titan_sea_floor"
+    assert sl.DSC_BY_BODY["core:europa"] == "core:dsc11_europa_ocean_water"
+    assert sl.DSC_BY_BODY["core:enceladus"] == "core:dsc12_enceladus_plume"
 
 
 # ---- sonar vs. identification ------------------------------------------------
@@ -167,7 +168,8 @@ def test_chem_gradient_is_sensor_no_light():
     sx = cg["x"] - 5.0
     ev = sl.step([cg], 0.1, sx, cg["z"], lights_on=False, rtg_we=0.0)
     disc = [e for e in ev if e[0] == "discovery"]
-    assert disc and disc[0][1] == 1 and disc[0][3] == "dsc11"
+    assert (disc and disc[0][1] == 1
+            and disc[0][3] == "core:dsc11_europa_ocean_water")
 
 
 def test_discovery_pays_science_by_tier():
