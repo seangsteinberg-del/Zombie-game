@@ -6098,8 +6098,32 @@ def run(argv: list[str] | None = None) -> int:
                 else interior_home
             if shipb is None or shipb_id != id(_place):
                 _sb_crew = {n: crew[n] for n in inhabitants if n in crew}
-                shipb = shipb_mod.Shipboard(interior_rooms, _sb_crew,
-                                            spin_g=g_in, t0=t)
+                # pass the REAL module ids so repair/attention target the
+                # base's actual cond keys (machine_shop_0, not a synthesized
+                # machine_shop-1); vessels have no per-module cond so their
+                # bare-key rooms are fine
+                if interior_home is not None:
+                    _sb_mods = [(m.module_id.rsplit("_", 1)[0], m.module_id)
+                                for m in interior_home.net.modules
+                                if m.module_id.rsplit("_", 1)[0]
+                                in iart.HABITABLE]
+                    # seed stores from the colony's REAL buffers so cook/
+                    # scan refuse honestly and samples feed the bench
+                    _bufs = interior_home.net.buffers
+                    _sb_stores = {
+                        "food_kg": (_bufs["FoodRations"].level
+                                    if "FoodRations" in _bufs else 60.0),
+                        "medsupplies_kg": (_bufs["MedSupplies"].level
+                                           if "MedSupplies" in _bufs
+                                           else 6.0),
+                        "samples": float(len(explore.get(
+                            "investigated", ())))}
+                else:
+                    _sb_mods = list(interior_rooms)
+                    _sb_stores = None
+                shipb = shipb_mod.Shipboard(_sb_mods, _sb_crew,
+                                            spin_g=g_in, t0=t,
+                                            stores=_sb_stores)
                 shipb_id = id(_place)
             # context: cupola flyby bonus near a body, base module cond,
             # the morale floor the habitat affords (window/plants/g)
@@ -6125,6 +6149,10 @@ def run(argv: list[str] | None = None) -> int:
                     audio.play("warn" if _ev_sb["class"] <= 2 else "tick")
                 if _ev_sb.get("chronicle"):
                     chron.add(t, "WONDER", _ev_sb["text"][:120], cls=4)
+            # shipboard OWNS crew morale/conditioning while you're aboard;
+            # keep last_dose_t current so the hourly sweep on exit does not
+            # re-integrate the dwell shipb.step already covered
+            last_dose_t = t
 
             # deep space drifts behind the hull cutaway (slow parallax)
             bdrop = space_backdrop(size)
