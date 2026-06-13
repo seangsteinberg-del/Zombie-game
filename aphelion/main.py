@@ -1429,6 +1429,7 @@ def run(argv: list[str] | None = None) -> int:
     dive_sea: list = []               # live sealife entities (transient)
     dive_sea_cells: set = set()       # ecology cells already populated
     dive_uv = False                   # UV lamp (Tier-1 mats fluoresce)
+    dive_contact_active = False       # contact spawned THIS dive (transient)
     # V5 drive scene state
     drive_gv = None                   # GroundVehicle at the wheel
     drive_av = None                   # the landed vessel anchoring the site
@@ -3030,6 +3031,7 @@ def run(argv: list[str] | None = None) -> int:
                             dive_painted = set()
                             dive_sea, dive_sea_cells = [], set()
                             dive_uv = False
+                            dive_contact_active = False
                             surface_open = False
                             scene = "dive"
                             toast = (f"{gv_d.name} CASTS OFF — A/D thrust, "
@@ -5358,11 +5360,14 @@ def run(argv: list[str] | None = None) -> int:
             sid_v = f"{dive_av.landed_at}|sea"
 
             def _floor_m(wx: float) -> float:
+                # bathymetry: shallow shelves ~20 m and deep trenches that
+                # bottom past 300 m — the deep is where the hull rating
+                # (300 m) bites and THE CONTACT (>=180 m) lives
                 s1 = (zlib.crc32(sid_v.encode()) % 628) / 100.0
-                return max(15.0, min(280.0,
-                                     90.0 + 55.0 * math.sin(wx * 0.011 + s1)
-                                     + 24.0 * math.sin(wx * 0.041 + 2 * s1)
-                                     + 9.0 * math.sin(wx * 0.13 + 3 * s1)))
+                return max(12.0, min(360.0,
+                                     150.0 + 95.0 * math.sin(wx * 0.011 + s1)
+                                     + 48.0 * math.sin(wx * 0.041 + 2 * s1)
+                                     + 18.0 * math.sin(wx * 0.13 + 3 * s1)))
 
             dt_sim = real_dt * EVA_TIME_FACTOR
             dive_x += dive_vx * dt_sim
@@ -5415,15 +5420,20 @@ def run(argv: list[str] | None = None) -> int:
                             if sealife.cell_of(en.get("x", dive_x))
                             in _near_c]
                 dive_sea_cells = _near_c
-            # Tier 3: once per campaign, deep water only — THE CONTACT
+            # Tier 3: once per campaign, deep water only — THE CONTACT.
+            # The persistent milestone is NOT set on spawn (the entity is
+            # transient): if you surface before the reveal dwell completes
+            # the contact can spawn again next dive. It locks as seen ONLY
+            # when the FIRST actually fires (the discovery handler below).
             if ("sea_contact_seen" not in milestones
+                    and not dive_contact_active
                     and dive_depth >= sealife.CONTACT_MIN_DEPTH_M):
                 _ct = sealife.maybe_contact(
                     body_v, sid_v, dive_depth, dive_x, dive_face,
                     campaign_rng.campaign_seed, False)
                 if _ct is not None:
                     dive_sea.append(_ct)
-                    milestones.add("sea_contact_seen")
+                    dive_contact_active = True
             for _ev_s in sealife.step(dive_sea, dt_sim, dive_x,
                                       dive_depth, True, dive_gv.rtg_we,
                                       uv_on=dive_uv):
@@ -5442,6 +5452,7 @@ def run(argv: list[str] | None = None) -> int:
                         _ent_s = next((en for en in dive_sea
                                        if en.get("id") == _eid_s), None)
                         if _ent_s is not None and sealife.is_first(_ent_s):
+                            milestones.add("sea_contact_seen")  # NOW locked
                             chron.add(t, "FIRST_CONTACT",
                                       sealife.chronicle_text(_ent_s),
                                       cls=2)
