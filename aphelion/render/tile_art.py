@@ -273,10 +273,18 @@ class TileRenderer:
                             (int(sx), int(sy)))
 
     # -- the dark down there -------------------------------------------------
-    def darkness(self, screen, walker_px: tuple, depth_m: float) -> None:
+    def darkness(self, screen, walker_px: tuple, depth_m: float,
+                 lamp_on: bool = True) -> None:
         """Past ~2 m of overburden the sky stops helping; the suit lamp
-        holds a warm circle around the walker."""
+        holds a warm circle around the walker. With a dead battery
+        (lamp_on=False) the dark closes in completely — no pool, no glow."""
         if depth_m <= 2.0:
+            return
+        if not lamp_on:
+            alpha = min(238, int((depth_m - 2.0) * 18) + 24)
+            dark = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+            dark.fill((2, 2, 8, alpha))
+            screen.blit(dark, (0, 0))
             return
         if self._lamp is None:
             # multiplied into the dark layer: alpha 0 at the walker (clear)

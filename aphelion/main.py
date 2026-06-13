@@ -1539,6 +1539,8 @@ def run(argv: list[str] | None = None) -> int:
         if os.environ.get("APH_QA_PRINTS") == "1":   # QA: a trail to read
             for _pi in range(26):
                 eva_prints.append((eva_state.x - _pi * 0.52, _pi & 1))
+        if os.environ.get("APH_QA_DEADBATT") == "1":  # QA: lamp out in the dark
+            eva_state.batt_wh = 0.0
         scene = "eva"
     elif want == "drive":               # QA: an LRV parked at Peary
         from aphelion.sim.vessels.vessel import Vessel as _V
@@ -6282,12 +6284,22 @@ def run(argv: list[str] | None = None) -> int:
             _extra_s = (EVA_TIME_FACTOR - 1.0) * real_dt
             eva_state.o2_s = max(0.0, eva_state.o2_s - _extra_s)
             eva_state.idle_burn(_extra_s)        # battery, cooling, scrubber
-            if eva_state.o2_s <= 0.0:
+            # the suit kills you on the FIRST life-critical consumable to run
+            # dry — oxygen, cooling (you cook) or the CO2 scrubber (it breaks
+            # through). The battery is the survivable one: lamp and comms die,
+            # not you. The HUD's RETURN-IN limiter gives fair warning.
+            _fatal = ("suit oxygen exhausted" if eva_state.o2_s <= 0.0
+                      else "suit cooling failed — thermal overload"
+                      if eva_state.feedwater_kg <= 0.0
+                      else "CO2 scrubber saturated — hypercapnia"
+                      if eva_state.co2_load_kg
+                      >= eva_sim.SUIT_CO2_CAP_KG - 1e-6 else None)
+            if _fatal is not None:
                 lost_w = eva_state.member
                 crew.pop(lost_w, None)
                 if lost_w in eva_av.crew:
                     eva_av.crew.remove(lost_w)
-                toast = f"{lost_w} DIED ON EVA — suit oxygen exhausted"
+                toast = f"{lost_w} DIED ON EVA — {_fatal}"
                 toast_until = t + 14
                 audio.play("alarm")
                 eva_state, eva_tiles, eva_tr, eva_dig = None, None, None, None
@@ -6470,13 +6482,16 @@ def run(argv: list[str] | None = None) -> int:
             screen.blit(aspr, (size[0] / 2 - aspr.get_width() / 2,
                                walker_top))
 
-            # underground: the sky stops helping, the suit lamp takes over
+            # underground: the sky stops helping, the suit lamp takes over —
+            # but only while the battery holds; a dead pack means the dark
+            # closes in completely
             depth_e = eva_state.depth_m()
-            eva_state.lamp_on = depth_e > 1.0    # lamp draws on the battery
+            _lamp_live = eva_state.batt_wh > 0.0
+            eva_state.lamp_on = depth_e > 1.0 and _lamp_live
             eva_tr.darkness(screen,
                             (int(size[0] / 2),
                              int(walker_top + aspr.get_height() * 0.4)),
-                            depth_e)
+                            depth_e, lamp_on=_lamp_live)
             if eva_dig is not None:     # the tool bites: progress bar
                 frac_d = 1.0 - max(0.0, eva_dig["left"]) / eva_dig["total"]
                 pygame.draw.rect(screen, (38, 40, 50),
