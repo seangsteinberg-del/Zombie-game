@@ -5712,6 +5712,32 @@ def run(argv: list[str] | None = None) -> int:
             def _syv2(d_m: float) -> float:
                 return cy_px + (d_m - dive_depth) * ppm_v
 
+            # god-ray light shafts slanting down from the surface — the
+            # classic shallow-sea volume, drifting and fading with depth.
+            # Built as RGB-intensity (additive ignores alpha) with soft edges
+            # + a downward fade, cached once and depth-scaled per blit.
+            if dive_depth < 75.0:
+                _ray = dive_bg_cache.get("ray")
+                if _ray is None:
+                    _ray = pygame.Surface((96, 300))     # black = adds nothing
+                    for _ry in range(300):
+                        _vf = (1.0 - _ry / 300.0) ** 1.5
+                        for _rx in range(96):
+                            _hf = max(0.0, 1.0 - abs(_rx - 48) / 48.0) ** 2.0
+                            _v = _vf * _hf
+                            _ray.set_at((_rx, _ry), (int(40 * _v), int(60 * _v),
+                                                     int(58 * _v)))
+                    dive_bg_cache["ray"] = _ray
+                _lf = max(0.0, 1.0 - dive_depth / 75.0)
+                _sy_surf = _syv2(0.0)
+                _g = int(_lf * 255)
+                for _s in range(6):
+                    _bx = ((_s * 211.0 + 40) % size[0]
+                           + 22 * math.sin(t * 0.22 + _s))
+                    _r2 = _ray.copy()
+                    _r2.fill((_g, _g, _g), special_flags=pygame.BLEND_RGB_MULT)
+                    screen.blit(_r2, (int(_bx - 48), int(_sy_surf)),
+                                special_flags=pygame.BLEND_RGB_ADD)
             # surface shimmer when shallow
             if dive_depth < 35.0:
                 sy0 = _syv2(0.0)
