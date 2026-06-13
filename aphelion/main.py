@@ -9221,6 +9221,31 @@ def run(argv: list[str] | None = None) -> int:
                                     font="small")
                 clip = pygame.Rect(px0 + 12, y_base, pw - 24, view_h)
                 screen.set_clip(clip)
+                # prerequisite edges: draw the dependency graph under the
+                # cards. Dim by default, greener once a prereq is researched,
+                # and the SELECTED node's whole chain lit in accent so you can
+                # trace what feeds it (respects fog — fogged nodes get none).
+                from aphelion.sim.research import flat_prereqs as _flatpre
+
+                def _ctr(nid_):
+                    return (px0 + 18 + col_of[nid_] * col_w + card_w // 2,
+                            y_base + row_of[nid_] * pitch - scroll + card_h // 2)
+                for nid in all_ids:
+                    if nid not in idx_of:
+                        continue
+                    cx2, cy2 = _ctr(nid)
+                    if not (y_base - pitch < cy2 < y_base + view_h + pitch):
+                        continue
+                    for p in _flatpre(db.tech[nid]):
+                        if p not in idx_of or p not in col_of:
+                            continue
+                        px2, py2 = _ctr(p)
+                        sel = nid == sel_nid or p == sel_nid
+                        ecol = (theme.COLORS["accent"] if sel
+                                else (54, 92, 70) if p in research.unlocked
+                                else (38, 48, 66))
+                        pygame.draw.line(screen, ecol, (px2, py2),
+                                         (cx2, cy2), 2 if sel else 1)
                 for nid in all_ids:
                     x = px0 + 18 + col_of[nid] * col_w
                     y = y_base + row_of[nid] * pitch - scroll
