@@ -1333,7 +1333,20 @@ def run(argv: list[str] | None = None) -> int:
         contracts_open = True
     elif want == "crew":
         crew_open = True
-    elif want == "planner":
+    elif want == "planner":             # QA: a stack in LEO so rows quote
+        from aphelion.sim.vessels.vessel import Vessel as _V
+        _rows = [_V.fueled_row(db, "core:engine_ml111"),
+                 _V.fueled_row(db, "core:tank_ml_s"),
+                 _V.fueled_row(db, "core:capsule_vela")]
+        _bq = tree.body("core:earth")
+        _rq = _bq.radius + 300e3
+        _el = state_to_elements(_rq, 0.0, 0.0,
+                                tr.circular_speed(_bq.mu, _rq), 0.0, _bq.mu)
+        vessels.append(FleetVessel(tree, "core:earth", _el,
+                                   _V(db, _rows, stage_plan=[[0, 1, 2]]),
+                                   "PLANNER-QA", next_vid))
+        next_vid += 1
+        active_idx = len(vessels) - 1
         planner_open = True
     elif want == "pause":
         pause_open = True
@@ -1572,6 +1585,50 @@ def run(argv: list[str] | None = None) -> int:
                 t_dep=t0 + wait, t_tr=t_tr, dv_dep=dv_dep, dv_cap=dv_cap,
                 affordable=dv_dep <= av0.dv_remaining))
         return rows
+
+    # O wiring: Lambert-refined window per planner row, cached per sim-day
+    # (a refinement is ~150 Izzo solves — run on selection, never per frame)
+    lam_cache: dict[tuple, dict | None] = {}
+
+    def lambert_refined(av0, row, t0: float) -> dict | None:
+        """Sharpen a planner row with a real Lambert scan (01 §2.4): the
+        Hohmann quote assumes circular coplanar orbits; this scans the
+        actual eccentric ephemerides around that window and returns the
+        true minimum — often days off and cheaper."""
+        if av0 is None or av0.landed_at is not None:
+            return None
+        origin = av0.frame_id
+        key = (origin, row["pid"], int(t0 // SECONDS_PER_DAY))
+        if key in lam_cache:
+            return lam_cache[key]
+        from aphelion.sim.orbits import lambert as lam
+        mu_s = tree.body("core:sun").mu
+        b_o, b_t = tree.body(origin), tree.body(row["pid"])
+        n_o = math.sqrt(mu_s / b_o.elements.a ** 3)
+        n_t = math.sqrt(mu_s / b_t.elements.a ** 3)
+        syn = 2.0 * math.pi / max(abs(n_t - n_o), 1e-12)
+        lo = max(t0 + 3_600.0, row["t_dep"] - 0.12 * syn)
+        hi = max(row["t_dep"] + 0.12 * syn, lo + SECONDS_PER_DAY)
+        out: dict | None
+        try:
+            t_dep, tof, _ = lam.best_window(
+                mu_s, b_o.elements, b_t.elements, (lo, hi),
+                (0.55 * row["t_tr"], 1.45 * row["t_tr"]), n_grid=(13, 11))
+            vinf_d, vinf_a = lam.transfer_vinfs(
+                mu_s, b_o.elements, b_t.elements, t_dep, tof)
+            crx0, cry0, _, _ = av0.state(t0)
+            park_r = math.hypot(crx0, cry0)
+            out = dict(
+                t_dep=t_dep, tof=tof,
+                dv_dep=tr.departure_dv(b_o.mu, park_r, vinf_d),
+                dv_cap=tr.departure_dv(b_t.mu, b_t.radius + 200e3,
+                                       vinf_a))
+        except ValueError:
+            out = None
+        if len(lam_cache) > 64:
+            lam_cache.clear()
+        lam_cache[key] = out
+        return out
 
     def closest_approach(av0, tgt: str, t0: float) -> tuple[float, float]:
         """(min distance m, when) sampling the prediction over ≤30 days —
@@ -2361,11 +2418,14 @@ def run(argv: list[str] | None = None) -> int:
                     audio.play("tick")
                 elif event.key == pygame.K_RETURN:
                     row = prows[planner_cursor % len(prows)]
-                    node = {"t_node": row["t_dep"], "dvp": row["dv_dep"],
+                    ref = lambert_refined(av0, row, t)
+                    node = {"t_node": ref["t_dep"] if ref else row["t_dep"],
+                            "dvp": ref["dv_dep"] if ref else row["dv_dep"],
                             "dvr": 0.0, "armed": False}
                     target_id = row["pid"]
                     planner_open = False
-                    toast = (f"TRANSFER NODE to {row['name']} at the window "
+                    via = "Lambert window" if ref else "window"
+                    toast = (f"TRANSFER NODE to {row['name']} at the {via} "
                              f"— fine-tune ([/] arrows), ENTER arms, W warps")
                     toast_until = t + 10
                     audio.play("blip")
@@ -6253,6 +6313,34 @@ def run(argv: list[str] | None = None) -> int:
                 f"prograde {node['dvp']:+,.0f}  radial {node['dvr']:+,.0f}  "
                 f"({math.hypot(node['dvp'], node['dvr']):,.0f} m/s)",
                 True, (255, 120, 220)), (10, size[1] - 48))
+            # O wiring: the finite burn this node actually is (01 §2.9) —
+            # t_b from the rocket equation, ignition centered on the node
+            _ndv = math.hypot(node["dvp"], node["dvr"])
+            if av is not None and _ndv > 0.5:
+                _F = av.vessel.active_thrust_n(0.0)
+                if _F <= 0.0:
+                    screen.blit(font.render(
+                        "no active engine — node cannot be executed",
+                        True, theme.COLORS["danger"]), (10, size[1] - 88))
+                else:
+                    _ve = av.vessel.active_isp(0.0) * 9.80665
+                    _m0 = av.vessel.total_mass_kg()
+                    _tb = (_m0 * _ve / _F) * (1.0 - math.exp(-_ndv / _ve))
+                    _ign = node["t_node"] - 0.5 * _tb
+                    _frac = (_tb / av.elements.period
+                             if av.elements.alpha > 0 else 0.0)
+                    _btxt = (f"burn {theme.fmt_duration(_tb)} — ignition "
+                             f"T-{theme.fmt_duration(max(0.0, _ign - t))}"
+                             + (f"   ({_frac:.0%} of orbit: impulse "
+                                f"approx degrades)"
+                                if _frac > 0.12 else ""))
+                    _bcol = ((255, 170, 235) if _frac <= 0.12 and _ign > t
+                             else theme.COLORS["warn"] if _ign > t
+                             else theme.COLORS["danger"])
+                    if _ign <= t and not node["armed"]:
+                        _btxt = ("IGNITION TIME PASSED — " + _btxt)
+                    screen.blit(font.render(_btxt, True, _bcol),
+                                (10, size[1] - 88))
             if node_post is not None and av is not None:
                 body_r = tree.body(av.frame_id).radius
                 pe_post = node_post.periapsis - body_r
@@ -6538,8 +6626,10 @@ def run(argv: list[str] | None = None) -> int:
 
         if planner_open:
             prows = planner_rows_for(av, t)
-            ppan2 = theme.panel(760, 122 + 26 * max(1, len(prows)),
-                                "TRANSFER PLANNER")
+            # viewport: the destination list outgrew the screen (planets +
+            # asteroids + comets) — scroll a window that follows the cursor
+            n_vis = min(max(1, len(prows)), max(4, (size[1] - 330) // 26))
+            ppan2 = theme.panel(760, 148 + 26 * n_vis, "TRANSFER PLANNER")
             ppx2, ppy2 = size[0] // 2 - 380, 110
             screen.blit(ppan2, (ppx2, ppy2))
             overlay_rects["planner"] = []
@@ -6550,14 +6640,23 @@ def run(argv: list[str] | None = None) -> int:
                     "around a planet — get one first",
                     color=theme.COLORS["text_dim"], font="small")
             else:
+                cur = planner_cursor % len(prows)
+                first = max(0, min(cur - n_vis // 2, len(prows) - n_vis))
                 theme.draw_text(
                     screen, ppx2 + 18, ppy2 + 34,
                     f"{'DESTINATION':14s}{'WINDOW IN':>12s}{'TRANSIT':>12s}"
                     f"{'DEPART dv':>12s}{'CAPTURE dv':>12s}",
                     color=theme.COLORS["gold"], font="small")
-                for i, row in enumerate(prows):
-                    sel = i == planner_cursor % len(prows)
-                    ry2 = ppy2 + 58 + i * 26
+                if len(prows) > n_vis:
+                    theme.draw_text(screen, ppx2 + 636, ppy2 + 34,
+                                    f"{first + 1}-{first + n_vis} of "
+                                    f"{len(prows)}",
+                                    color=theme.COLORS["text_dim"],
+                                    font="small")
+                for vi, i in enumerate(range(first, first + n_vis)):
+                    row = prows[i]
+                    sel = i == cur
+                    ry2 = ppy2 + 58 + vi * 26
                     if sel:
                         screen.blit(theme.row_glow(724, 24), (ppx2 + 14, ry2 - 3))
                     col2 = (theme.COLORS["good"] if row["affordable"]
@@ -6573,11 +6672,29 @@ def run(argv: list[str] | None = None) -> int:
                         font="small")
                     overlay_rects["planner"].append(
                         (pygame.Rect(ppx2 + 14, ry2 - 3, 724, 26), i))
+                _ry3 = ppy2 + 64 + n_vis * 26
+                # Lambert refinement of the SELECTED row: the real
+                # ephemerides beat the circular-Hohmann quote above
+                _selrow = prows[cur]
+                _ref = lambert_refined(av, _selrow, t)
+                if _ref is not None:
+                    _save = ((_selrow["dv_dep"] + _selrow["dv_cap"])
+                             - (_ref["dv_dep"] + _ref["dv_cap"]))
+                    _reftxt = (
+                        f"LAMBERT {_selrow['name'].upper()}: depart in "
+                        f"{theme.fmt_duration(max(0.0, _ref['t_dep'] - t))}"
+                        f" · transit {theme.fmt_duration(_ref['tof'])} · "
+                        f"inject {_ref['dv_dep']:,.0f} + capture "
+                        f"{_ref['dv_cap']:,.0f} m/s")
+                    if _save > 10.0:
+                        _reftxt += f"   (saves {_save:,.0f} m/s)"
+                    theme.draw_text(screen, ppx2 + 18, _ry3, _reftxt,
+                                    color=theme.COLORS["accent"],
+                                    font="small")
                 theme.draw_text(
-                    screen, ppx2 + 18, ppy2 + 66 + len(prows) * 26,
-                    "ENTER places the departure node AT the window (sets "
-                    "target too)   ·   quotes assume your current parking "
-                    "orbit   ·   P/ESC close",
+                    screen, ppx2 + 18, _ry3 + 26,
+                    "ENTER places the node at the window + sets target   ·"
+                    "   quotes assume your parking orbit   ·   P/ESC close",
                     color=theme.COLORS["text_dim"], font="small")
 
         if base_screen and bases:
