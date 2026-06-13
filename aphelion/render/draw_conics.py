@@ -96,14 +96,40 @@ def clip_segment(x0: float, y0: float, x1: float, y1: float,
 def clip_polyline(points_px: np.ndarray, width: int, height: int,
                   guard: float = GUARD_BAND_PX) -> list[list[tuple[float, float]]]:
     """Clip a screen-space polyline into drawable chains, every vertex within
-    viewport + guard band (safe for SDL int conversion)."""
+    viewport + guard band (safe for SDL int conversion).
+
+    Outcodes are computed ONCE per vertex (vectorized) instead of twice per
+    segment, and the full Cohen-Sutherland refinement runs only for the
+    rare boundary-crossing segments — a fully on-screen orbit (the common
+    case) never enters the clip loop. Output is identical to the naive
+    per-segment clip."""
+    if len(points_px) < 2:
+        return []
     xmin, ymin = -guard, -guard
     xmax, ymax = width + guard, height + guard
+    xs = points_px[:, 0]
+    ys = points_px[:, 1]
+    codes = np.zeros(len(points_px), dtype=np.int32)
+    codes |= (xs < xmin).astype(np.int32) * _LEFT
+    codes |= (xs > xmax).astype(np.int32) * _RIGHT
+    codes |= (ys < ymin).astype(np.int32) * _BOTTOM
+    codes |= (ys > ymax).astype(np.int32) * _TOP
+    cl = codes.tolist()                       # python ints: fast scalar ops
     chains: list[list[tuple[float, float]]] = []
     current: list[tuple[float, float]] = []
     for i in range(len(points_px) - 1):
-        seg = clip_segment(points_px[i, 0], points_px[i, 1],
-                           points_px[i + 1, 0], points_px[i + 1, 1],
+        c0, c1 = cl[i], cl[i + 1]
+        if not (c0 | c1):                     # trivial accept: no clipping
+            if not current:
+                current = [(xs[i], ys[i])]
+            current.append((xs[i + 1], ys[i + 1]))
+            continue
+        if c0 & c1:                           # trivial reject
+            if len(current) >= 2:
+                chains.append(current)
+            current = []
+            continue
+        seg = clip_segment(xs[i], ys[i], xs[i + 1], ys[i + 1],
                            xmin, ymin, xmax, ymax)
         if seg is None:
             if len(current) >= 2:
