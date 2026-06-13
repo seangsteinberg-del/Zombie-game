@@ -526,12 +526,78 @@ def _airlock(s, x0, rng):
     _screen_panel(s, px, py, 64, 40, (255, 196, 110), 2, rng)
 
 
+def _pharma(s, x0, rng):
+    """Pharma lab: a glass medicine cabinet of lit vials, a fume hood with
+    a sash, a benchtop centrifuge — clean med-production, not a machine shop."""
+    cab = (x0 + 56, CEIL_Y + 12, 188, 96)
+    _drop_shadow(s, cab, dy=5)
+    pygame.draw.rect(s, (70, 80, 96), cab, border_radius=6)
+    pygame.draw.rect(s, (40, 48, 60), cab, 2, border_radius=6)
+    for r in range(3):                               # shelves of vials
+        sy = cab[1] + 12 + r * 28
+        pygame.draw.line(s, (52, 60, 74), (cab[0] + 8, sy + 19),
+                         (cab[0] + cab[2] - 8, sy + 19), 2)
+        for c in range(8):
+            vx = cab[0] + 16 + c * 21
+            col = rng.choice(((150, 230, 255), (200, 255, 200),
+                              (255, 220, 150), (240, 180, 220)))
+            pygame.draw.rect(s, col, (vx, sy, 9, 16), border_radius=2)
+    sheen = pygame.Surface((cab[2], cab[3]), pygame.SRCALPHA)
+    pygame.draw.polygon(sheen, (220, 235, 245, 26),
+                        [(8, 8), (58, 8), (26, cab[3] - 8), (8, cab[3] - 8)])
+    s.blit(sheen, (cab[0], cab[1]))
+    fh = (x0 + 270, FLOOR_Y - 96, 120, 96)           # fume hood + sash
+    pygame.draw.rect(s, (88, 96, 112), fh, border_radius=4)
+    pygame.draw.rect(s, (24, 30, 42), (fh[0] + 8, fh[1] + 18, fh[2] - 16, 50))
+    pygame.draw.rect(s, (150, 200, 220), (fh[0] + 8, fh[1] + 10, fh[2] - 16, 8))
+    _glow(s, fh[0] + fh[2] // 2, fh[1] + 40, 30, (40, 90, 70), 0.8)
+    pygame.draw.rect(s, (110, 118, 134),             # counter + centrifuge
+                     (x0 + 70, FLOOR_Y - 40, 150, 40))
+    pygame.draw.rect(s, (134, 142, 158), (x0 + 70, FLOOR_Y - 46, 150, 8),
+                     border_radius=3)
+    pygame.draw.circle(s, (150, 158, 174), (x0 + 110, FLOOR_Y - 52), 12)
+    pygame.draw.circle(s, (40, 46, 58), (x0 + 110, FLOOR_Y - 52), 7)
+    pygame.draw.circle(s, (120, 230, 150), (x0 + 150, FLOOR_Y - 56), 3)
+    _screen_panel(s, x0 + 446, CEIL_Y + 26, 80, 50, (110, 230, 150), 3, rng)
+
+
+def _utility(s, x0, rng):
+    """The clean fallback for any module without a bespoke idiom: storage
+    racks of stowed containers, a control console, a ceiling pipe run."""
+    for ri in range(2):                              # storage racks
+        rx = x0 + 56 + ri * 150
+        rk = (rx, CEIL_Y + 16, 124, FLOOR_Y - CEIL_Y - 24)
+        _drop_shadow(s, rk, dy=5)
+        pygame.draw.rect(s, (74, 80, 94), rk, border_radius=4)
+        for shelf in range(3):
+            sy = CEIL_Y + 30 + shelf * 46
+            pygame.draw.line(s, (52, 58, 70), (rx + 4, sy + 30),
+                             (rx + 120, sy + 30), 3)
+            for ci in range(3):
+                cx = rx + 8 + ci * 38
+                col = rng.choice(((150, 120, 80), (96, 104, 120),
+                                  (110, 92, 60)))
+                pygame.draw.rect(s, col, (cx, sy, 32, 28), border_radius=2)
+                pygame.draw.line(s, tuple(int(c * 0.7) for c in col),
+                                 (cx, sy + 14), (cx + 32, sy + 14), 1)
+    cons = (x0 + 384, FLOOR_Y - 70, 130, 70)         # control console
+    pygame.draw.rect(s, (84, 92, 108), cons, border_radius=4)
+    pygame.draw.rect(s, (110, 120, 138), (cons[0], cons[1] - 6, cons[2], 8),
+                     border_radius=3)
+    _screen_panel(s, cons[0] + 14, cons[1] - 50, 100, 44, _SCREEN_BLUE, 3, rng)
+    pygame.draw.line(s, (90, 98, 114), (x0 + 20, CEIL_Y + 10),
+                     (x0 + ROOM_W - 20, CEIL_Y + 10), 5)   # ceiling pipe
+    for px in range(x0 + 40, x0 + ROOM_W - 20, 80):
+        pygame.draw.line(s, (60, 66, 80), (px, CEIL_Y + 10),
+                         (px, CEIL_Y + 22), 3)
+
+
 _PROPS = {"hab_module": _bunks, "hab_rigid": _bunks,
           "hab_inflatable": _bunks, "regolith_vault": _bunks,
           "basalt_hab": _bunks, "greenhouse": _planters,
           "bio_farm": _planters, "med_bay": _med,
           "machine_shop": _shop, "science_lab": _lab,
-          "flight_deck": _flight_deck}
+          "pharma_lab": _pharma, "flight_deck": _flight_deck}
 
 
 def _stars(s: pygame.Surface, rng: random.Random) -> None:
@@ -576,7 +642,7 @@ def room_strip(rooms: tuple[str, ...]) -> pygame.Surface:
         sub_rng = random.Random(zlib.crc32(f"{kind}|{i}".encode()))
         _room_shell(s, x0, sub_rng,
                     vault=(kind in ("regolith_vault", "basalt_hab")))
-        _PROPS.get(kind, _shop)(s, x0, sub_rng)
+        _PROPS.get(kind, _utility)(s, x0, sub_rng)
     _CACHE[key] = s
     return s
 
