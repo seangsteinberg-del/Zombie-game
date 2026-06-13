@@ -5437,7 +5437,41 @@ def run(argv: list[str] | None = None) -> int:
                     f"burn {r_dd['burn_s']:5,.0f} s",
                     color=theme.COLORS["text"], font="small")
                 yy += 18
-            yy += 8
+            yy += 6
+            # MISSION REACH: total ΔV vs the canonical Δv map (01 §1.2),
+            # cumulative from Earth surface — the "can it get there" readout
+            _total_dv = sum(r["dv_ms"] for r in rep_dd)
+            _DESTS = (("low Earth orbit", 9400), ("Earth escape", 12600),
+                      ("Venus transfer", 12880), ("Mars transfer", 12990),
+                      ("Mars orbit (aero)", 13040), ("GEO", 13300),
+                      ("lunar orbit", 13340), ("Mars surface (aero)", 13640),
+                      ("near-Earth asteroid", 14400), ("lunar surface", 15240),
+                      ("Jupiter transfer", 15700))
+            _reach = [d for d in _DESTS if _total_dv >= d[1]]
+            _nxt = next((d for d in _DESTS if _total_dv < d[1]), None)
+            theme.draw_text(screen, px0 + 16, yy,
+                            f"MISSION REACH — ΔV {_total_dv:,.0f} m/s ({dd_mode})",
+                            color=theme.COLORS["gold"], font="small")
+            yy += 18
+            if _reach:
+                theme.draw_text(screen, px0 + 16, yy,
+                                f"✓ reaches {_reach[-1][0]}",
+                                color=theme.COLORS["good"], font="small")
+            else:
+                theme.draw_text(screen, px0 + 16, yy,
+                                "· not yet orbital",
+                                color=theme.COLORS["warn"], font="small")
+            yy += 17
+            if _nxt is not None:
+                theme.draw_text(
+                    screen, px0 + 16, yy,
+                    f"→ {_nxt[0]}: needs +{_nxt[1] - _total_dv:,.0f} m/s",
+                    color=theme.COLORS["text_dim"], font="small")
+            else:
+                theme.draw_text(screen, px0 + 16, yy,
+                                "→ outer-system capable",
+                                color=theme.COLORS["accent"], font="small")
+            yy += 22
             errs_dd = dd_v.validate()
             theme.draw_text(screen, px0 + 16, yy,
                             "VALIDATION — E jumps to the offender"
