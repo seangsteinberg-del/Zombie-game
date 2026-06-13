@@ -2640,7 +2640,7 @@ def run(argv: list[str] | None = None) -> int:
                                         interior_return_x = eva_state.x
                                         interior_face = eva_state.facing
                                         interior_frame = 0.0
-                                        eva_state.o2_s = eva_sim.SUIT_O2_S
+                                        eva_state.recharge_suit()
                                         scene = "interior"
                                         toast = (f"INSIDE {home_b.name} — "
                                                  f"suit recharged; walk "
@@ -6221,8 +6221,9 @@ def run(argv: list[str] | None = None) -> int:
             run = bool(keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT])
             eva_state.step(real_dt, move, run, False)
             # the suit clock runs at sim rate (step burned 1x already)
-            eva_state.o2_s = max(0.0, eva_state.o2_s
-                                 - (EVA_TIME_FACTOR - 1.0) * real_dt)
+            _extra_s = (EVA_TIME_FACTOR - 1.0) * real_dt
+            eva_state.o2_s = max(0.0, eva_state.o2_s - _extra_s)
+            eva_state.idle_burn(_extra_s)        # battery, cooling, scrubber
             if eva_state.o2_s <= 0.0:
                 lost_w = eva_state.member
                 crew.pop(lost_w, None)
@@ -6393,6 +6394,7 @@ def run(argv: list[str] | None = None) -> int:
 
             # underground: the sky stops helping, the suit lamp takes over
             depth_e = eva_state.depth_m()
+            eva_state.lamp_on = depth_e > 1.0    # lamp draws on the battery
             eva_tr.darkness(screen,
                             (int(size[0] / 2),
                              int(walker_top + aspr.get_height() * 0.4)),
@@ -6493,13 +6495,47 @@ def run(argv: list[str] | None = None) -> int:
                 cs = theme.chip(chip_txt, chip_col)
                 screen.blit(cs, (chx_e, 8))
                 chx_e += cs.get_width() + 8
-            theme.draw_text(screen, 10, 40, "SUIT O2",
-                            color=o2c, font="small")
-            screen.blit(theme.bar(220, 12, eva_state.o2_frac, o2c),
-                        (70, 39))
-            if eva_state.o2_frac < 0.25:
-                theme.draw_text(screen, 300, 39,
-                                "RETURN TO THE LANDER",
+            # ---- the suit life-support panel: four clocks, limited by the
+            #      one that runs out first (not just oxygen) ----
+            _ss = eva_state.suit_status()
+            def _hms(s):
+                s = int(max(0.0, min(s, 99 * 3600)))
+                return (f"{s // 3600}h{s % 3600 // 60:02d}" if s >= 3600
+                        else f"{s // 60}:{s % 60:02d}")
+            _sp_w, _sp_h = 244, 132
+            screen.blit(theme.panel(_sp_w, _sp_h, "SUIT  ·  LIFE SUPPORT"),
+                        (10, 34))
+            _row_lbl = {"O2": "OXYGEN", "PWR": "BATTERY",
+                        "H2O": "COOLING", "CO2": "SCRUBBER"}
+            _ry = 64
+            for _k in ("O2", "PWR", "H2O", "CO2"):
+                _frac, _secs = _ss["clocks"][_k]
+                _lim = _k == _ss["limit_key"]
+                _col = (theme.COLORS["danger"] if _frac < 0.22
+                        else theme.COLORS["warn"] if _frac < 0.45
+                        else theme.COLORS["accent"])
+                theme.draw_text(screen, 22, _ry, _row_lbl[_k],
+                                color=(theme.COLORS["gold"] if _lim
+                                       else theme.COLORS["text_dim"]),
+                                font="small")
+                screen.blit(theme.bar(96, 9, max(0.0, min(1.0, _frac)), _col),
+                            (96, _ry + 1))
+                theme.draw_text(screen, 200, _ry, _hms(_secs),
+                                color=(_col if _lim else theme.COLORS["text"]),
+                                font="small")
+                _ry += 17
+            # the governing clock — your real walk-back deadline
+            _lim_lo = _ss["limit_s"] < 0.18 * eva_sim.SUIT_O2_S
+            theme.draw_text(
+                screen, 22, _ry + 1,
+                f"RETURN IN {_hms(_ss['limit_s'])}"
+                f"   ({_row_lbl[_ss['limit_key']].lower()})",
+                color=(theme.COLORS["danger"] if _lim_lo
+                       else theme.COLORS["text_dim"]), font="small")
+            if _lim_lo:
+                theme.draw_text(screen, size[0] / 2 - 120, 40,
+                                "RETURN TO THE LANDER — "
+                                f"{_row_lbl[_ss['limit_key']]} LOW",
                                 color=theme.COLORS["danger"],
                                 font="ui_small")
             screen.blit(theme.footer(

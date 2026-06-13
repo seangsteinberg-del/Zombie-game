@@ -18,7 +18,22 @@ import numpy as np
 WALK_MS = 1.6                 # suit walk speed, m/s
 RUN_MS = 3.4
 JUMP_MS = 3.2                 # vertical leap speed in the suit
-SUIT_O2_S = 6.0 * 3_600.0     # surface EVA suit endurance (08 ls03)
+SUIT_O2_S = 6.0 * 3_600.0     # primary-O2 endurance (08 ls03; EMU class)
+# the rest of the EMU consumable set (08 §4.7) — each has its own clock, and
+# your safe-return time is the MINIMUM across all four, not just oxygen.
+SUIT_BATT_WH = 430.0          # suit battery energy (fans, pumps, comms, heat)
+SUIT_BASE_W = 53.0            # nominal electrical draw
+SUIT_LAMP_W = 26.0            # helmet lamp adder (night / underground)
+SUIT_FEEDWATER_KG = 3.0      # sublimator feedwater, sublimed to space to cool
+SUIT_COOL_KGPH = 0.40        # nominal cooling draw at rest
+SUIT_CO2_CAP_KG = 1.48       # METOX/LiOH canister CO2 capacity
+SUIT_CO2_KGPH = 0.042        # metabolic CO2 at rest (~1 kg/day)
+SUIT_PRESS_KPA = 29.6        # suit pressure, 4.3 psia pre-breathe setpoint
+# metabolic exertion multiplier — moving and (worse) running drive cooling,
+# CO2 and a little O2 harder; this is what makes the limiter shift in play
+EXERT_IDLE = 1.0
+EXERT_WALK = 1.5
+EXERT_RUN = 2.4
 INTERACT_RANGE_M = 4.0
 SCOOPS_PER_EVA = 3
 STEP_UP_M = 1.05              # max riser a suited walker climbs (2 tiles)
@@ -80,6 +95,12 @@ class EvaState:
         self.facing = 1
         self.airborne = False
         self.o2_s = SUIT_O2_S
+        # the rest of the EMU consumable set
+        self.batt_wh = SUIT_BATT_WH
+        self.feedwater_kg = SUIT_FEEDWATER_KG
+        self.co2_load_kg = 0.0         # scrubber loading toward saturation
+        self.lamp_on = False           # helmet lamp (set by the scene)
+        self.exertion = EXERT_IDLE     # last step's metabolic multiplier
         self.scoops_left = SCOOPS_PER_EVA
         self.dist_walked = 0.0
         self.frame = 0.0               # animation phase
@@ -99,6 +120,7 @@ class EvaState:
         if self.tiles is not None:
             self._step_tiles(dt, move, run, jump)
             self.o2_s = max(0.0, self.o2_s - dt)
+            self._suit_consume(dt, move, run)
             return
         speed = RUN_MS if run else WALK_MS
         if move:
@@ -122,6 +144,7 @@ class EvaState:
         else:
             self.y = self.ground_at(self.x)
         self.o2_s = max(0.0, self.o2_s - dt)
+        self._suit_consume(dt, move, run)
 
     def _step_tiles(self, dt: float, move: int, run: bool,
                     jump: bool) -> None:
@@ -175,6 +198,54 @@ class EvaState:
     @property
     def o2_frac(self) -> float:
         return self.o2_s / SUIT_O2_S
+
+    # -- suit consumables (the EMU clock set) -------------------------------
+    def _suit_consume(self, dt: float, move: int, run: bool) -> None:
+        """Burn battery, sublimator feedwater and scrubber capacity. Cooling
+        and CO2 scale with exertion; the lamp adds an electrical load."""
+        exert = (EXERT_RUN if run else EXERT_WALK) if move else EXERT_IDLE
+        self.exertion = exert
+        draw_w = SUIT_BASE_W + (SUIT_LAMP_W if self.lamp_on else 0.0)
+        self.batt_wh = max(0.0, self.batt_wh - draw_w * dt / 3_600.0)
+        self.feedwater_kg = max(
+            0.0, self.feedwater_kg - SUIT_COOL_KGPH * exert * dt / 3_600.0)
+        self.co2_load_kg = min(
+            SUIT_CO2_CAP_KG,
+            self.co2_load_kg + SUIT_CO2_KGPH * exert * dt / 3_600.0)
+
+    def idle_burn(self, seconds: float) -> None:
+        """Advance the consumable clocks by extra sim seconds (the EVA scene
+        runs faster than wall-clock; O2 is burned separately by the caller)."""
+        self._suit_consume(seconds, 1 if self.exertion > EXERT_IDLE else 0,
+                           self.exertion >= EXERT_RUN)
+
+    def recharge_suit(self) -> None:
+        """Back at the lander: top off every consumable."""
+        self.o2_s = SUIT_O2_S
+        self.batt_wh = SUIT_BATT_WH
+        self.feedwater_kg = SUIT_FEEDWATER_KG
+        self.co2_load_kg = 0.0
+
+    def suit_status(self) -> dict:
+        """The four-clock readout. Each entry: (fraction 0..1, seconds left).
+        'limit' is the consumable that ends the walk first, in seconds."""
+        exert = max(self.exertion, EXERT_IDLE)
+        draw_w = SUIT_BASE_W + (SUIT_LAMP_W if self.lamp_on else 0.0)
+        cool = SUIT_COOL_KGPH * exert
+        scrub = SUIT_CO2_KGPH * exert
+        clocks = {
+            "O2": (self.o2_frac, self.o2_s),
+            "PWR": (self.batt_wh / SUIT_BATT_WH,
+                    self.batt_wh / draw_w * 3_600.0 if draw_w > 0 else 1e9),
+            "H2O": (self.feedwater_kg / SUIT_FEEDWATER_KG,
+                    self.feedwater_kg / cool * 3_600.0 if cool > 0 else 1e9),
+            "CO2": (1.0 - self.co2_load_kg / SUIT_CO2_CAP_KG,
+                    (SUIT_CO2_CAP_KG - self.co2_load_kg) / scrub * 3_600.0
+                    if scrub > 0 else 1e9),
+        }
+        limit_key = min(clocks, key=lambda k: clocks[k][1])
+        return {"clocks": clocks, "limit_key": limit_key,
+                "limit_s": clocks[limit_key][1]}
 
     def jump_apex_m(self) -> float:
         """How high this world lets you leap (HUD flavor + tests)."""

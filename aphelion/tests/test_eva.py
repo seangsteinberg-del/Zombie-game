@@ -69,6 +69,47 @@ def test_suit_clock_and_scoops():
     assert 0.0 < w.o2_frac < 1.0
 
 
+def test_suit_consumables_deplete_and_limit():
+    w = EvaState("core:sec_moon_10", 8.0, G_MOON, "V")
+    b0, f0 = w.batt_wh, w.feedwater_kg
+    # idle for a while: battery and feedwater drop, scrubber loads
+    for _ in range(600):
+        w.step(1.0, 0, False, False)
+    assert w.batt_wh < b0 and w.feedwater_kg < f0 and w.co2_load_kg > 0.0
+    st = w.suit_status()
+    assert set(st["clocks"]) == {"O2", "PWR", "H2O", "CO2"}
+    assert st["limit_s"] <= w.o2_s                       # min of the four
+    # running drains cooling far faster than resting (exertion scaling)
+    rest = EvaState("core:sec_moon_10", 8.0, G_MOON, "V")
+    runr = EvaState("core:sec_moon_10", 8.0, G_MOON, "V")
+    for _ in range(120):
+        rest.step(0.5, 0, False, False)
+        runr.step(0.5, 1, True, False)
+    assert runr.feedwater_kg < rest.feedwater_kg
+
+
+def test_lamp_loads_the_battery():
+    dark = EvaState("core:sec_moon_10", 8.0, G_MOON, "V")
+    lit = EvaState("core:sec_moon_10", 8.0, G_MOON, "V")
+    lit.lamp_on = True
+    for _ in range(300):
+        dark.step(1.0, 0, False, False)
+        lit.lamp_on = True
+        lit.step(1.0, 0, False, False)
+    assert lit.batt_wh < dark.batt_wh                    # the lamp costs power
+
+
+def test_recharge_tops_off_every_consumable():
+    w = EvaState("core:sec_moon_10", 8.0, G_MOON, "V")
+    for _ in range(800):
+        w.step(1.0, 1, True, False)
+    w.recharge_suit()
+    assert w.o2_s == SUIT_O2_S and w.co2_load_kg == 0.0
+    from aphelion.game.eva import SUIT_BATT_WH, SUIT_FEEDWATER_KG
+    assert w.batt_wh == SUIT_BATT_WH
+    assert w.feedwater_kg == SUIT_FEEDWATER_KG
+
+
 def test_interaction_geometry():
     w = EvaState("core:sec_moon_10", 8.0, G_MOON, "V")
     w.x = 1.0
