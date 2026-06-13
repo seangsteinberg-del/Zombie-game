@@ -1930,6 +1930,7 @@ def run(argv: list[str] | None = None) -> int:
     prox_chaser = None
     prox_target = None
     prox_trail: list[tuple[float, float]] = []
+    prox_rcs: list = []               # recent RCS pulses (dx, dy, age) for puffs
 
     # blueprint slots (designs.json beside the saves)
     bp_path = save_dir / "designs.json"
@@ -2377,6 +2378,9 @@ def run(argv: list[str] | None = None) -> int:
                             event.key, 0.0)
                         if prox.pulse(dx, dy, mag):
                             audio.play("burn")
+                            prox_rcs.append([dx, dy, 0.0])
+                            if len(prox_rcs) > 12:
+                                prox_rcs.pop(0)
                         else:
                             audio.play("warn")
                     elif event.key == pygame.K_a:
@@ -5053,6 +5057,29 @@ def run(argv: list[str] | None = None) -> int:
                 pygame.draw.lines(screen, (60, 80, 110), False, tpts, 1)
             chx = cx0 + int(prox.y * sc)
             chy = cy0 - int(prox.x * sc)
+            # RCS puffs: cold-gas jets fire opposite the commanded accel,
+            # at the chaser, fading fast — clear feedback that you thrusted
+            _kept_rcs = []
+            for _rc in prox_rcs:
+                _rc[2] += real_dt
+                if _rc[2] > 0.30:
+                    continue
+                _kept_rcs.append(_rc)
+                _pf = _rc[2] / 0.30
+                # accel screen vector (dy→+x, dx→−y); plume exits opposite
+                _ax, _ay = _rc[1], -_rc[0]
+                _pl = math.hypot(_ax, _ay) or 1.0
+                _px2, _py2 = -_ax / _pl, -_ay / _pl
+                for _k in range(3):
+                    _d = 5 + _k * 4 + _pf * 10
+                    _rr = int(2 + _k + _pf * 3)
+                    _pp = pygame.Surface((_rr * 2, _rr * 2), pygame.SRCALPHA)
+                    pygame.draw.circle(_pp, (210, 224, 240,
+                                             int(150 * (1 - _pf))),
+                                       (_rr, _rr), _rr)
+                    screen.blit(_pp, (int(chx + _px2 * _d - _rr),
+                                      int(chy + _py2 * _d - _rr)))
+            prox_rcs = _kept_rcs
             cspr2 = craft_icon(math.atan2(-(prox.vx), prox.vy), 14,
                                burning=False)
             screen.blit(cspr2, (chx - cspr2.get_width() // 2,
@@ -5060,6 +5087,21 @@ def run(argv: list[str] | None = None) -> int:
             pygame.draw.line(screen, theme.COLORS["accent"], (chx, chy),
                              (chx + int(prox.vy * sc * 18),
                               chy - int(prox.vx * sc * 18)), 1)
+            # docking sight: on final approach a fixed reticle frames the
+            # port, with alignment ticks and a closing-speed-tinted ring
+            if prox.range_m < 60.0:
+                _al = theme.COLORS["good"] if cap_ok else theme.COLORS["danger"]
+                for _a4 in range(0, 360, 90):
+                    _ang = math.radians(_a4)
+                    _x1 = cx0 + int(math.cos(_ang) * 14)
+                    _y1 = cy0 + int(math.sin(_ang) * 14)
+                    _x2 = cx0 + int(math.cos(_ang) * 26)
+                    _y2 = cy0 + int(math.sin(_ang) * 26)
+                    pygame.draw.line(screen, _al, (_x1, _y1), (_x2, _y2), 1)
+                pygame.draw.circle(screen, _al, (cx0, cy0), 30, 1)
+                # lateral alignment error bug (how far off the centreline)
+                pygame.draw.circle(screen, theme.COLORS["accent"],
+                                   (chx, chy), 3, 1)
             particles.update_draw(screen, real_dt)
             bloom.apply(screen)
 
@@ -6075,6 +6117,14 @@ def run(argv: list[str] | None = None) -> int:
                 esky = sky_surface(size, body_e)
                 esky.set_alpha(70)
                 screen.blit(esky, (0, 0))
+            # the parent world + sun overhead while you walk the surface
+            _airless_e = not (site_e.get("aero") or body_e in _ATMO_BODIES)
+            _home_e0 = next((b for b in bases
+                             if b.site_id == eva_av.landed_at), None)
+            _dl_e = _home_e0.daylight(t) if _home_e0 is not None else 1.0
+            from aphelion.render.base_art import draw_sky_bodies
+            draw_sky_bodies(screen, size[0], h_ground - 40, body_e, tree,
+                            _dl_e, _airless_e)
             for ridge_s, fac in ridge_layers(body_e, size[0]):
                 rx = -((camx * ppm * fac * 0.25) % RIDGE_PAD)
                 screen.blit(ridge_s,
