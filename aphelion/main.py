@@ -1798,8 +1798,12 @@ def run(argv: list[str] | None = None) -> int:
                 x0, y0, att = fx0 + lx0, fy0 + ly0, None
             crewed_rated = any(db.parts[r.part_id]["type"] == "crew"
                                for r in v.vessel.rows)
-            parts = (("CM-OMNI", "UT-DISH-S") if crewed_rated
-                     else ("CM-OMNI",))
+            # CM-PROX (proximity medium-gain, 20 dBi) is the L-13 teleop
+            # fit every vehicle carries — without it an uncrewed rover's
+            # omni caps at 256 kbit/s / gain 1 and teleop is structurally
+            # impossible at any range. The HGA carries the bulk downlink.
+            parts = (("CM-OMNI", "CM-PROX", "UT-DISH-M") if crewed_rated
+                     else ("CM-OMNI", "CM-PROX", "UT-DISH-S"))
             uid = f"v{v.vid}"
             nodes.append(netg.CommsNode(uid, (x0, y0), parts, ("UT-AV",)))
             pos[uid] = (x0, y0, att)
