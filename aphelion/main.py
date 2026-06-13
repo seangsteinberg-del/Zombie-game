@@ -4879,6 +4879,8 @@ def run(argv: list[str] | None = None) -> int:
                         break
             audio.set_engine(descent.throttle_eff
                              if descent.outcome is None else 0.0)
+            if os.environ.get("APH_QA_BLAST") == "1":   # QA: near-surface
+                descent.h = 16.0
 
             # ---- draw: this body's sky, seeded terrain, the lander ----
             screen.fill((6, 8, 14))
@@ -4942,6 +4944,31 @@ def run(argv: list[str] | None = None) -> int:
                 if rho0 > 0.0 and a_sky > 8 and ground_y < size[1] + 70:
                     haze.set_alpha(int(110 * a_sky / 190))
                     screen.blit(haze, (0, ground_y - 70))
+                # regolith blast: on final approach the plume scours dust in
+                # radial sheets across the surface — the iconic landing dust
+                if (os.environ.get("APH_QA_BLAST") == "1") or (
+                        descent.throttle_eff > 0.1 and 0.0 < descent.h < 45.0
+                        and ground_y < size[1] + 4):
+                    _bf = (0.85 if os.environ.get("APH_QA_BLAST") == "1"
+                           else (1.0 - descent.h / 45.0)
+                           * min(1.0, descent.throttle_eff))
+                    _tx = size[0] // 2 + sox
+                    _dcol = ((184, 132, 96) if "mars" in site_d["body"]
+                             else (172, 166, 156))
+                    _blast = pygame.Surface((size[0], 64), pygame.SRCALPHA)
+                    for _di in range(22):
+                        _side = -1 if _di % 2 == 0 else 1
+                        _ph = (ui_t * 1.8 + _di * 0.29) % 1.0
+                        _reach = int((24 + 320 * _ph) * _bf)
+                        _x = _tx + _side * _reach
+                        _r = int(3 + 10 * _ph)
+                        _a = int(135 * _bf * (1.0 - _ph) ** 1.4)
+                        if _a > 4:
+                            pygame.draw.ellipse(
+                                _blast, (*_dcol, _a),
+                                (_x - _r, 40 - int(10 * (1 - _ph) * _bf),
+                                 _r * 2, max(2, _r)))
+                    screen.blit(_blast, (0, ground_y - 40))
                 # LZ beacon where the descent began (downrange zero)
                 lz_x = size[0] // 2 - off
                 if -200 < lz_x < size[0] + 200 and ground_y < size[1] + 30:
