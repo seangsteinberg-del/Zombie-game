@@ -1412,7 +1412,7 @@ def run(argv: list[str] | None = None) -> int:
     help_open = False
     station_open = False              # F7: spin/keeping/depot ops
     # map intelligence: target, transfer planner, warp-to-node
-    target_id: str | None = None
+    target_id: str | None = os.environ.get("APH_QA_TARGET") or None
     planner_open = False
     planner_cursor = 0
     warp_to_node = False
@@ -8050,6 +8050,51 @@ def run(argv: list[str] | None = None) -> int:
             for li, (txt2, col2) in enumerate(nav_lines):
                 theme.draw_text(screen, nx0 + 12, ny0 + 30 + li * 20, txt2,
                                 color=col2, font="small")
+
+        # TARGET fact card: the planning facts about the body you're aimed at
+        # (gravity, day, radius, surface radiation, atmosphere, mapped sites)
+        if (target_id is not None and target_id in db.bodies
+                and not (base_screen or research_open or crew_open
+                         or planner_open or contracts_open)):
+            from aphelion.sim.habitat import dose as _dose_m
+            _bd_t = db.bodies[target_id]
+            _g_t = _bd_t["mu_m3s2"] / max(_bd_t["radius_m"] ** 2, 1.0)
+            _rot_h = _bd_t.get("rotation_period_s", 0.0) / 3600.0
+            _rad_t = _dose_m.AMBIENT_MSV_DAY.get(target_id, 1.8)
+            _atmo_t = target_id in _ATMO_BODIES
+            try:
+                from aphelion.game.sectors import sectors_of as _secf
+                _nsec = len(_secf(db, target_id))
+            except Exception:
+                _nsec = 0
+            _facts = [
+                (f"gravity    {_g_t / 9.80665:5.2f} g  ({_g_t:4.1f} m/s²)",
+                 theme.COLORS["text"]),
+                (f"day        {_rot_h:6.1f} h" if _rot_h > 0
+                 else "day         —", theme.COLORS["text_dim"]),
+                (f"radius     {_bd_t['radius_m'] / 1e3:6,.0f} km",
+                 theme.COLORS["text_dim"]),
+                (f"radiation  {_rad_t:6.2f} mSv/day",
+                 theme.COLORS["good"] if _rad_t < 1.0
+                 else theme.COLORS["warn"] if _rad_t < 5.0
+                 else theme.COLORS["danger"]),
+                (f"atmosphere {'yes' if _atmo_t else 'none':>4s}",
+                 theme.COLORS["accent"] if _atmo_t
+                 else theme.COLORS["text_dim"]),
+            ]
+            if _nsec:
+                _facts.append((f"landing    {_nsec} sectors mapped",
+                               theme.COLORS["gold"]))
+            _navh = (34 + 20 * len(nav_lines) + 8) if nav_lines else 0
+            _ty0 = 84 + _navh
+            _tx0 = size[0] - 364
+            screen.blit(theme.panel(
+                354, 34 + 20 * len(_facts),
+                f"TARGET — {target_id.split(':')[1].upper()}"),
+                (_tx0, _ty0))
+            for _fi, (_ft, _fc) in enumerate(_facts):
+                theme.draw_text(screen, _tx0 + 12, _ty0 + 30 + _fi * 20, _ft,
+                                color=_fc, font="small")
 
         screen.blit(theme.footer(
             size[0],
