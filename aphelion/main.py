@@ -4719,6 +4719,19 @@ def run(argv: list[str] | None = None) -> int:
                             color=theme.COLORS["text_dim"], font="small")
             screen.blit(theme.bar(150, 10, live.throttle_cmd,
                                   theme.COLORS["warn"]), (hx + 78, hy + 4))
+            # max-Q gauge: live dynamic pressure against the structural limit,
+            # green→amber→red as the airframe loads up — the ascent's tensest
+            # instant made legible at a glance, redline ticked
+            theme.draw_text(screen, hx, hy + 24, "MAX-Q",
+                            color=theme.COLORS["text_dim"], font="small")
+            _qf = min(1.0, live.q / max(live.params.q_limit, 1.0))
+            _qcol = (theme.COLORS["good"] if _qf < 0.6
+                     else theme.COLORS["warn"] if _qf < 0.9
+                     else theme.COLORS["danger"])
+            screen.blit(theme.bar(150, 10, _qf, _qcol), (hx + 78, hy + 26))
+            pygame.draw.line(screen, theme.COLORS["danger"],
+                             (hx + 78 + 148, hy + 25), (hx + 78 + 148, hy + 37),
+                             2)
 
             for i, ev_txt in enumerate(live.events[-3:]):
                 theme.draw_text(screen, 16, size[1] - 96 + i * 20, ev_txt,
