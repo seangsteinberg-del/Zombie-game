@@ -232,6 +232,74 @@ def _drive_terrain_key(site: dict) -> str:
     return "regolith"
 
 
+def _corridor_advice(body_id: str, mu: float, radius: float, el,
+                     beta: float,
+                     rating_w_m2: float) -> list[tuple[str, str]]:
+    """Aerocapture/entry corridor advisor for the NAV panel (01 §1.6).
+
+    Judges the encounter leg's arrival conic against the live
+    skip/capture/land corridor for THIS stack. Coarse integrator settings —
+    this is advisory; the entry adjudicator still flies the real thing.
+    Returns [(line, status)] with status in {"go", "warn", "danger"}.
+    """
+    from aphelion.sim.environment.atmosphere import interface_altitude
+    from aphelion.sim.flight.corridor import advise, corridor
+
+    h_int = interface_altitude(body_id)
+    if not math.isfinite(h_int):
+        return []
+    r_i = radius + h_int
+    v2 = mu * (2.0 / r_i - el.alpha)
+    if v2 <= 0.0:
+        return []                     # conic never reaches the interface
+    v_i = math.sqrt(v2)
+    try:
+        rep = corridor(body_id, mu, radius, v_i, max(beta, 10.0),
+                       tol_deg=0.1, dt=0.25)
+    except ValueError:
+        return []
+    if el.periapsis >= r_i:
+        # vacuum flyby: tell the player what periapsis to AIM for
+        if rep.has_capture_band:
+            return [(
+                f"AEROCAPTURE window Pe "
+                f"{rep.hp_window_lo_m / 1e3:,.0f}-"
+                f"{rep.hp_window_hi_m / 1e3:,.0f} km — current Pe "
+                f"{(el.periapsis - radius) / 1e3:,.0f} km HIGH (flyby)",
+                "warn")]
+        return []
+    # the conic dips into the atmosphere: judge the entry angle itself
+    v_pe = math.sqrt(max(mu * (2.0 / el.periapsis - el.alpha), 0.0))
+    cosg = min(1.0, (el.periapsis * v_pe) / (r_i * v_i))
+    gamma = math.degrees(math.acos(cosg))
+    if not (rep.has_capture_band or math.isfinite(rep.gamma_land_limit)):
+        return [("ENTRY: NO CORRIDOR — can neither capture nor land",
+                 "danger")]
+    _, margin = advise(rep, gamma)
+    if rep.has_capture_band:
+        lo = rep.gamma_capture_lo
+        band = f"{lo:.1f}-{rep.gamma_capture_hi:.1f}"
+    else:
+        lo = rep.gamma_land_limit
+        band = f"{rep.gamma_land_limit:.1f}+"
+    lines: list[tuple[str, str]] = []
+    if margin >= 0.0:
+        lines.append((f"ENTRY {gamma:.1f} deg in corridor {band} — GO "
+                      f"({margin:.1f} deg margin)",
+                      "go" if margin >= 0.3 else "warn"))
+    else:
+        side = "SHALLOW (skip-out risk)" if gamma < lo else "STEEP"
+        lines.append((f"ENTRY {gamma:.1f} deg vs corridor {band} — "
+                      f"{-margin:.1f} deg {side}", "danger"))
+    if (math.isfinite(rep.peak_heating_w_m2)
+            and rep.peak_heating_w_m2 > rating_w_m2):
+        lines.append((
+            f"TPS: {rep.peak_heating_w_m2 / 1e6:.1f} MW/m2 at corridor "
+            f"center vs {rating_w_m2 / 1e6:.1f} rated — WILL BURN UP",
+            "danger"))
+    return lines
+
+
 def _surface_options(av, bases, db=None,
                      investigated=frozenset(),
                      vehicles=()) -> list[tuple[tuple, str]]:
@@ -1223,6 +1291,9 @@ def run(argv: list[str] | None = None) -> int:
     planner_cursor = 0
     warp_to_node = False
     ca_cache = {"at": -1e9, "tgt": None, "d": None, "t": 0.0}
+    # O wiring: corridor advisor verdicts, recomputed at most hourly per
+    # encounter (the bisection runs ~25 fly_entry passes — never per frame)
+    corridor_cache = {"key": None, "lines": []}
     # V5 dive scene state (Titan seas)
     dive_gv = None
     dive_av = None
@@ -6325,6 +6396,25 @@ def run(argv: list[str] | None = None) -> int:
                         + ("  IMPACT" if pe_enc < 0 else ""),
                         theme.COLORS["danger"] if pe_enc < 0
                         else theme.COLORS["good"]))
+                    # §1.6 corridor advisor for atmospheric arrivals
+                    _ck = (target_id, av.vid, int(enc.t_start // 3600))
+                    if corridor_cache["key"] != _ck:
+                        _body_e = tree.body(target_id)
+                        _beta_e = (av.vessel.total_mass_kg()
+                                   / max(av.vessel.cd_a_m2, 0.5))
+                        _rate_e = (_CAPSULE_HEAT_W_M2 if any(
+                            db.parts[r.part_id]["type"] == "crew"
+                            for r in av.vessel.rows)
+                            else _BARE_HEAT_W_M2)
+                        corridor_cache.update(
+                            key=_ck,
+                            lines=_corridor_advice(
+                                target_id, _body_e.mu, _body_e.radius,
+                                enc.elements, _beta_e, _rate_e))
+                    for _cl, _cs in corridor_cache["lines"]:
+                        nav_lines.append((_cl, theme.COLORS[
+                            {"go": "good", "warn": "warn",
+                             "danger": "danger"}[_cs]]))
                 else:
                     if (ui_t - ca_cache["at"] > 0.5
                             or ca_cache["tgt"] != target_id):

@@ -62,3 +62,58 @@ def test_transfer_window_phase_converges():
     n_t = math.sqrt(MU_S / r2 ** 3)
     phase_at_dep = _wrap_pi(phase_now + (n_t - n_o) * wait)
     assert phase_at_dep == pytest.approx(_wrap_pi(phase_req), abs=1e-6)
+
+
+# ---- O wiring: NAV-panel corridor advisor (01 §1.6) -------------------------
+
+from types import SimpleNamespace  # noqa: E402
+
+from aphelion.main import _corridor_advice  # noqa: E402
+from aphelion.sim.environment.atmosphere import interface_altitude  # noqa: E402
+
+MU_MARS = 4.282_837e13
+R_MARS = 3.3895e6
+
+
+def _mars_arrival_el(gamma_deg: float, v_i: float = 5_600.0):
+    """Arrival conic with the given entry angle at the Mars interface
+    (the canon test_phase5 state: 5.6 km/s, judged against beta 300)."""
+    r_i = R_MARS + interface_altitude("core:mars")
+    alpha = 2.0 / r_i - v_i * v_i / MU_MARS
+    h = r_i * v_i * math.cos(math.radians(gamma_deg))
+    eps = 0.5 * v_i * v_i - MU_MARS / r_i
+    e = math.sqrt(max(1.0 + 2.0 * eps * h * h / (MU_MARS * MU_MARS), 0.0))
+    return SimpleNamespace(alpha=alpha, periapsis=h * h / MU_MARS / (1.0 + e))
+
+
+def test_corridor_advice_mars_go_and_steep():
+    # 9.1 deg sits inside the pinned 8.83-9.42 capture band -> GO
+    lines = _corridor_advice("core:mars", MU_MARS, R_MARS,
+                             _mars_arrival_el(9.1), 300.0, 2.5e6)
+    assert lines and lines[0][1] in ("go", "warn")
+    assert "GO" in lines[0][0] and "corridor" in lines[0][0]
+    # 7.0 deg skips out (phase-5 pin) -> danger, called SHALLOW
+    shallow = _corridor_advice("core:mars", MU_MARS, R_MARS,
+                               _mars_arrival_el(7.0), 300.0, 2.5e6)
+    assert shallow and shallow[0][1] == "danger"
+    assert "SHALLOW" in shallow[0][0]
+    # an impossibly low TPS rating must raise the burn-up line
+    burned = _corridor_advice("core:mars", MU_MARS, R_MARS,
+                              _mars_arrival_el(9.1), 300.0, 1.0)
+    assert any("WILL BURN UP" in ln for ln, _ in burned)
+
+
+def test_corridor_advice_flyby_names_the_window():
+    # periapsis 400 km up: vacuum flyby -> advise the Pe window to aim for
+    el = _mars_arrival_el(9.1)
+    el.periapsis = R_MARS + 400e3
+    lines = _corridor_advice("core:mars", MU_MARS, R_MARS, el, 300.0, 2.5e6)
+    assert lines and lines[0][1] == "warn"
+    assert "AEROCAPTURE window" in lines[0][0]
+    assert "HIGH" in lines[0][0]
+
+
+def test_corridor_advice_silent_without_atmosphere():
+    el = _mars_arrival_el(9.1)
+    assert _corridor_advice("core:moon", 4.9e12, 1.737e6, el,
+                            300.0, 2.5e6) == []
