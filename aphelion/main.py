@@ -1096,6 +1096,7 @@ def run(argv: list[str] | None = None) -> int:
     # still finds the newest by mtime across all of them.
     AUTOSAVE_SLOTS = 3
     autosave_idx = 0
+    photo_seq = 0                  # F-chunk photo mode capture counter
 
     def latest_save():
         saves = sorted(save_dir.glob("*.aph"),
@@ -2104,6 +2105,25 @@ def run(argv: list[str] | None = None) -> int:
                         pygame.FULLSCREEN if fullscreen else 0)
                     screen = pygame.display.set_mode(
                         size, flags, vsync=0 if args.headless else 1)
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_F12:
+                # PHOTO (F-chunk): capture the frame + log it to the
+                # Chronicle so the mission album is part of the record
+                try:
+                    photo_dir = save_dir / "photos"
+                    photo_dir.mkdir(parents=True, exist_ok=True)
+                    photo_seq += 1
+                    pname = f"aphelion-{photo_seq:04d}.png"
+                    pygame.image.save(screen, str(photo_dir / pname))
+                    _av_p = locals().get("av")
+                    _where = (_av_p.frame_id.split(":")[-1]
+                              if _av_p is not None else scene)
+                    chron.add(t, "PHOTO", f"a photograph from {_where}",
+                              location=_where, autoshot_id=pname, cls=4)
+                    toast = f"PHOTO saved — {pname}  (logged to Chronicle)"
+                    toast_until = t + 5.0
+                    audio.play("blip")
+                except Exception as _pe:
+                    toast, toast_until = f"photo failed: {_pe}", t + 5.0
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_m:
                 toast = ("audio muted" if audio.toggle_mute()
                          else "audio on")
