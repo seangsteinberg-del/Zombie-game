@@ -4392,9 +4392,13 @@ def run(argv: list[str] | None = None) -> int:
             prev_scene = scene
         # music mood rides the scene; engine rumble only where engines live
         audio.update(real_dt)
-        audio.set_mood("tense" if scene in ("ascent", "descent", "proxops")
-                       else "warm" if scene == "victory" or base_screen
-                       else "calm")
+        # mood by scene: tense under the loads/danger (launch, EDL, docking,
+        # the crushing deep), warm where it's safe and home (victory, colony,
+        # walking your own hab), calm out in the quiet of flight/EVA
+        audio.set_mood(
+            "tense" if scene in ("ascent", "descent", "proxops", "dive")
+            else "warm" if (scene in ("victory", "interior") or base_screen)
+            else "calm")
         if scene not in ("ascent", "descent"):
             audio.set_engine(0.0)
 
