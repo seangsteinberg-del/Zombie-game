@@ -1446,6 +1446,7 @@ def run(argv: list[str] | None = None) -> int:
     drive_attempts = 0
     drive_warn_t = -1e9
     drive_eta = 1.0                   # L-13 teleop efficiency (1 = crewed)
+    drive_dust: list = []            # world-anchored wheel-dust puffs
     # colony scene state
     base_focus = "construct"          # or "modules"
     module_cursor = 0
@@ -5839,6 +5840,14 @@ def run(argv: list[str] | None = None) -> int:
                 dsky = sky_surface(size, body_d)
                 dsky.set_alpha(70)
                 screen.blit(dsky, (0, 0))
+            # the parent world + sun overhead (Earthrise while you rove)
+            _airless_d = not (site_d.get("aero") or body_d in _ATMO_BODIES)
+            _home_d0 = next((b for b in bases
+                             if b.site_id == drive_av.landed_at), None)
+            _dl_d = _home_d0.daylight(t) if _home_d0 is not None else 1.0
+            from aphelion.render.base_art import draw_sky_bodies
+            draw_sky_bodies(screen, size[0], h_ground - 40, body_d, tree,
+                            _dl_d, _airless_d)
             for ridge_s, fac in ridge_layers(body_d, size[0]):
                 rx = -((camx_d * ppm * fac * 0.25) % RIDGE_PAD)
                 screen.blit(ridge_s,
@@ -5871,6 +5880,34 @@ def run(argv: list[str] | None = None) -> int:
                                 (_sxd(bx) - spr.get_width() / 2,
                                  _syd(drive_tiles.surface_y(bx))
                                  - spr.get_height()))
+
+            # wheel dust: kicked up behind the rover on dusty ground, anchored
+            # in the world so it lingers where you churned it (V5 feedback)
+            _dusty_d = (terr_key in ("regolith", "mars_dust", "dust")
+                        or site_d.get("kind") in ("regolith", "mars_ice",
+                                                  "psr_ice"))
+            if _dusty_d and abs(drive_v) > 0.6 and drive_stuck <= 0.0:
+                _jx = ((len(drive_dust) * 0.137 + ui_t) % 1.0 - 0.5) * 1.2
+                drive_dust.append([drive_x - drive_face * 1.1 + _jx, 0.0])
+                if len(drive_dust) > 28:
+                    drive_dust.pop(0)
+            _dcol = ((150, 96, 64) if "mars" in body_d else (172, 158, 132))
+            _kept_dust = []
+            for _pp in drive_dust:
+                _pp[1] += real_dt
+                if _pp[1] > 0.75:
+                    continue
+                _kept_dust.append(_pp)
+                _p = _pp[1] / 0.75
+                _r = int(3 + 11 * _p)
+                _sx = _sxd(_pp[0])
+                _sy = _syd(drive_tiles.surface_y(_pp[0])) - 4 - 26 * _p
+                if -20 < _sx < size[0] + 20:
+                    _ds = pygame.Surface((_r * 2, _r * 2), pygame.SRCALPHA)
+                    pygame.draw.circle(_ds, (*_dcol, int(108 * (1 - _p))),
+                                       (_r, _r), _r)
+                    screen.blit(_ds, (int(_sx - _r), int(_sy - _r)))
+            drive_dust = _kept_dust
 
             # the vehicle: grounded by its contact shadow (rule zero)
             vppm = 22.0
@@ -8072,23 +8109,12 @@ def run(argv: list[str] | None = None) -> int:
             # CELESTIAL LAYER: the parent world hanging over the site (an
             # Earthrise over a lunar base, Jupiter looming over Europa) plus
             # the sun disk camera-left — the sky becomes a place, not a void.
-            from aphelion.render.base_art import kind_palette as _kpal
+            from aphelion.render.base_art import (kind_palette as _kpal,
+                                                   draw_sky_bodies)
             from aphelion.ui.theme import _mix as _mixc, _seed as _seedc
             _airless_b = _kpal(site_def["kind"])[4]
-            try:
-                _pid_b = tree.body(site_def["body"]).parent
-                _is_moon = (_pid_b is not None
-                            and tree.body(_pid_b).parent is not None)
-            except Exception:
-                _pid_b, _is_moon = None, False
-            if _is_moon:
-                _psp = body_sprite(_pid_b, 150, sun_angle=3.5)
-                screen.blit(_psp, (int(size[0] * 0.72 - _psp.get_width() / 2),
-                                   int(scene_h * 0.20 - _psp.get_height() / 2)))
-            if daylight > 0.28:           # the sun, when it's above the horizon
-                _ssp = sun_sprite(38 if _airless_b else 28)
-                screen.blit(_ssp, (int(size[0] * 0.13 - _ssp.get_width() / 2),
-                                   int(scene_h * 0.30 - _ssp.get_height() / 2)))
+            draw_sky_bodies(screen, size[0], scene_h, site_def["body"], tree,
+                            daylight, _airless_b)
             # parallax ridge silhouettes — distant relief behind the colony
             _hpal = _kpal(site_def["kind"])
             _rngh = np.random.default_rng(_seedc(site_b.site_id + "skyline"))

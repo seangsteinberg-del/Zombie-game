@@ -19,7 +19,7 @@ import math
 import numpy as np
 import pygame
 
-from aphelion.render.body_art import _fbm
+from aphelion.render.body_art import _fbm, body_sprite, sun_sprite
 from aphelion.ui.theme import _mix, _seed
 
 _TERRAIN_CACHE: dict[tuple, tuple[pygame.Surface, list[int]]] = {}
@@ -129,6 +129,27 @@ def sky_strip(kind: str, w: int, h: int, daylight: float) -> pygame.Surface:
         _SKY_CACHE.clear()
     _SKY_CACHE[key] = surf
     return surf
+
+
+def draw_sky_bodies(surf, w: int, scene_h: int, body_id: str, tree,
+                    daylight: float, airless: bool) -> None:
+    """The parent world hanging over the site (Earthrise over a lunar base,
+    Jupiter over Europa) + the sun disk camera-left when it's up. Resolves
+    'are we a moon?' from the frame tree's parent chain. Cinematic depth for
+    any surface scene (colony, drive, EVA)."""
+    try:
+        pid = tree.body(body_id).parent
+        is_moon = pid is not None and tree.body(pid).parent is not None
+    except Exception:
+        pid, is_moon = None, False
+    if is_moon and pid:
+        psp = body_sprite(pid, 150, sun_angle=3.5)
+        surf.blit(psp, (int(w * 0.72 - psp.get_width() / 2),
+                        int(scene_h * 0.20 - psp.get_height() / 2)))
+    if daylight > 0.28:
+        ssp = sun_sprite(38 if airless else 28)
+        surf.blit(ssp, (int(w * 0.13 - ssp.get_width() / 2),
+                        int(scene_h * 0.30 - ssp.get_height() / 2)))
 
 
 # ------------------------------------------------------------ terrain --
