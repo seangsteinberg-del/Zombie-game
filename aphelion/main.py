@@ -1459,6 +1459,8 @@ def run(argv: list[str] | None = None) -> int:
     drive_warn_t = -1e9
     drive_eta = 1.0                   # L-13 teleop efficiency (1 = crewed)
     drive_dust: list = []            # world-anchored wheel-dust puffs
+    drive_tracks: list = []          # world x of compressed wheel ruts
+    drive_track_x = -1e9             # last x where a rut was laid
     # colony scene state
     base_focus = "construct"          # or "modules"
     module_cursor = 0
@@ -1567,6 +1569,8 @@ def run(argv: list[str] | None = None) -> int:
         ground_vehicles.append(drive_gv)
         drive_av = _fvq
         drive_x = 24.0
+        if os.environ.get("APH_QA_PRINTS") == "1":   # QA: a rut trail to read
+            drive_tracks.extend(24.0 - _ti * 0.4 for _ti in range(60))
         scene = "drive"
     elif want == "dive":                # QA: SUB-T in a Titan sea
         from aphelion.sim.vessels.vessel import Vessel as _V
@@ -3130,6 +3134,8 @@ def run(argv: list[str] | None = None) -> int:
                             drive_v, drive_face = 0.0, 1
                             drive_stuck, drive_attempts = 0.0, 0
                             drive_tiles, drive_tr = None, None
+                            drive_tracks.clear()
+                            drive_track_x = -1e9
                             surface_open = False
                             scene = "drive"
                             _tele_tag = ("" if av0.crew else
@@ -6126,6 +6132,13 @@ def run(argv: list[str] | None = None) -> int:
                                   min(getattr(drive_tiles, "width_m",
                                               2000.0) - 2.0,
                                       drive_x + dx_d))
+                    # press a compressed wheel rut into loose ground every
+                    # ~0.4 m of travel (the trail you churn behind you)
+                    if abs(drive_x - drive_track_x) >= 0.4:
+                        drive_tracks.append(drive_x)
+                        drive_track_x = drive_x
+                        if len(drive_tracks) > 600:
+                            del drive_tracks[:160]
                     if int(drive_gv.odo_km) != int(km_pre):
                         import zlib as _z
                         p_g = locomotion.p_ground_pa(
@@ -6180,6 +6193,25 @@ def run(argv: list[str] | None = None) -> int:
                 return size[0] / 2.0 + (wx - camx_d) * ppm
 
             drive_tr.draw(screen, camx_d, drive_camy, size, ppm, h_ground)
+            # wheel ruts: the compressed groove the rover churned. Points sit
+            # ~0.4 m apart; wide overlapping dabs fuse into a continuous dark
+            # track sunk into the regolith with a thin sunlit upper lip
+            _gpd = ground_palette(body_d)
+            _rdk = tuple(max(0, c - 22) for c in _gpd.dark)
+            _rw = max(9, int(0.95 * ppm))
+            for _tx in drive_tracks:
+                _tsx = _sxd(_tx)
+                if -12 < _tsx < size[0] + 12:
+                    _tsy = int(_syd(drive_tiles.surface_y(_tx)))
+                    pygame.draw.line(screen, _gpd.speck,
+                                     (int(_tsx - _rw / 2), _tsy),
+                                     (int(_tsx + _rw / 2), _tsy))
+                    pygame.draw.rect(screen, _rdk,
+                                     (int(_tsx - _rw / 2), _tsy + 1, _rw, 6))
+                    # twin ruts: a faint centre crown between the wheel grooves
+                    pygame.draw.line(screen, _gpd.dark,
+                                     (int(_tsx - _rw / 2), _tsy + 3),
+                                     (int(_tsx + _rw / 2), _tsy + 3))
             # the lander + colony share the cross-section
             stack_d = [[drive_av.vessel.rows[i].part_id for i in st]
                        for st in drive_av.vessel.stage_plan]
