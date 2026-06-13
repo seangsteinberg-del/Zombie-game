@@ -4801,15 +4801,28 @@ def run(argv: list[str] | None = None) -> int:
             bloom.apply(screen)        # bloom the world, not the HUD glass
 
             # ---- HUD ----
-            screen.blit(theme.panel(258, 308, "ASCENT"), (16, 16))
+            screen.blit(theme.panel(258, 330, "ASCENT"), (16, 16))
             hx, hy = 32, 52
             q_col = (theme.COLORS["danger"] if live.q > live.params.q_limit
                      else theme.COLORS["text"])
+            # ORBIT INSERTION verdict: what phase of the climb are you in, and
+            # what the autopilot/you should do next (target apo off the sim)
+            _tapo_km = getattr(live.params, "target_apo", 200e3) / 1e3
+            if live.peri_km > 120.0 and live.h > 120e3:
+                _ins, _ic = "ORBIT", theme.COLORS["good"]
+            elif live.apo_km >= _tapo_km - 1.0:
+                _ins, _ic = "COAST — CIRCULARIZE @ APO", theme.COLORS["gold"]
+            elif live.ignited:
+                _ins = f"CLIMB → apo {min(live.apo_km, 9999):,.0f}/{_tapo_km:,.0f}"
+                _ic = theme.COLORS["accent"]
+            else:
+                _ins, _ic = "ON THE PAD", theme.COLORS["text_dim"]
             rows = [
                 (f"ALT   {live.h/1e3:10,.2f} km", theme.COLORS["text"]),
                 (f"VEL   {live.v_air:10,.0f} m/s", theme.COLORS["text"]),
                 (f"APO   {live.apo_km:10,.0f} km", theme.COLORS["accent"]),
                 (f"PERI  {live.peri_km:10,.0f} km", theme.COLORS["accent"]),
+                (f"INSERT {_ins}", _ic),
                 (f"Q     {live.q/1e3:10,.1f} kPa", q_col),
                 (f"TWR   {live.twr:10,.2f}", theme.COLORS["text"]),
                 (f"STAGE {max(len(live.vessel.stage_plan), 0):>6d} left",
