@@ -5419,6 +5419,37 @@ def run(argv: list[str] | None = None) -> int:
                                else theme.COLORS["text_dim"]),
                         font="small")
                     yy += 18
+            # selected part spec — the numbers that drive the choice
+            if sel_dd:
+                _sp = sel_dd[1]
+                _wsz, _hsz = _sp.get("size", [1, 1])
+                theme.draw_text(
+                    screen, px0 + 16, yy,
+                    f"{_sp.get('mass_t', 0):.2f} t   ${_sp.get('cost_musd', 0):,.1f}M"
+                    f"   {_wsz}x{_hsz} cells",
+                    color=theme.COLORS["text"], font="small")
+                yy += 16
+                _eng, _tnk, _crw = (_sp.get("engine"), _sp.get("tank"),
+                                    _sp.get("crew"))
+                if _eng:
+                    _pp = "/".join(k[:3] for k in _eng.get("propellant", {}))
+                    _detail = (f"{_eng.get('thrust_kN', 0):,.0f} kN  Isp "
+                               f"{_eng.get('isp_s', 0):.0f}"
+                               + (f"/{_eng['isp_sl_s']:.0f}"
+                                  if 'isp_sl_s' in _eng else "")
+                               + f" s  {_pp}")
+                elif _tnk:
+                    _mx = "/".join(k[:3] for k in _tnk.get("mixture", {}))
+                    _detail = (f"holds {_tnk.get('capacity_t', 0):,.1f} t  "
+                               f"{_mx}")
+                elif _crw:
+                    _detail = (f"{_crw.get('capacity', 0)} crew  "
+                               f"{_crw.get('endurance_days', 0):.0f} d endurance")
+                else:
+                    _detail = _sp.get("class", "STRUCT").lower() + " element"
+                theme.draw_text(screen, px0 + 16, yy, _detail[:48],
+                                color=theme.COLORS["accent"], font="small")
+                yy += 18
             yy += 8
             defs_dd = dd_stage.to_stage_defs(dd_v)
             rep_dd = stage_report(defs_dd, mode=dd_mode) if defs_dd \
