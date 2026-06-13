@@ -6560,6 +6560,24 @@ def run(argv: list[str] | None = None) -> int:
                 pygame.draw.rect(screen, theme.COLORS["gold"],
                                  (size[0] / 2 - 24, walker_top - 12,
                                   int(48 * min(1.0, frac_d)), 6))
+                # geology readout: what you're cutting and what it yields
+                _GEO = {tileworld.REGOLITH: ("REGOLITH", "loose fines"),
+                        tileworld.ROCK: ("ROCK", "hard — slow cut"),
+                        tileworld.ICE: ("ICE", "water-rich"),
+                        tileworld.ORE: ("ORE VEIN", "metal-bearing")}
+                _tt = eva_dig.get("tt")
+                if _tt in _GEO:
+                    _gn, _gd = _GEO[_tt]
+                    _gkg = tileworld.TILE_KG.get(_tt, 0.0)
+                    _gcol = (theme.COLORS["accent"] if _tt == tileworld.ICE
+                             else theme.COLORS["gold"]
+                             if _tt == tileworld.ORE
+                             else theme.COLORS["text_dim"])
+                    _gtxt = f"{_gn}  ·  {_gd}  ·  ~{_gkg:,.0f} kg"
+                    _gw = theme.init_fonts()["small"].size(_gtxt)[0]
+                    theme.draw_text(screen, int(size[0] / 2 - _gw / 2),
+                                    walker_top - 30, _gtxt, color=_gcol,
+                                    font="small")
             # dig debris: chips spall off the tool bite — a steady spray
             # while cutting, a burst when the tile lets go (deterministic
             # jitter keyed on frame so headless stays reproducible)
