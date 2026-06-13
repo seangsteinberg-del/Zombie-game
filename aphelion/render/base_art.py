@@ -146,10 +146,25 @@ def draw_sky_bodies(surf, w: int, scene_h: int, body_id: str, tree,
         psp = body_sprite(pid, 150, sun_angle=3.5)
         surf.blit(psp, (int(w * 0.72 - psp.get_width() / 2),
                         int(scene_h * 0.20 - psp.get_height() / 2)))
-    if daylight > 0.28:
-        ssp = sun_sprite(38 if airless else 28)
-        surf.blit(ssp, (int(w * 0.13 - ssp.get_width() / 2),
-                        int(scene_h * 0.30 - ssp.get_height() / 2)))
+    if daylight > 0.20:
+        # the sun rides time of day: low on the horizon at dawn/dusk, high
+        # at midday; bigger near the horizon (and warmer on atmo worlds)
+        el = max(0.0, min(1.0, (daylight - 0.20) / 0.80))
+        sun_y = scene_h * (0.50 - 0.38 * el)
+        low = el < 0.4
+        base_d = (44 if low else 36) if airless else (34 if low else 26)
+        ssp = sun_sprite(base_d)
+        sx = int(w * 0.13 - ssp.get_width() / 2)
+        sy = int(sun_y - ssp.get_height() / 2)
+        if low and not airless:           # warm horizon haze under the disk
+            haze = pygame.Surface((ssp.get_width() * 3, ssp.get_height() * 2),
+                                  pygame.SRCALPHA)
+            pygame.draw.ellipse(haze, (120, 70, 40,
+                                       int(70 * (1.0 - el / 0.4))),
+                                haze.get_rect())
+            surf.blit(haze, (sx - ssp.get_width(), sy - ssp.get_height() // 2),
+                      special_flags=pygame.BLEND_RGB_ADD)
+        surf.blit(ssp, (sx, sy))
 
 
 # ------------------------------------------------------------ terrain --

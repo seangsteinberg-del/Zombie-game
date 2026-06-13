@@ -8390,8 +8390,8 @@ def run(argv: list[str] | None = None) -> int:
             avail = catalog_for_kind(site_def["kind"])
             mods = site_b.net.modules
             daylight = site_b.daylight(t)
-            if os.environ.get("APH_QA_NIGHT") == "1":   # QA: night visuals
-                daylight = 0.08
+            if os.environ.get("APH_QA_NIGHT"):          # QA: force daylight
+                daylight = float(os.environ["APH_QA_NIGHT"])
             overlay_rects["base"] = []
 
             scene_h = 444
