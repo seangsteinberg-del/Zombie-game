@@ -9200,16 +9200,42 @@ def run(argv: list[str] | None = None) -> int:
                 _reach_col = (theme.COLORS["accent"] if not _reach_b
                               else theme.COLORS["good"] if not _nxt_b
                               else theme.COLORS["gold"])
-                for ci, (txt, col) in enumerate((
-                        (f"dv {total_dv:,.0f} m/s", theme.COLORS["good"]),
-                        (f"{vessel.total_mass_kg()/1e3:,.1f} t   "
-                         f"drag {vessel.cd_a_m2:.1f} m²",
-                         theme.COLORS["accent"]),
-                        (f"${cost/1e6:,.0f}M of ${program.funds/1e6:,.0f}M",
-                         theme.COLORS["gold"] if cost <= program.funds
-                         else theme.COLORS["danger"]),
-                        (_reach_txt, _reach_col))):
-                    screen.blit(theme.chip(txt, col), (sx0, size[1] - 164 + ci * 26))
+                _chips_b = [
+                    (f"dv {total_dv:,.0f} m/s", theme.COLORS["good"]),
+                    (f"{vessel.total_mass_kg()/1e3:,.1f} t   "
+                     f"drag {vessel.cd_a_m2:.1f} m²", theme.COLORS["accent"]),
+                    (f"${cost/1e6:,.0f}M of ${program.funds/1e6:,.0f}M",
+                     theme.COLORS["gold"] if cost <= program.funds
+                     else theme.COLORS["danger"]),
+                    (_reach_txt, _reach_col)]
+                # LIVABILITY: a crewed craft must keep them alive too —
+                # provisioned endurance + habitable volume from the same
+                # stores rollup the interior LIFE SUPPORT panel reads
+                _capb = builder.crew_capacity()
+                if _capb:
+                    from aphelion.sim.habitat import stores as stores_sim
+                    _manb = stores_sim.manifest(
+                        [db.parts[pid] for stg in builder.stack
+                         for pid in stg], _capb)
+                    _bd = _manb["days"]
+                    _chips_b.append((
+                        "endures " + (f"{_bd / 365:.1f} yr" if _bd >= 400
+                                      else f"{_bd:,.0f} d")
+                        + f" · {_manb['vol_per_crew']:.0f} m³/crew"
+                        + (" · cramped" if _manb["vol_per_crew"] < 15
+                           else ""),
+                        theme.COLORS["danger"] if _bd < 14
+                        else theme.COLORS["warn"] if _bd < 60
+                        else theme.COLORS["good"]))
+                    if _manb["grow_m2"] > 0:
+                        _chips_b.append((
+                            f"greenhouse {_manb['grow_m2']:,.0f} m² · "
+                            f"{_manb['food_closure'] * 100:.0f}% diet",
+                            theme.COLORS["good"]))
+                for ci, (txt, col) in enumerate(_chips_b):
+                    screen.blit(theme.chip(txt, col),
+                                (sx0, size[1] - 188 - max(0, len(_chips_b) - 4)
+                                 * 26 + ci * 26))
                 # the rocket, as large as the bay allows (crisp nearest)
                 vspr = vessel_sprite(db, builder.stack)
                 if vspr.get_width() > 4:
