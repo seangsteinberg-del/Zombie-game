@@ -1,6 +1,14 @@
 """Procedural part & vessel sprites (14 §2 palette, §3.2 world vector
 layer, §4.2 propellant-family catalog; 12 §5.7 icon grammar).
 
+ART-DIRECTION "MISSION FILM" pass (§1.2 machine layer): hulls are
+NASA-white/aluminium with per-column cylindrical shading, axial light
+gradient and film grain; panel seams, hoop welds and rivet rows; gold MLI
+foil bands on cryo tanks; international-orange interstage rings; engines
+are graphite bells with regen-cooling hoops, a gimbal/plumbing head and a
+hot-metal mouth; crew parts are white capsules with a charred heatshield,
+RCS ports and tiny window emitters. Light always comes from high-left.
+
 Everything is drawn with pygame.draw / surfarray / numpy at build time — no
 image or font assets, no display calls (plain SRCALPHA surfaces, so the
 module is headless-safe). Sizes derive from the part's real data: tank
@@ -31,6 +39,14 @@ DANGER = (255, 110, 110)
 GOLD = (255, 215, 130)
 TEXT = (200, 210, 224)
 TEXT_DIM = (110, 122, 140)
+
+# MISSION FILM machine-layer materials (ART-DIRECTION §1.2).
+_ORANGE = (221, 86, 38)          # international orange
+_HULL = (208, 211, 216)          # NASA white, slightly cool
+_ALU = (170, 175, 182)           # bare aluminium
+_GRAPHITE = (56, 60, 68)
+_MLI = (186, 142, 62)            # gold foil, shadow side
+_MLI_HI = (244, 206, 118)        # gold foil, lit side
 
 # Engine bell (base, highlight) per propellant family (14 §4.2 catalog).
 _BELL_COLORS: dict[str, tuple[tuple[int, int, int], tuple[int, int, int]]] = {
@@ -99,6 +115,39 @@ def _fit(w: float, h: float, min_w: float, min_h: float,
     return max(int(round(w)), 6), max(int(round(h)), 8)
 
 
+def _shade(col: tuple[int, int, int], f: float) -> tuple[int, int, int]:
+    return tuple(max(0, min(255, int(c * f))) for c in col)
+
+
+def _finish(surf: pygame.Surface, rng: np.random.Generator,
+            top: float = 1.05, bot: float = 0.86,
+            grain: float = 2.2) -> None:
+    """ART-DIRECTION §1.2/§3: axial light gradient + subtle film grain on
+    every opaque pixel — no surface ships as a flat fill."""
+    alpha = pygame.surfarray.array_alpha(surf)
+    arr = pygame.surfarray.pixels3d(surf)
+    h = arr.shape[1]
+    g = np.linspace(top, bot, max(h, 1))[np.newaxis, :, np.newaxis]
+    noise = rng.normal(0.0, grain, size=arr.shape[:2])[:, :, np.newaxis]
+    out = np.clip(arr.astype(np.float64) * g + noise, 0.0, 255.0)
+    mask = (alpha > 0)[:, :, np.newaxis]
+    arr[...] = np.where(mask, out, arr).astype(np.uint8)
+    del arr
+
+
+def _contact_band(surf: pygame.Surface, x: int, y: int, w: int, h: int,
+                  alpha: int = 100) -> None:
+    """Soft fading occlusion band — the contact shadow one part casts on
+    the part below it (rule zero of depth, ART-DIRECTION §2.5)."""
+    if w <= 0 or h <= 0:
+        return
+    band = pygame.Surface((w, h), pygame.SRCALPHA)
+    for r in range(h):
+        a = int(alpha * (1.0 - r / h))
+        pygame.draw.line(band, (0, 0, 0, a), (0, r), (w - 1, r))
+    surf.blit(band, (x, y))
+
+
 # -- physical sizing -----------------------------------------------------
 
 
@@ -160,6 +209,10 @@ def _content_color(mixture: dict[str, float]) -> tuple[int, int, int]:
     return _CONTENT_COLORS.get(res, (150, 160, 175))
 
 
+def _is_cryo(mixture: dict[str, float]) -> bool:
+    return bool({"Oxygen", "Hydrogen", "Methane"} & set(mixture))
+
+
 # -- part builders -------------------------------------------------------
 
 
@@ -169,62 +222,143 @@ def _build_engine(part: dict, part_id: str, ppm: float) -> pygame.Surface:
     base, hi = _BELL_COLORS[fam]
     d_m, l_m = _engine_dims_m(part)
     W, H = _fit(d_m * ppm, l_m * ppm, 14.0, 18.0, 256.0)
-    surf = pygame.Surface((W, H), pygame.SRCALPHA)
+    # supersample x3 for a smooth machined-bell silhouette, then downscale
+    S = 3
+    w, h = W * S, H * S
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
     rng = _rng(part_id)
-    cx = W / 2.0
+    cx = w / 2.0
 
-    # gimbal mount
-    mw, mh = max(2, int(0.20 * W)), max(1, int(0.07 * H))
-    pygame.draw.rect(surf, (66, 74, 90),
-                     pygame.Rect(int(cx - mw / 2), 0, mw, mh + 1))
+    # family identity folded into a graphite/metal skin (§1.2 materials)
+    skin = tuple(int(0.46 * c + 0.54 * n)
+                 for c, n in zip(base, (112, 116, 124)))
+    skin_hi = tuple(int(0.42 * c + 0.58 * n)
+                    for c, n in zip(hi, (206, 212, 222)))
+    skin_dk = _shade(skin, 0.40)
 
-    # powerhead box with piping
-    pw = max(4, int(0.52 * W))
-    head = pygame.Rect(int(cx - pw / 2), mh, pw, max(3, int(0.25 * H)))
-    pygame.draw.rect(surf, (50, 56, 68), head)
-    pygame.draw.rect(surf, PANEL_EDGE, head, 1)
+    # gimbal mount: graphite beam, ball joint, twin actuator struts
+    mw, mh = max(2 * S, int(0.20 * w)), max(S, int(0.07 * h))
+    mount = pygame.Rect(int(cx - mw / 2), 0, mw, mh + S)
+    pygame.draw.rect(surf, (70, 76, 88), mount)
+    pygame.draw.rect(surf, (96, 102, 114),
+                     pygame.Rect(mount.left, 0, mount.width,
+                                 max(1, mount.height // 3)))
+    pygame.draw.rect(surf, (34, 38, 46), mount, max(1, S // 2))
+
+    pw = max(4 * S, int(0.52 * w))
+    head = pygame.Rect(int(cx - pw / 2), mh, pw, max(3 * S, int(0.25 * h)))
+    for sx in (-1, 1):                # actuator struts to the head shoulders
+        pygame.draw.line(surf, (148, 154, 166),
+                         (int(cx + sx * mw * 0.45), S),
+                         (int(cx + sx * pw * 0.40),
+                          head.top + int(0.35 * head.height)), S)
+    pygame.draw.circle(surf, (140, 146, 158),
+                       (int(cx), head.top + S), max(2, int(0.07 * w)))
+    pygame.draw.circle(surf, (50, 54, 64),
+                       (int(cx), head.top + S), max(2, int(0.07 * w)), 1)
+
+    # powerhead: top-lit graphite block, turbopump volute, seeded plumbing
+    pygame.draw.rect(surf, (54, 58, 68), head)
+    pygame.draw.rect(surf, (70, 75, 86),
+                     pygame.Rect(head.left, head.top, head.width,
+                                 head.height // 2))
+    pygame.draw.line(surf, (26, 28, 34), (head.left + 1, head.top),
+                     (head.right - 2, head.top), S)   # AO under the mount
+    pygame.draw.rect(surf, (30, 34, 42), head, max(1, S // 2))
+    tp = (head.left + int(0.30 * head.width),
+          head.top + int(0.58 * head.height))
+    pygame.draw.circle(surf, (134, 140, 152), tp, max(2, int(0.09 * w)))
+    pygame.draw.circle(surf, (58, 62, 72), tp, max(2, int(0.09 * w)), 1)
     for _ in range(2 + int(rng.integers(0, 2))):
-        px = head.left + 2 + int(rng.integers(0, max(1, head.width - 4)))
-        pygame.draw.line(surf, (96, 106, 122),
-                         (px, head.top + 2), (px, head.bottom - 2))
-        ey = head.top + 2 + int(rng.integers(0, max(1, head.height - 4)))
-        pygame.draw.line(surf, (96, 106, 122),
-                         (px, ey), (min(px + 3, head.right - 2), ey))
+        px = head.left + 2 * S + int(rng.integers(
+            0, max(1, head.width - 4 * S)))
+        pygame.draw.line(surf, (150, 158, 170),
+                         (px, head.top + 2 * S), (px, head.bottom - S), S)
+        ey = head.top + 2 * S + int(rng.integers(
+            0, max(1, head.height - 4 * S)))
+        pygame.draw.line(surf, (118, 124, 136), (px, ey),
+                         (min(px + 3 * S, head.right - 2 * S), ey), S)
     if fam == "ntr":                  # hazard chevrons over the powerhead
-        for k, x in enumerate(range(head.left + 1, head.right - 1, 4)):
+        for k, x in enumerate(range(head.left + S, head.right - S, 4 * S)):
             col = WARN if k % 2 == 0 else (24, 24, 26)
-            pygame.draw.line(surf, col, (x, head.bottom - 2),
-                             (min(x + 3, head.right - 2), head.top + 1), 2)
+            pygame.draw.line(surf, col, (x, head.bottom - 2 * S),
+                             (min(x + 3 * S, head.right - 2 * S),
+                              head.top + S), 2 * S)
 
-    # bell: curved trapezoid, throat to exit lip
-    y_t, y_e = head.bottom, H - 1
-    hw_t, hw_e = max(1.5, 0.13 * W), W / 2.0 - 1.0
+    # bell: same outer profile as the sizing contract, finely sampled
+    y_t, y_e = head.bottom, h - 1
+    hw_t, hw_e = max(1.5 * S, 0.13 * w), w / 2.0 - S
+    n_p = 24
     prof = [(y_t + (y_e - y_t) * t, hw_t + (hw_e - hw_t) * t ** 0.7)
-            for t in (i / 11.0 for i in range(12))]
+            for t in (i / (n_p - 1.0) for i in range(n_p))]
     left = [(cx - hw, y) for y, hw in prof]
     right = [(cx + hw, y) for y, hw in prof]
-    pygame.draw.polygon(surf, base, left + right[::-1])
-    hi_layer = pygame.Surface((W, H), pygame.SRCALPHA)
-    pygame.draw.polygon(hi_layer, (*hi, 110),
-                        [(cx - hw * 0.55, y) for y, hw in prof]
-                        + [(cx - hw * 0.22, y) for y, hw in prof][::-1])
-    surf.blit(hi_layer, (0, 0))
-    edge = tuple(int(c * 0.55) for c in base)
-    pygame.draw.lines(surf, edge, False, left)
-    pygame.draw.lines(surf, edge, False, right)
+    pygame.draw.polygon(surf, skin, left + right[::-1])
 
-    # inner dark throat + exit-mouth interior with a lit rim
+    ov = pygame.Surface((w, h), pygame.SRCALPHA)
+    # specular highlight band, sun high-left; broad shade on the right limb
+    pygame.draw.polygon(ov, (*skin_hi, 165),
+                        [(cx - hw * 0.62, y) for y, hw in prof]
+                        + [(cx - hw * 0.24, y) for y, hw in prof][::-1])
+    pygame.draw.polygon(ov, (0, 0, 0, 92),
+                        [(cx + hw * 0.42, y) for y, hw in prof]
+                        + [(cx + hw, y) for y, hw in prof][::-1])
+    # powerhead contact shadow falling onto the bell shoulder
+    for r in range(max(2, int(0.035 * h))):
+        a = int(110 * (1.0 - r / max(2, int(0.035 * h))))
+        yy = y_t + r
+        hwr = hw_t + (hw_e - hw_t) * ((yy - y_t) / max(1, y_e - y_t)) ** 0.7
+        pygame.draw.line(ov, (0, 0, 0, a), (cx - hwr, yy), (cx + hwr, yy))
+    # regen-cooling hoops + one bright stiffener ring along the profile
+    for tf in (0.16, 0.32, 0.47, 0.62, 0.78, 0.92):
+        idx = int(tf * (n_p - 1))
+        yy, hwr = prof[idx]
+        pygame.draw.line(ov, (0, 0, 0, 52),
+                         (cx - hwr + S, yy), (cx + hwr - S, yy))
+    yy, hwr = prof[int(0.55 * (n_p - 1))]
+    pygame.draw.line(ov, (*skin_hi, 120),
+                     (cx - hwr + S, yy + 1), (cx + hwr - S, yy + 1))
+    # hot-metal wash low on the bell (radiative-cooled section)
+    pygame.draw.polygon(ov, (120, 64, 40, 36),
+                        [(cx - hw, y) for y, hw in prof[int(0.72 * n_p):]]
+                        + [(cx + hw, y)
+                           for y, hw in prof[int(0.72 * n_p):]][::-1])
+    surf.blit(ov, (0, 0))
+
+    edge = _shade(skin, 0.34)
+    pygame.draw.lines(surf, edge, False, left, S - 1)
+    pygame.draw.lines(surf, edge, False, right, S - 1)
+    # bright machined lip right at the exit plane
+    pygame.draw.line(surf, skin_hi, (cx - hw_e + S, y_e - S),
+                     (cx + hw_e - S, y_e - S), max(1, S // 2))
+
+    # throat: dark slot with a faint hot glow seam under the powerhead
     pygame.draw.ellipse(surf, (16, 17, 22),
                         pygame.Rect(int(cx - hw_t), y_t - 1,
                                     max(2, int(2 * hw_t)),
-                                    max(2, int(0.04 * H))))
-    mouth_h = max(2, int(0.05 * H))
-    mouth = pygame.Rect(int(cx - hw_e) + 1, H - mouth_h - 1,
+                                    max(2, int(0.04 * h))))
+    glow = pygame.Surface((w, h), pygame.SRCALPHA)
+    pygame.draw.ellipse(glow, (216, 120, 60, 70),
+                        pygame.Rect(int(cx - hw_t * 0.7),
+                                    y_t + max(1, int(0.01 * h)),
+                                    max(2, int(1.4 * hw_t)),
+                                    max(2, int(0.025 * h))))
+    surf.blit(glow, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+
+    # exit mouth: near-black interior, residual hot-metal core, lit lip
+    mouth_h = max(2, int(0.05 * h))
+    mouth = pygame.Rect(int(cx - hw_e) + 1, h - mouth_h - 1,
                         max(2, int(2 * hw_e) - 2), mouth_h)
-    pygame.draw.ellipse(surf, (14, 15, 20), mouth)
-    pygame.draw.ellipse(surf, tuple(min(255, int(c * 1.25)) for c in base),
-                        mouth, 1)
-    return surf
+    pygame.draw.ellipse(surf, (13, 13, 17), mouth)
+    pygame.draw.ellipse(surf, (52, 28, 20), mouth.inflate(
+        -int(mouth.width * 0.36), -max(1, int(mouth.height * 0.36))))
+    pygame.draw.ellipse(surf, skin_dk, mouth, max(1, S // 2))
+    pygame.draw.arc(surf, skin_hi, mouth, math.pi * 0.55, math.pi * 1.45,
+                    max(1, S // 2))
+
+    out = pygame.transform.smoothscale(surf, (W, H))
+    _finish(out, rng, top=1.05, bot=0.90, grain=2.0)
+    return out
 
 
 def _build_tank(part: dict, part_id: str, ppm: float) -> pygame.Surface:
@@ -237,72 +371,290 @@ def _build_tank(part: dict, part_id: str, ppm: float) -> pygame.Surface:
     body_top, body_bot = dome, H - dome
     body_h = max(1, body_bot - body_top)
 
-    # cylindrical shading column by column (rounded-dome capsule silhouette)
-    hull = (104.0, 112.0, 128.0)
+    # NASA-white cylinder, column by column: sun high-left puts a specular
+    # band left of centre, the right limb falls to shadow with a faint
+    # bounce rim (rounded-dome capsule silhouette preserved)
     for x in range(W):
         u = (x + 0.5) / W
         bulge = math.sqrt(max(0.0, 1.0 - (2.0 * u - 1.0) ** 2))
-        lum = (0.40 + 0.58 * bulge
-               + 0.22 * math.exp(-((u - 0.36) / 0.10) ** 2))
-        col = tuple(int(min(255.0, c * lum)) for c in hull)
+        lum = (0.30 + 0.60 * bulge ** 0.85
+               + 0.26 * math.exp(-((u - 0.30) / 0.12) ** 2)
+               + 0.06 * math.exp(-((u - 0.96) / 0.05) ** 2))
+        col = _shade(_HULL, min(1.25, lum))
         dy = int(round(dome * (1.0 - bulge)))
         pygame.draw.line(surf, col, (x, dy), (x, H - 1 - dy))
 
-    # subtle top-lit axial gradient (surfarray pass)
-    arr = pygame.surfarray.pixels3d(surf)
-    grad = np.linspace(1.06, 0.86, H)
-    arr[...] = np.clip(arr * grad[np.newaxis, :, np.newaxis],
-                       0.0, 255.0).astype(np.uint8)
-    del arr
+    # gold MLI foil band on cryo sections, shaded by the same cylinder math
+    mli_rect = None
+    if _is_cryo(mixture) and body_h >= 10:
+        bh = max(3, int(0.16 * body_h))
+        by = body_top + int(0.56 * body_h)
+        mli_rect = pygame.Rect(0, by, W, bh)
+        for x in range(W):
+            u = (x + 0.5) / W
+            bulge = math.sqrt(max(0.0, 1.0 - (2.0 * u - 1.0) ** 2))
+            lum = (0.34 + 0.56 * bulge ** 0.85
+                   + 0.30 * math.exp(-((u - 0.30) / 0.12) ** 2))
+            gold = tuple(int(a + (b - a) * min(1.0, lum))
+                         for a, b in zip(_shade(_MLI, 0.55), _MLI_HI))
+            pygame.draw.line(surf, gold, (x, by), (x, by + bh - 1))
 
-    # hoop weld lines (seeded placement)
+    # axial light gradient + film grain before the crisp detail pass
+    _finish(surf, rng, top=1.06, bot=0.84, grain=2.4)
+
+    ov = pygame.Surface((W, H), pygame.SRCALPHA)
+    # dome separation seams: dark joint + lit lip (recess idiom)
+    pygame.draw.line(ov, (0, 0, 0, 70), (1, body_top), (W - 2, body_top))
+    pygame.draw.line(ov, (255, 255, 255, 34),
+                     (1, body_top + 1), (W - 2, body_top + 1))
+    pygame.draw.line(ov, (0, 0, 0, 70), (1, body_bot), (W - 2, body_bot))
+    pygame.draw.line(ov, (255, 255, 255, 36),
+                     (1, body_bot - 1), (W - 2, body_bot - 1))
+
+    # vertical panel seams with a lit edge (only when girth allows)
+    if W >= 16:
+        for fu in sorted(rng.uniform(0.22, 0.78,
+                                     size=1 + int(W >= 26))):
+            sx = int(fu * W)
+            pygame.draw.line(ov, (0, 0, 0, 40),
+                             (sx, body_top + 1), (sx, body_bot - 1))
+            pygame.draw.line(ov, (255, 255, 255, 24),
+                             (sx + 1, body_top + 1), (sx + 1, body_bot - 1))
+
+    # hoop welds (seeded placement) with rivet rows
     n_welds = 2 + int(rng.integers(0, 2))
-    for f in sorted(rng.uniform(0.18, 0.85, size=n_welds)):
+    for f in sorted(rng.uniform(0.16, 0.88, size=n_welds)):
         y = body_top + int(f * body_h)
-        pygame.draw.line(surf, (62, 68, 82), (1, y), (W - 2, y))
-        pygame.draw.line(surf, (138, 146, 160), (1, y + 1), (W - 2, y + 1))
+        if mli_rect and mli_rect.top - 1 <= y <= mli_rect.bottom:
+            continue
+        pygame.draw.line(ov, (0, 0, 0, 72), (1, y), (W - 2, y))
+        pygame.draw.line(ov, (255, 255, 255, 46), (1, y + 1), (W - 2, y + 1))
+        if W >= 18:
+            for rx in range(3, W - 2, 3):
+                ov.set_at((rx, y - 1), (0, 0, 0, 80))
 
-    # contents band near the top dome
-    band = _content_color(mixture)
-    bh = max(2, int(0.05 * H))
-    by = body_top + max(1, int(0.10 * body_h))
-    pygame.draw.rect(surf, band, pygame.Rect(1, by, W - 2, bh))
-    pygame.draw.rect(surf, tuple(int(c * 0.55) for c in band),
-                     pygame.Rect(1, by, W - 2, bh), 1)
+    # MLI quilting + taped edges over the foil band
+    if mli_rect:
+        pygame.draw.line(ov, (0, 0, 0, 90), (1, mli_rect.top),
+                         (W - 2, mli_rect.top))
+        pygame.draw.line(ov, (0, 0, 0, 90), (1, mli_rect.bottom - 1),
+                         (W - 2, mli_rect.bottom - 1))
+        for qx in range(2, W - 1, 3):
+            pygame.draw.line(ov, (0, 0, 0, 46), (qx, mli_rect.top + 1),
+                             (qx, mli_rect.bottom - 2))
+        if mli_rect.height >= 6:
+            my = mli_rect.top + mli_rect.height // 2
+            pygame.draw.line(ov, (0, 0, 0, 40), (1, my), (W - 2, my))
 
-    # stenciled tier text
-    if W >= 18 and H >= 28:
-        label = _font(9).render(str(part.get("tier", "T0")), True, TEXT_DIM)
-        if label.get_width() <= W - 4:
+    # contents marking ring near the top dome (desaturated, engineering
+    # decal rather than candy stripe) + dark keylines
+    band = tuple(int(0.58 * c + 0.42 * 148) for c in _content_color(mixture))
+    bh2 = max(2, int(0.045 * H))
+    by2 = body_top + max(2, int(0.07 * body_h))
+    pygame.draw.rect(ov, (*band, 235), pygame.Rect(1, by2, W - 2, bh2))
+    pygame.draw.line(ov, (0, 0, 0, 90), (1, by2 - 1), (W - 2, by2 - 1))
+    pygame.draw.line(ov, (0, 0, 0, 90), (1, by2 + bh2), (W - 2, by2 + bh2))
+    surf.blit(ov, (0, 0))
+
+    # stenciled catalog id (graphite paint on the white hull)
+    if W >= 20 and H >= 30:
+        text = str(part.get("catalog_id", part.get("tier", "T0")))
+        label = _font(9).render(text, True, (84, 88, 98))
+        if label.get_width() <= W - 6:
             lx = int(W / 2 - label.get_width() / 2 + rng.integers(-1, 2))
-            surf.blit(label, (lx, body_top + int(0.60 * body_h)))
+            surf.blit(label, (lx, by2 + bh2 + max(2, int(0.06 * body_h))))
     return surf
+
+
+def _structure_dims(part: dict, ppm: float) -> tuple[int, int]:
+    d_m = min(6.0, 1.2 + 0.9 * float(part.get("mass_t", 1.0)) ** (1.0 / 3.0))
+    return _fit(d_m * ppm, 2.1 * d_m * ppm, 12.0, 18.0, 256.0)
 
 
 def _build_fairing(part: dict, part_id: str, ppm: float) -> pygame.Surface:
-    d_m = min(6.0, 1.2 + 0.9 * float(part.get("mass_t", 1.0)) ** (1.0 / 3.0))
-    W, H = _fit(d_m * ppm, 2.1 * d_m * ppm, 12.0, 18.0, 256.0)
-    surf = pygame.Surface((W, H), pygame.SRCALPHA)
+    W, H = _structure_dims(part, ppm)
+    S = 3
+    w, h = W * S, H * S
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
     rng = _rng(part_id)
-    cx, hw_e, shoulder = W / 2.0, W / 2.0 - 1.0, 0.72
-    prof = [(1.0 + (i / 12.0) * (H - 2.0),
-             hw_e * min(1.0, ((i / 12.0) / shoulder) ** 0.62))
-            for i in range(13)]
+    cx, hw_e, shoulder = w / 2.0, w / 2.0 - S, 0.72
+    n_p = 25
+    prof = [(1.0 + (i / (n_p - 1.0)) * (h - 2.0),
+             hw_e * min(1.0, ((i / (n_p - 1.0)) / shoulder) ** 0.62))
+            for i in range(n_p)]
     left = [(cx - hw, y) for y, hw in prof]
     right = [(cx + hw, y) for y, hw in prof]
-    pygame.draw.polygon(surf, (222, 226, 233), left + right[::-1])
-    hi_layer = pygame.Surface((W, H), pygame.SRCALPHA)
-    pygame.draw.polygon(hi_layer, (255, 255, 255, 70),
-                        [(cx - hw * 0.5, y) for y, hw in prof]
-                        + [(cx - hw * 0.2, y) for y, hw in prof][::-1])
-    surf.blit(hi_layer, (0, 0))
-    pygame.draw.lines(surf, (150, 156, 168), False, left)
-    pygame.draw.lines(surf, (150, 156, 168), False, right)
-    # grey stripe near the base (seeded one-pixel jitter)
-    sy = int(0.80 * H) + int(rng.integers(-1, 2))
-    pygame.draw.rect(surf, (118, 126, 140),
-                     pygame.Rect(1, sy, W - 2, max(2, int(0.06 * H))))
-    return surf
+    pygame.draw.polygon(surf, (218, 221, 226), left + right[::-1])
+
+    ov = pygame.Surface((w, h), pygame.SRCALPHA)
+    # sun high-left: specular band + shaded right limb
+    pygame.draw.polygon(ov, (255, 255, 255, 85),
+                        [(cx - hw * 0.55, y) for y, hw in prof]
+                        + [(cx - hw * 0.18, y) for y, hw in prof][::-1])
+    pygame.draw.polygon(ov, (0, 0, 0, 60),
+                        [(cx + hw * 0.42, y) for y, hw in prof]
+                        + [(cx + hw, y) for y, hw in prof][::-1])
+    # graphite nose cap on the ogive tip
+    pygame.draw.polygon(ov, (84, 90, 100, 235),
+                        [(cx - hw, y) for y, hw in prof[:4]]
+                        + [(cx + hw, y) for y, hw in prof[:4]][::-1])
+    # vertical jettison seam with lit edge
+    pygame.draw.line(ov, (0, 0, 0, 56), (cx, prof[2][0]), (cx, h - 2), S // 2)
+    pygame.draw.line(ov, (255, 255, 255, 30),
+                     (cx + S // 2 + 1, prof[3][0]), (cx + S // 2 + 1, h - 2))
+    # ring frames + rivet rows at seeded stations
+    for ff in sorted(rng.uniform(0.34, 0.72, size=2)):
+        idx = int(ff * (n_p - 1))
+        yy, hwr = prof[idx]
+        pygame.draw.line(ov, (0, 0, 0, 60),
+                         (cx - hwr + S, yy), (cx + hwr - S, yy), S // 2)
+        pygame.draw.line(ov, (255, 255, 255, 36),
+                         (cx - hwr + S, yy + S // 2 + 1),
+                         (cx + hwr - S, yy + S // 2 + 1))
+        for rx in range(int(cx - hwr) + 2 * S, int(cx + hwr) - S, 3 * S):
+            pygame.draw.circle(ov, (0, 0, 0, 80), (rx, int(yy) - S), S // 2)
+    # international-orange band near the base (separation marking)
+    sy = int(0.80 * h) + int(rng.integers(-1, 2)) * S
+    bh = max(2 * S, int(0.06 * h))
+    band_rect = pygame.Rect(0, sy, w, bh)
+    for yy in range(band_rect.top, band_rect.bottom):
+        t = (yy - 1.0) / (h - 2.0)
+        hwr = hw_e * min(1.0, (t / shoulder) ** 0.62)
+        pygame.draw.line(ov, (*_ORANGE, 240), (cx - hwr + 1, yy),
+                         (cx + hwr - 1, yy))
+    pygame.draw.line(ov, (0, 0, 0, 90), (S, sy - 1), (w - S, sy - 1))
+    pygame.draw.line(ov, (0, 0, 0, 90), (S, sy + bh), (w - S, sy + bh))
+    surf.blit(ov, (0, 0))
+
+    sil = (140, 146, 158)
+    pygame.draw.lines(surf, sil, False, left, max(1, S // 2))
+    pygame.draw.lines(surf, sil, False, right, max(1, S // 2))
+
+    out = pygame.transform.smoothscale(surf, (W, H))
+    _finish(out, rng, top=1.05, bot=0.88, grain=2.0)
+    return out
+
+
+def _build_capsule(part: dict, part_id: str, ppm: float) -> pygame.Surface:
+    """Crew capsule: white cone, charred heatshield band, RCS ports, tiny
+    window emitters, orange hatch ring (ART-DIRECTION §1.2)."""
+    W, H = _structure_dims(part, ppm)
+    S = 3
+    w, h = W * S, H * S
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    rng = _rng(part_id)
+    cx = w / 2.0
+
+    ring_h = max(2 * S, int(0.09 * h))
+    shield_h = max(2 * S, int(0.09 * h))
+    nose_hw = 0.24 * w
+    base_hw = w / 2.0 - S
+    cone_top, cone_bot = ring_h, h - shield_h
+
+    # docking ring drum (graphite) with a lit top face
+    dr = pygame.Rect(int(cx - nose_hw * 0.82), 0,
+                     int(nose_hw * 1.64), ring_h)
+    pygame.draw.rect(surf, (86, 92, 102), dr)
+    pygame.draw.rect(surf, (122, 128, 140),
+                     pygame.Rect(dr.left, 0, dr.width, max(1, ring_h // 3)))
+    pygame.draw.rect(surf, (38, 42, 50), dr, max(1, S // 2))
+
+    # white pressure cone
+    cone = [(cx - nose_hw, cone_top), (cx + nose_hw, cone_top),
+            (cx + base_hw, cone_bot), (cx - base_hw, cone_bot)]
+    pygame.draw.polygon(surf, (215, 218, 223), cone)
+    ov = pygame.Surface((w, h), pygame.SRCALPHA)
+    pygame.draw.polygon(ov, (255, 255, 255, 85),
+                        [(cx - nose_hw * 0.55, cone_top),
+                         (cx - nose_hw * 0.10, cone_top),
+                         (cx - base_hw * 0.10, cone_bot),
+                         (cx - base_hw * 0.55, cone_bot)])
+    pygame.draw.polygon(ov, (0, 0, 0, 60),
+                        [(cx + nose_hw * 0.45, cone_top),
+                         (cx + nose_hw, cone_top),
+                         (cx + base_hw, cone_bot),
+                         (cx + base_hw * 0.45, cone_bot)])
+    # docking-ring contact shadow on the cone shoulder
+    for r in range(max(2, int(0.03 * h))):
+        a = int(110 * (1.0 - r / max(2, int(0.03 * h))))
+        t = r / max(1.0, cone_bot - cone_top)
+        hwr = nose_hw + (base_hw - nose_hw) * t
+        pygame.draw.line(ov, (0, 0, 0, a),
+                         (cx - hwr, cone_top + r), (cx + hwr, cone_top + r))
+    # panel seam ring across the cone
+    my = cone_top + int(0.52 * (cone_bot - cone_top))
+    tm = (my - cone_top) / max(1.0, cone_bot - cone_top)
+    hwm = nose_hw + (base_hw - nose_hw) * tm
+    pygame.draw.line(ov, (0, 0, 0, 56), (cx - hwm + S, my),
+                     (cx + hwm - S, my))
+    pygame.draw.line(ov, (255, 255, 255, 36), (cx - hwm + S, my + 1),
+                     (cx + hwm - S, my + 1))
+    surf.blit(ov, (0, 0))
+
+    # windows: two small offset panes, dark glass in graphite frames with a
+    # faint warm cabin glint (emitters) — asymmetric so the cone never
+    # reads as a face
+    wr = max(2, int(0.026 * w))
+    for wx_f, wy_f in ((-0.145, 0.22), (-0.01, 0.27)):
+        wx = int(cx + wx_f * w)
+        wy = cone_top + int(wy_f * (cone_bot - cone_top))
+        frame = pygame.Rect(wx - wr - 1, wy - wr - 1, 2 * wr + 2, 2 * wr + 2)
+        pygame.draw.rect(surf, (120, 126, 138), frame)        # raised sill
+        pygame.draw.rect(surf, (54, 58, 68), frame, 1)
+        pygame.draw.rect(surf, (20, 25, 34), frame.inflate(-2, -2))
+        surf.set_at((frame.left + 2, frame.top + 2), (226, 206, 162))
+    # side hatch: international-orange outline, recessed, offset right
+    hw2, hh2 = int(0.13 * w), int(0.16 * (cone_bot - cone_top))
+    hatch = pygame.Rect(int(cx + 0.04 * w),
+                        cone_top + int(0.42 * (cone_bot - cone_top)),
+                        hw2, hh2)
+    hov = pygame.Surface((w, h), pygame.SRCALPHA)
+    pygame.draw.rect(hov, (0, 0, 0, 50), hatch)
+    pygame.draw.rect(hov, (*_ORANGE, 235), hatch, max(1, S // 2))
+    surf.blit(hov, (0, 0))
+    # RCS port pairs with soot streaks, low on the cone
+    ry = cone_bot - int(0.14 * (cone_bot - cone_top))
+    tr = (ry - cone_top) / max(1.0, cone_bot - cone_top)
+    hwr2 = nose_hw + (base_hw - nose_hw) * tr
+    rov = pygame.Surface((w, h), pygame.SRCALPHA)
+    for sx in (-1, 1):
+        rx = int(cx + sx * (hwr2 - 2.5 * S))
+        for k in range(2):
+            pygame.draw.circle(rov, (22, 22, 26),
+                               (rx, ry - k * 2 * S), max(1, S // 2) + 1)
+        pygame.draw.polygon(rov, (40, 36, 34, 70),
+                            [(rx - S, ry - 5 * S), (rx + S, ry - 5 * S),
+                             (rx, ry)])
+    surf.blit(rov, (0, 0))
+
+    # heatshield: charred ablator, lit separation lip above it
+    pygame.draw.polygon(surf, (66, 52, 44),
+                        [(cx - base_hw, cone_bot), (cx + base_hw, cone_bot),
+                         (cx + base_hw * 0.88, h - 1),
+                         (cx - base_hw * 0.88, h - 1)])
+    pygame.draw.polygon(surf, (40, 31, 26),
+                        [(cx - base_hw * 0.96, cone_bot + shield_h * 0.45),
+                         (cx + base_hw * 0.96, cone_bot + shield_h * 0.45),
+                         (cx + base_hw * 0.88, h - 1),
+                         (cx - base_hw * 0.88, h - 1)])
+    pygame.draw.line(surf, (236, 238, 242),
+                     (cx - base_hw + S, cone_bot - 1),
+                     (cx + base_hw - S, cone_bot - 1))
+    pygame.draw.line(surf, (24, 20, 18),
+                     (cx - base_hw + S, cone_bot),
+                     (cx + base_hw - S, cone_bot))
+
+    sil = (130, 136, 148)
+    pygame.draw.lines(surf, sil, False,
+                      [(cx - nose_hw, cone_top), (cx - base_hw, cone_bot)],
+                      max(1, S // 2))
+    pygame.draw.lines(surf, sil, False,
+                      [(cx + nose_hw, cone_top), (cx + base_hw, cone_bot)],
+                      max(1, S // 2))
+
+    out = pygame.transform.smoothscale(surf, (W, H))
+    _finish(out, rng, top=1.05, bot=0.90, grain=2.0)
+    return out
 
 
 # -- public API ----------------------------------------------------------
@@ -313,7 +665,9 @@ def part_sprite(part: dict, part_id: str,
     """Side-view sprite for one catalog part, sized from its real data.
 
     Engines render nozzle-down (gimbal mount at the top), tanks as shaded
-    capsules with a contents band, structures as a white fairing cone.
+    NASA-white capsules with welds/panel seams and an MLI band on cryo
+    sections, crew parts as capsules with a heatshield, everything else
+    as a white fairing cone with an orange base band.
     """
     key = (part_id, round(px_per_m, 3))
     hit = _PART_CACHE.get(key)
@@ -324,6 +678,8 @@ def part_sprite(part: dict, part_id: str,
         surf = _build_engine(part, part_id, px_per_m)
     elif kind == "tank" and "tank" in part:
         surf = _build_tank(part, part_id, px_per_m)
+    elif kind == "crew":
+        surf = _build_capsule(part, part_id, px_per_m)
     else:
         surf = _build_fairing(part, part_id, px_per_m)
     _PART_CACHE[key] = surf
@@ -351,19 +707,30 @@ def part_thumb(part: dict, part_id: str, size: int = 28) -> pygame.Surface:
 
 def _draw_fins(surf: pygame.Surface, cx: int, hull_w: int,
                top: int, bot: int, fin_w: int) -> None:
-    """4 fins in side view: 2 outer silhouettes + 2 foreshortened center."""
+    """4 fins in side view: 2 outer silhouettes + 2 foreshortened center.
+    Graphite skins with a lit leading edge and a root contact shadow."""
     fin_h = max(8, int(0.45 * max(8, bot - top)))
     hw = max(2, hull_w // 2)
     for sx in (-1, 1):                # projected front/back pair, darker
         xi = cx + sx * max(1, hw // 4)
-        pygame.draw.polygon(surf, (48, 54, 66),
+        pygame.draw.polygon(surf, (40, 44, 52),
                             [(xi, bot - int(fin_h * 0.7)), (xi, bot),
                              (xi + sx * max(2, int(fin_w * 0.4)), bot)])
+    ao = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
     for sx in (-1, 1):                # outer silhouette pair
         x0 = cx + sx * (hw - 1)
         pts = [(x0, bot - fin_h), (x0, bot), (x0 + sx * fin_w, bot)]
-        pygame.draw.polygon(surf, (70, 78, 92), pts)
-        pygame.draw.lines(surf, (112, 122, 138), True, pts)
+        pygame.draw.polygon(surf, (64, 70, 80), pts)
+        # darker lower half = the fin shading agrees with top-light
+        pygame.draw.polygon(surf, (50, 55, 64),
+                            [(x0, bot - fin_h // 3), (x0, bot),
+                             (x0 + sx * fin_w, bot)])
+        # lit leading edge + root contact shadow on the hull
+        pygame.draw.line(surf, (148, 154, 166), pts[0],
+                         (x0 + sx * fin_w, bot))
+        pygame.draw.line(ao, (0, 0, 0, 80), (x0 - sx, bot - fin_h + 1),
+                         (x0 - sx, bot - 1))
+    surf.blit(ao, (0, 0))
 
 
 def vessel_sprite(db, stack: list[list[str]],
@@ -372,9 +739,11 @@ def vessel_sprite(db, stack: list[list[str]],
 
     stack is the builder's bottom-first stage list of part ids; db.parts[pid]
     yields the part dict. Per stage: payload/structures on top, tanks below
-    them, engines clustered side by side underneath; a darker interstage
-    ring joins stages; the bottom stage grows 4 fins when it clusters 2+
-    engines. The result is auto-scaled to fit within ~440 px height.
+    them, engines clustered side by side underneath; an international-orange
+    interstage ring joins stages; the bottom stage grows 4 fins when it
+    clusters 2+ engines. Stage bases cast contact shadows on their engine
+    clusters; the upper hull takes a stencil name + flag decal when girth
+    allows. The result is auto-scaled to fit within ~440 px height.
     """
     key = (tuple(tuple(stage) for stage in stack), round(px_per_m, 3))
     hit = _VESSEL_CACHE.get(key)
@@ -413,6 +782,7 @@ def vessel_sprite(db, stack: list[list[str]],
                           pygame.SRCALPHA)
     cx = total_w // 2
 
+    name_zone: tuple[int, int, int] | None = None
     y = 0
     for i in range(len(stages) - 1, -1, -1):
         eng, tank, struct = stages[i]
@@ -423,21 +793,59 @@ def vessel_sprite(db, stack: list[list[str]],
         for spr in tank:
             surf.blit(spr, (cx - spr.get_width() // 2, y))
             y += spr.get_height()
+        if i == len(stages) - 1 and tank:
+            name_zone = (tank_top, y, dims[i][2])
         if i == 0 and fins:
             _draw_fins(surf, cx, dims[0][2], tank_top, y, fin_w)
         ew = sum(s.get_width() for s in eng) + gap * max(0, len(eng) - 1)
         x = cx - ew // 2
+        eng_top = y
         for spr in eng:                # engines clustered side by side
             surf.blit(spr, (x, y))
             x += spr.get_width() + gap
+        if eng and dims[i][3] >= 10:   # stage base shades its engine bay
+            _contact_band(surf, cx - ew // 2, eng_top, ew,
+                          max(2, int(0.12 * dims[i][3])), alpha=110)
         y += dims[i][3]
-        if i > 0:                      # darker interstage ring
+        if i > 0:                      # international-orange interstage
             rw = max(8, int(0.85 * min(dims[i][2] or dims[i][0],
                                        dims[i - 1][2] or dims[i - 1][0])))
             ring = pygame.Rect(cx - rw // 2, y, rw, ring_h)
-            pygame.draw.rect(surf, (26, 32, 44), ring)
-            pygame.draw.rect(surf, PANEL_EDGE, ring, 1)
+            pygame.draw.rect(surf, _shade(_ORANGE, 0.92), ring)
+            pygame.draw.line(surf, _shade(_ORANGE, 1.25),
+                             (ring.left + 1, ring.top + 1),
+                             (ring.right - 2, ring.top + 1))
+            for tx in range(ring.left + 2, ring.right - 1, 3):
+                pygame.draw.line(surf, _shade(_ORANGE, 0.62),
+                                 (tx, ring.top + 2), (tx, ring.bottom - 2))
+            pygame.draw.line(surf, (26, 24, 26),
+                             (ring.left, ring.top),
+                             (ring.right - 1, ring.top))
+            pygame.draw.line(surf, (26, 24, 26),
+                             (ring.left, ring.bottom - 1),
+                             (ring.right - 1, ring.bottom - 1))
             y += ring_h
+
+    # stencil vessel name + flag decal idiom on the upper hull (§1.2)
+    if name_zone is not None:
+        t0, t1, hull_w = name_zone
+        zone_h = t1 - t0
+        if hull_w >= 16 and zone_h >= 44:
+            lab = _font(8).render("APHELION", True, (86, 90, 100))
+            lab = pygame.transform.rotate(lab, -90)
+            if (lab.get_height() <= zone_h - 10
+                    and lab.get_width() <= hull_w - 6):
+                surf.blit(lab, (cx - lab.get_width() // 2
+                                - max(1, hull_w // 6),
+                                t0 + (zone_h - lab.get_height()) // 2))
+            if hull_w >= 22:
+                fx = cx + max(2, hull_w // 6)
+                fy = t0 + max(4, zone_h // 5)
+                pygame.draw.rect(surf, (230, 232, 236), (fx, fy, 5, 2))
+                pygame.draw.rect(surf, _ORANGE, (fx, fy + 2, 5, 2))
+                pygame.draw.rect(surf, (66, 72, 84), (fx, fy + 4, 5, 2))
+                pygame.draw.rect(surf, (32, 34, 40),
+                                 pygame.Rect(fx - 1, fy - 1, 7, 8), 1)
 
     f = min(1.0, 440.0 / surf.get_height(), 500.0 / surf.get_width())
     if f < 1.0:
@@ -518,11 +926,11 @@ def craft_icon(heading_rad: float, size: int = 18,
     nose_x, tail_x = ccx + length / 2.0, ccx - length / 2.0
 
     pw, phh = max(2, int(0.34 * s)), max(2, int(0.16 * s))
-    for top in (ccy - hw - phh, ccy + hw):     # solar panel pair
+    for top in (ccy - hw - phh, ccy + hw):     # solar panel pair: dark glass
         rect = pygame.Rect(int(ccx - 0.12 * length - pw / 2), int(top),
                            pw, phh)
-        pygame.draw.rect(base, (36, 64, 96), rect)
-        pygame.draw.rect(base, ACCENT, rect, 1)
+        pygame.draw.rect(base, (24, 38, 56), rect)
+        pygame.draw.rect(base, (92, 138, 164), rect, 1)
     if burning:                                # additive flame at the tail
         fl = 0.5 * s
         flame = pygame.Surface((c, c), pygame.SRCALPHA)
@@ -537,11 +945,16 @@ def craft_icon(heading_rad: float, size: int = 18,
     hull = [(nose_x, ccy), (ccx + 0.15 * length, ccy - hw),
             (tail_x, ccy - 0.7 * hw), (tail_x, ccy + 0.7 * hw),
             (ccx + 0.15 * length, ccy + hw)]
-    pygame.draw.polygon(base, (205, 232, 244), hull)
-    pygame.draw.lines(base, ACCENT, True, hull)
-    pygame.draw.polygon(base, (245, 250, 255),
+    pygame.draw.polygon(base, (206, 212, 220), hull)
+    pygame.draw.lines(base, (108, 124, 140), True, hull)
+    pygame.draw.polygon(base, (240, 244, 250),
                         [(nose_x, ccy), (ccx + 0.3 * length, ccy - 0.55 * hw),
                          (ccx + 0.3 * length, ccy + 0.55 * hw)])
+    # graphite engine nub at the tail
+    pygame.draw.rect(base, (62, 68, 78),
+                     pygame.Rect(int(tail_x - 0.08 * length),
+                                 int(ccy - 0.5 * hw),
+                                 max(1, int(0.08 * length)), max(1, int(hw))))
 
     # pygame rotates CCW on screen; screen headings grow clockwise (y-down).
     rot = pygame.transform.rotate(base, -15.0 * sector)
@@ -554,8 +967,10 @@ def craft_icon(heading_rad: float, size: int = 18,
 def plume(length_px: int, width_px: int, phase01: float) -> pygame.Surface:
     """Animated exhaust plume frame, nozzle at the top, flowing down.
 
-    Layered translucent triangles, white-hot core fading through orange to
-    transparent; flicker is driven by phase01 in [0, 1) quantized to 8
+    Layered translucent sheath/mid/core, white-hot core fading through
+    orange to transparent, Prandtl-Pack shock diamonds down the core and a
+    bright exit-plane flash (the plume is THE bloom hero, ART-DIRECTION
+    §5); flicker is driven by phase01 in [0, 1) quantized to 8
     deterministic cached frames (NOT wall time, per 14 VD-P2).
     """
     lp = int(min(max(length_px, 4), 500))
@@ -569,9 +984,10 @@ def plume(length_px: int, width_px: int, phase01: float) -> pygame.Surface:
     rng = _rng(f"plume:{lp}:{wp}:{frame}")
     f = frame / _PLUME_FRAMES
     surf = pygame.Surface((wp, lp), pygame.SRCALPHA)
-    for lf, wf, col, alpha in ((1.00, 0.50, (255, 118, 40), 60),
-                               (0.70, 0.32, (255, 178, 80), 120),
-                               (0.40, 0.16, (255, 244, 214), 215)):
+    core_len = lp
+    for lf, wf, col, alpha in ((1.00, 0.50, (255, 146, 64), 70),
+                               (0.74, 0.34, (255, 202, 116), 150),
+                               (0.44, 0.17, (255, 248, 228), 235)):
         flick = (0.88 + 0.10 * math.sin(math.tau
                                         * (f + float(rng.uniform(0.0, 0.25))))
                  + float(rng.uniform(-0.04, 0.04)))
@@ -589,6 +1005,33 @@ def plume(length_px: int, width_px: int, phase01: float) -> pygame.Surface:
         layer = pygame.Surface((wp, lp), pygame.SRCALPHA)
         pygame.draw.polygon(layer, (*col, alpha), left + right[::-1])
         surf.blit(layer, (0, 0))
+        core_len = ln
+
+    # soften the layer banding into a gaseous falloff (half-res bounce)
+    surf = pygame.transform.smoothscale(
+        pygame.transform.smoothscale(surf, (max(2, wp // 2),
+                                            max(2, lp // 2))), (wp, lp))
+
+    hot = pygame.Surface((wp, lp), pygame.SRCALPHA)
+    # shock diamonds spaced down the core, dimming with distance
+    n_d = max(1, int(core_len / max(5.0, 1.45 * wp)))
+    for k in range(min(n_d, 6)):
+        t = (k + 0.55) / (n_d + 0.55)
+        yy = int(t * core_len)
+        bw = max(1.0, wp * 0.15 * (1.0 - 0.6 * t))
+        bh = max(2, int(bw * 2.4))
+        a = int(190 * (1.0 - 0.6 * t)
+                * (0.86 + 0.14 * math.sin(math.tau * (f + 0.37 * k))))
+        pygame.draw.ellipse(hot, (255, 246, 222, max(0, a)),
+                            pygame.Rect(int(wp / 2.0 - bw),
+                                        max(0, yy - bh // 2),
+                                        max(2, int(2 * bw)), bh))
+    # exit-plane flash right at the nozzle lip
+    pygame.draw.ellipse(hot, (255, 252, 238, 235),
+                        pygame.Rect(int(wp * 0.30), 0,
+                                    max(2, int(wp * 0.40)),
+                                    max(2, int(0.05 * lp))))
+    surf.blit(hot, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
     _PLUME_CACHE[key] = surf
     return surf
 
