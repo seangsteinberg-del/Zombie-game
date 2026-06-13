@@ -7138,22 +7138,68 @@ def run(argv: list[str] | None = None) -> int:
                         audio.play("clunk")
                 elif (interior_vessel is not None
                       and 0 <= room_i < len(interior_labels)):
-                    # vessel module: surface the part's role description
-                    _info = interior_labels[room_i][1]
-                    _words, _line = _info.split(), ""
-                    for _w in _words:
-                        if len(_line) + len(_w) > 40:
-                            theme.draw_text(screen, pxp + 16, yy, _line,
+                    # vessel module: surface WHY it is here + what it actually
+                    # contributes, read straight off the part spec (the user
+                    # asked for the modules' reason/functionality to show)
+                    _vrooms = [interior_vessel.vessel.part(_r)
+                               for _r in interior_vessel.vessel.rows
+                               if (interior_vessel.vessel.part(_r).get("hab")
+                                   or interior_vessel.vessel.part(_r).get(
+                                       "crew"))]
+                    _vp = (_vrooms[room_i] if 0 <= room_i < len(_vrooms)
+                           else None)
+                    if _vp is not None:
+                        _hab = _vp.get("hab") or {}
+                        _cr = _vp.get("crew") or {}
+                        _port = _vp.get("port") or {}
+                        _fns = []
+                        if _cr.get("capacity"):
+                            _fns.append(("CREW", f"seats {_cr['capacity']}"))
+                        if _hab.get("sleeps"):
+                            _fns.append(("BERTHS",
+                                         f"{_hab['sleeps']} bunks"))
+                        if _hab.get("v_press_m3"):
+                            _fns.append(("VOLUME",
+                                         f"{_hab['v_press_m3']:,.0f} m³"))
+                        if _cr.get("endurance_days"):
+                            _cd = (_cr.get("capacity", 1)
+                                   * _cr["endurance_days"])
+                            _fns.append(("LIFE SUPPORT",
+                                         f"{_cd:,.0f} crew-days"))
+                        if _hab.get("grow_m2"):
+                            _fns.append(("GREENHOUSE",
+                                         f"{_hab['grow_m2']:,.0f} m² beds"))
+                        if _hab.get("lab"):
+                            _fns.append(("LAB", "research bench"))
+                        if _vp.get("dockyard"):
+                            _fns.append(("DRY DOCK", "builds & services"))
+                        if _vp.get("command_source"):
+                            _fns.append(("AVIONICS", "command & control"))
+                        if _port:
+                            _fns.append(("DOCK PORT",
+                                         f"DK-{_port.get('size', '?')} · "
+                                         f"{_port.get('rating_kn', 0):,.0f} kN"))
+                        if _vp.get("cargo_t"):
+                            _fns.append(("CARGO",
+                                         f"{_vp['cargo_t']:,.0f} t"))
+                        theme.draw_text(screen, pxp + 16, yy, "WHAT IT DOES",
+                                        color=theme.COLORS["gold"],
+                                        font="small")
+                        yy += 18
+                        for _fl, _fv in _fns[:6]:
+                            theme.draw_text(screen, pxp + 16, yy, _fl,
+                                            color=theme.COLORS["text_dim"],
+                                            font="small")
+                            theme.draw_text(screen, pxp + 132, yy, _fv,
                                             color=theme.COLORS["text"],
                                             font="small")
                             yy += 16
-                            _line = ""
-                        _line += _w + " "
-                    if _line:
-                        theme.draw_text(screen, pxp + 16, yy, _line,
-                                        color=theme.COLORS["text"],
-                                        font="small")
-                        yy += 20
+                        theme.draw_text(
+                            screen, pxp + 16, yy + 2,
+                            f"{_vp.get('mass_t', 0):,.0f} t  ·  "
+                            f"${_vp.get('cost_musd', 0):,.0f}M",
+                            color=theme.COLORS["text_dim"], font="small")
+                        yy += 22
                 if interior_home is not None:
                     bufs = interior_home.net.buffers
                     show = [k for k in ("Water", "Oxygen", "O2", "Power",
