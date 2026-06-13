@@ -1,4 +1,4 @@
-# PROJECT "APHELION" — v2.1 · THE LOOK UPDATE
+# PROJECT "APHELION" — v3 · THE FULL BUILD-OUT
 
 A single-player, 2D top-down, **hard-realism space program sim** for PC,
 built in Python 3.12 + pygame-ce. Every pixel procedural — no asset files.
@@ -7,12 +7,20 @@ built in Python 3.12 + pygame-ce. Every pixel procedural — no asset files.
 > industry — one persistent engineer-founder campaign across a **real-scale
 > solar system**, 2049 onward. No combat. No aliens. The antagonist is physics.
 
-v2.1 rebuilt the visual layer: a modern UI grotesk over monospace data
-columns, keycap hint footers, glass-gradient panels, scattering skies with
-a sun and parallax ridgelines on every world you launch from or land on, a
-KSC-style pad complex, a tier-column research tree, chip-based status bars,
-a film-grain post pass, and a title screen with the Earth's lit limb
-breathing at the bottom of the frame.
+v3 builds out the entire 16-document design bible into a playable whole: a
+**cinematic "MISSION FILM" art direction** (a moderngl GPU post pass —
+HDR bloom on emitters only, per-world color grades, film grain), a real
+**launch campaign** (countdown holds, weather, radio chatter, anomaly
+chains, swing-arm retract, deluge steam, a plume with mach diamonds that
+feathers with altitude), **walkable everything** (surface EVA over diggable
+tile worlds, living ship/station interiors where the crew sleep, eat, and
+work at real stations, a colony command view that is just that same world
+pulled back), **pilotable vehicles** (rovers across the V-law terrain
+table, a submarine under Titan's living methane seas), a full **comms
+network** with light-lag teleop, **aerocapture corridor advice** and
+Lambert transfer windows, and a campaign meta-layer of Firsts, Prestige,
+a Chronicle that remembers every milestone, and a four-class alarm grammar
+that caps time-warp until you answer it.
 
 ## Install & run
 
@@ -52,18 +60,33 @@ a bonus. The ledger (`O`) shows every payout and countdown.
   Clohessy-Wiltshire approach on an LVLH radar — RCS pulses against a real
   budget, soft capture under 2 m/s, hot contact bounces. Pilots make it
   visibly cheaper, and can fly it for you.
-- **Found drawn colonies** (`F2`): seeded terrain and day/night skies, one
-  drawn structure per module with live status lights, residents walking
-  between them. Founding pours your lander's tanks into the buffers and its
-  crew become colonists; engineers speed repairs and raise output; banked
-  ISRU propellant **refuels landers kg-for-kg**. Solar dies at night —
-  batteries bridge, reactors don't care, radiators shed the heat.
-- **Spend people carefully**: hire, train (+1 skill, 90 days grounded),
-  watch dose careers end permanently, pay the casualty review when they do.
-- **Research that grants**: 13 nodes including a flyable NTR engine, the
-  fusion torch the precursor actually rides, and closed-loop ECLSS that
-  stretches life support 2.5×. Science labs make the win provably affordable
-  — a pinned test does the budget.
+- **One world, two cameras**: a landing site is a persistent side-view
+  **tile cross-section** — strata, ore veins, ice lenses, the tunnels you
+  dig. Walk it on foot (EVA, `G`), drive a rover across it, or pull the
+  camera back (`F2`) for the colony command view — *the same world*, with
+  modules on the real ground and a tunnel dug on foot visible from orbit.
+  Founding pours your lander's tanks into the buffers and its crew become
+  colonists. Solar dies at night — batteries bridge, reactors don't care.
+- **Living interiors**: step inside a hab or board a stack and the crew are
+  really living there — asleep in the bunks, on the exercise rack, at the
+  science bench. `E` at a station cooks a morale-lifting shared meal, runs a
+  medical scan, services a module, works a sample for science, or takes in a
+  planet through the cupola. Needs (sleep, exercise in free-fall, hygiene,
+  food) drive their condition for real.
+- **The seas are alive**: take the submarine down through Titan's methane or
+  Europa's ocean. Sonar paints the bathymetry; vent fields, fluorescing
+  microbial mats (UV lamp), and — once per campaign, in the deep — a contact
+  that paces the boat at the edge of the headlights and never quite resolves.
+- **The network**: every vessel and base is a comms node. Watch your link
+  rate and round-trip light-time home (`J` for the map), and learn why a
+  rover on Mars *crawls* under teleop while one on the Moon does not.
+- **Spend people carefully**: hire, train, watch dose careers end
+  permanently. Every First — first orbit, first crewed landing, the Titan
+  sub — pays out, earns Prestige, and is written into the **Chronicle** you
+  can photograph (`F12`) and one day export as a mission-log.
+- **Research that grants**: a 132-node tree including a flyable NTR engine,
+  the fusion torch the precursor rides, and closed-loop ECLSS. Science labs
+  make the win provably affordable — a pinned test does the budget.
 
 ## Controls (F1 in-game for the full table)
 
