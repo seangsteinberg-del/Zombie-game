@@ -9509,12 +9509,81 @@ def run(argv: list[str] | None = None) -> int:
             dy0 = size[1] - 80 - detail_h
             pygame.draw.line(screen, theme.COLORS["panel_edge"],
                              (24, dy0), (560, dy0))
+            def _part_role(p):
+                """One line on WHY this part is on the menu — read off its
+                functional keys so every part (engines down to grid fins)
+                justifies itself, not just the ones with obvious stats."""
+                cid = p.get("catalog_id", "")
+                if "engine" in p:
+                    return "PROPULSION — the thrust for every climb and burn"
+                if "tank" in p:
+                    return "PROPELLANT — feeds the engines; more = more dv"
+                if "crew" in p:
+                    return ("CREW CABIN — seats the crew, stocks life support"
+                            + (" + flies the stack"
+                               if p.get("command_source") else ""))
+                if p.get("dockyard"):
+                    return "DRY DOCK — builds & services ships in orbit"
+                if p.get("hab"):
+                    _h = p["hab"]
+                    if _h.get("grow_m2"):
+                        return "GREENHOUSE — grows food, recycles CO2 to O2"
+                    if _h.get("lab"):
+                        return "LABORATORY — the research bench for samples"
+                    if cid.startswith("HB-CUP"):
+                        return "CUPOLA — the view; lifts crew morale"
+                    if cid.startswith("HB-STORM"):
+                        return "STORM SHELTER — radiation refuge in solar events"
+                    if cid.startswith("HB-AIR"):
+                        return "AIRLOCK — the pressurized door for EVA egress"
+                    return "HABITAT — pressurized volume the crew lives in"
+                if p.get("dish_m"):
+                    return f"COMMS — {p['dish_m']} m dish to downlink data home"
+                if p.get("command_source"):
+                    return "AVIONICS — the command core a stack flies on"
+                if p.get("cmg_nms"):
+                    return "ATTITUDE — gyros point you without spending fuel"
+                if "power" in p:
+                    return ("THERMAL — sheds waste heat to space"
+                            if cid.startswith("TH") else
+                            "POWER — the electricity every system draws")
+                if p.get("shield"):
+                    return "SHIELDING — sheds entry heat / stops debris"
+                if p.get("chute_recover_t"):
+                    return "RECOVERY — a chute for a soft, reusable landing"
+                if p.get("leg_rating_t"):
+                    return "LANDING GEAR — takes the touchdown load"
+                if p.get("decoupler"):
+                    return "STAGING — drops a spent stage cleanly away"
+                if p.get("fairing_interior"):
+                    return "SHROUD — guards the payload through max-Q"
+                if "qalpha_bonus_kpadeg" in p:
+                    return "AERO CONTROL — grid fins steer in atmosphere"
+                if p.get("port"):
+                    return "DOCKING — the port that mates to other craft"
+                if p.get("grapple") or p.get("robot_arm"):
+                    return "MANIPULATION — captures & moves payloads on orbit"
+                if (p.get("spin_arm") or p.get("spin_hub")
+                        or p.get("tether_m")):
+                    return "ARTIFICIAL GRAVITY — spins the hab vs bone loss"
+                if (p.get("cargo_t") or p.get("container_berth")
+                        or p.get("bulk")):
+                    return "CARGO — carries payload, parts and ISRU output"
+                if p.get("ballast_fill_t"):
+                    return "BALLAST — regolith mass for trim / shielding"
+                if p.get("crossfeed"):
+                    return "PLUMBING — crossfeeds propellant between tanks"
+                if p.get("axial_kn"):
+                    return "STRUCTURE — load-bearing truss holding the stack"
+                return "STRUCTURE — connects and stiffens the stack"
+
             if sel_pid is not None:
                 p = db.parts[sel_pid]
                 screen.blit(part_thumb(p, sel_pid, 56), (32, dy0 + 12))
                 theme.draw_text(screen, 100, dy0 + 10, p["name"],
                                 color=theme.COLORS["accent"], font="body")
-                lines = [f"mass {p['mass_t']:.2f} t    "
+                lines = [_part_role(p),
+                         f"mass {p['mass_t']:.2f} t    "
                          f"unit ${builder.part_cost(sel_pid)/1e6:,.1f}M"]
                 if "engine" in p:
                     eng = p["engine"]
@@ -9546,6 +9615,7 @@ def run(argv: list[str] | None = None) -> int:
                         screen, 100, dy0 + 34 + li * 19, line,
                         color=(theme.COLORS["warn"]
                                if line.startswith("LOCKED")
+                               else theme.COLORS["gold"] if li == 0
                                else theme.COLORS["text"]), font="small")
 
             # the stack: stage headers + cursor-editable part rows
