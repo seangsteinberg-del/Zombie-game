@@ -8390,6 +8390,8 @@ def run(argv: list[str] | None = None) -> int:
             avail = catalog_for_kind(site_def["kind"])
             mods = site_b.net.modules
             daylight = site_b.daylight(t)
+            if os.environ.get("APH_QA_NIGHT") == "1":   # QA: night visuals
+                daylight = 0.08
             overlay_rects["base"] = []
 
             scene_h = 444
@@ -8483,6 +8485,20 @@ def run(argv: list[str] | None = None) -> int:
                 pygame.draw.ellipse(_sh, (0, 0, 0, 90),
                                     (0, 0, spr.get_width(), 10))
                 screen.blit(_sh, (mx0, int(sy_b) - 5))
+                # at night a crewed habitat glows — a warm halo bleeds off
+                # its lit windows into the dark (bloom-legal emitter)
+                if daylight < 0.45:
+                    _ngf = (0.45 - daylight) / 0.45
+                    _gw = spr.get_width() + 30
+                    _gh = int(spr.get_height() * 0.6) + 20
+                    _ngs = pygame.Surface((_gw, _gh), pygame.SRCALPHA)
+                    pygame.draw.ellipse(_ngs, (78, 56, 28, int(72 * _ngf)),
+                                        (0, 0, _gw, _gh))
+                    pygame.draw.ellipse(_ngs, (96, 70, 34, int(54 * _ngf)),
+                                        (_gw // 4, _gh // 4, _gw // 2,
+                                         _gh // 2))
+                    screen.blit(_ngs, (mx0 - 15, my0 + spr.get_height() // 3),
+                                special_flags=pygame.BLEND_RGB_ADD)
                 screen.blit(spr, (mx0, my0))
                 col = state_cols.get(m.state, theme.COLORS["text"])
                 pulse = (0.55 + 0.45 * math.sin(ui_t * 4.0 + mi)
