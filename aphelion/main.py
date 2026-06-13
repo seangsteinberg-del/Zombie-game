@@ -4144,6 +4144,7 @@ def run(argv: list[str] | None = None) -> int:
                  start_new if start_new in _DIFFICULTIES else "DIRECTOR"))
             prestige, firsts_earned, chron, abus, prod_hwm = \
                 restore_acts2(None)
+            alerts_seen, runway_state = set(), {"cls": 0}
             spe_sched, mars_wx = env_models(campaign_rng)
             env_state = {"spe_warned": -1.0, "spe_capped": False,
                          "storm_was": False}
@@ -4163,6 +4164,7 @@ def run(argv: list[str] | None = None) -> int:
                      toast_until) = campaign_tuple(_st_l)
                     prestige, firsts_earned, chron, abus, prod_hwm = \
                         restore_acts2(_st_l.get("acts2"))
+                    alerts_seen, runway_state = set(), {"cls": 0}
                     spe_sched, mars_wx = env_models(campaign_rng)
                     env_state = {"spe_warned": -1.0, "spe_capped": False,
                                  "storm_was": False}
@@ -6824,6 +6826,16 @@ def run(argv: list[str] | None = None) -> int:
             # alert taxonomy sweeps: contract deadlines (E-9 T-90/30/7)
             # and the G-9 runway death-spiral ladder
             alerts_mod.deadline_sweep(abus, program.contracts, t)
+            # RESOLVE the deadline alert once its contract is discharged —
+            # otherwise a completed/failed contract keeps its Class-2 card
+            # active and pins the warp ladder until the original deadline
+            for _c_done in program.contracts:
+                if (_c_done.completed_t is not None or _c_done.failed):
+                    for _dd in alerts_mod.DEADLINE_ALERT_DAYS:
+                        _a_dl = abus.find(_c_done.contract_id,
+                                          f"deadline_T-{int(_dd[0])}d")
+                        if _a_dl is not None and not _a_dl.resolved:
+                            abus.resolve(_a_dl.aid)
             _burn_day = ((_OVERHEAD_FIXED_M
                           + _OVERHEAD_PER_CREW_M * len(crew)
                           + _OVERHEAD_PER_BASE_M * len(bases)) * 1e6
@@ -6833,6 +6845,14 @@ def run(argv: list[str] | None = None) -> int:
                 _rw_cls = 2 if _rw_d < 14 else 3 if _rw_d < 60 else 0
                 if _rw_cls and _rw_cls != runway_state["cls"]:
                     alerts_mod.runway_sweep(abus, t, _rw_d)
+                elif _rw_cls == 0 and runway_state["cls"] != 0:
+                    # runway recovered: resolve the standing runway cards so
+                    # the warp cap lifts without a manual acknowledge
+                    for _rwd in alerts_mod.RUNWAY_ALERT_DAYS:
+                        _a_rw = abus.find("program:ledger",
+                                          f"runway_{int(_rwd[0])}d")
+                        if _a_rw is not None and not _a_rw.resolved:
+                            abus.resolve(_a_rw.aid)
                 runway_state["cls"] = _rw_cls
             for _al in abus.toasts(t):
                 if _al.aid not in alerts_seen:
