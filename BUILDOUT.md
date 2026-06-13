@@ -62,6 +62,26 @@ sound + flow, verified by crop review):
 | Vehicles (V5, building now) | drive/dive/hop scenes born at the bar: cockpit framing, terrain interaction feedback, headlights, sonar viz |
 | UI everywhere | HUD restraint fleet pass in flight; then consistent iconography, panel motion (slide/ease), alarm grammar (F) |
 
+### DEPTH² PROGRESS (2026-06-13 "100x the depth, every part deliberate" run)
+- **Drydock → hangar**: `render/part_art.py` — every part now real hardware (bell
+  nozzles + powerheads, propellant-tinted domed tanks w/ frost, gumdrop capsules,
+  MLI habs, ogive fairings, trusses, decoupler rings, solar/reactor/shield/etc.);
+  drydock scene = zoom-to-fit lit assembly bay w/ gantry cranes, work lights, stack
+  contact shadow, snap-ghost (green/red). Plus MISSION REACH ΔV ladder vs the canon
+  Δv map (01 §1.2). Still TODO: live cutaway prop fill, staging timeline, ROLLOUT.
+- **Interiors**: TAB live module-systems console (cond/power/resources/occupants) +
+  C crew dossier (5 tracks, morale/cond/energy/rad bars, ARS, meds, NOW activity);
+  pharma_lab idiom + a real `_utility` fallback (was the machine shop). TODO: ambient
+  sound, visible crew task props.
+- **Colony**: celestial sky (parent-world Earthrise + sun via `draw_sky_bodies`),
+  parallax ridge silhouettes, surface boulder scatter, FAILED-module smoke + red
+  strobe distress.
+- **Drive/EVA**: celestial sky reused; rover wheel-dust; EVA dig debris (spray +
+  break burst, tile-typed).
+- **Docking**: RCS puff particles on thrust + an alignment-reticle docking sight
+  (green/red by capture-speed) inside 60 m.
+- **Ascent**: live max-Q gauge vs the structural redline.
+
 ## Build order rationale
 
 R first (user's #1 complaint: "nothing to research"). S unlocks land-anywhere + the
