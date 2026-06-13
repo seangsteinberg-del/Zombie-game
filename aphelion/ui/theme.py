@@ -1,8 +1,11 @@
-"""UI theme (12 §5): the whole HUD/screen visual language — KSP map-view /
-Factorio panel chrome / ONI clarity. Panels, gauges, chips, icon glyphs,
-crew portraits and toasts are 100% procedural (pygame.draw + numpy),
-headless-safe (plain SRCALPHA surfaces, no display), deterministic
-(blake2b-seeded), and aggressively cached at module level.
+"""UI theme (12 §5; ART-DIRECTION §1.3 "mission-control glass"): the whole
+HUD/screen visual language. Dark translucent glass, thin rules, ONE amber
+accent family for attention/interactive, desaturated cyan reserved for
+nav/orbital values; status reads through brightness + context, never neon.
+Panels, gauges, chips, icon glyphs, crew portraits and toasts are 100%
+procedural (pygame.draw + numpy), headless-safe (plain SRCALPHA surfaces,
+no display), deterministic (blake2b-seeded), and aggressively cached at
+module level. The HUD whispers; the world speaks.
 """
 
 from __future__ import annotations
@@ -13,17 +16,21 @@ import math
 import numpy as np
 import pygame
 
-# -- palette (90-14 art direction; binding constants) ------------------------
+# -- palette (ART-DIRECTION §1.3 + §3; binding constants) ---------------------
+# Text never pure white (#E8E4DA max) and never glows; amber is the single
+# attention/interactive family (#FFB000-ish, pulled down to whisper on glass);
+# cyan is desaturated and ONLY for nav/orbital geometry; good/warn/danger stay
+# distinguishable by hue but live at low saturation.
 SPACE_BG = (6, 8, 14)
-PANEL_FILL = (10, 16, 28, 220)
-PANEL_EDGE = (42, 58, 85)
-ACCENT = (140, 235, 255)
-GOOD = (120, 255, 170)
-WARN = (255, 200, 90)
-DANGER = (255, 110, 110)
-GOLD = (255, 215, 130)
-TEXT = (200, 210, 224)
-TEXT_DIM = (110, 122, 140)
+PANEL_FILL = (10, 12, 17, 225)        # near-neutral dark glass
+PANEL_EDGE = (60, 64, 72)             # graphite hairline, not blue chrome
+ACCENT = (138, 186, 198)              # desaturated cyan: nav/orbital only
+GOOD = (142, 192, 156)                # sage, reads by brightness not neon
+WARN = (216, 158, 92)                 # amber-orange, same family as GOLD
+DANGER = (212, 122, 110)              # muted brick, still unmistakable
+GOLD = (226, 168, 80)                 # THE amber accent (headers, funds, keys)
+TEXT = (214, 210, 200)                # warm off-white, under #E8E4DA ceiling
+TEXT_DIM = (126, 124, 118)            # warm-neutral secondary
 
 COLORS: dict[str, tuple] = {
     "space_bg": SPACE_BG,
@@ -119,9 +126,10 @@ def panel(w: int, h: int, title: str | None = None) -> pygame.Surface:
     surf = pygame.Surface((w, h), pygame.SRCALPHA)
     body = pygame.Rect(0, 0, w, h)
     notch = max(6, min(12, w // 6, h // 6))
-    # body: subtle vertical gradient, lighter glass at the top
-    top = (16, 24, 42, 232)
-    bot = (7, 11, 20, 222)
+    # body: subtle vertical gradient, lighter glass at the top (§1.3: dark
+    # translucent glass — near-neutral, the blue cast lives in the world)
+    top = (14, 17, 25, 230)
+    bot = (7, 9, 14, 220)
     grad = pygame.Surface((1, max(2, h)), pygame.SRCALPHA)
     for yy in range(h):
         t = yy / max(1, h - 1)
@@ -135,10 +143,10 @@ def panel(w: int, h: int, title: str | None = None) -> pygame.Surface:
     if title is not None:
         band_h = 26
         band = pygame.Surface((w - 2, band_h), pygame.SRCALPHA)
-        for yy in range(band_h):
+        for yy in range(band_h):                      # graphite, not blue
             t = yy / max(1, band_h - 1)
-            band.fill((int(24 + 8 * (1 - t)), int(36 + 10 * (1 - t)),
-                       int(58 + 14 * (1 - t)), 236),
+            band.fill((int(19 + 6 * (1 - t)), int(22 + 7 * (1 - t)),
+                       int(29 + 8 * (1 - t)), 234),
                       pygame.Rect(0, yy, w - 2, 1))
         bmask = pygame.Surface((w - 2, band_h), pygame.SRCALPHA)
         pygame.draw.rect(bmask, (255, 255, 255, 255),
@@ -146,22 +154,22 @@ def panel(w: int, h: int, title: str | None = None) -> pygame.Surface:
                          border_top_left_radius=7, border_top_right_radius=7)
         band.blit(bmask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
         surf.blit(band, (1, 1))
-        pygame.draw.line(surf, _mix(PANEL_EDGE, ACCENT, 0.18),
+        pygame.draw.line(surf, _mix(PANEL_EDGE, GOLD, 0.15),
                          (1, band_h), (w - 2, band_h))
         img = tracked(title.upper(), "ui_small", GOLD, 2)
         tx = notch + 6
         surf.blit(img, (tx, 1 + (band_h - img.get_height()) // 2))
-        pygame.draw.line(surf, (*ACCENT, 140),
+        pygame.draw.line(surf, (*GOLD, 90),
                          (tx, band_h - 3), (tx + img.get_width(), band_h - 3))
-    # inner top sheen + hairline edge
-    pygame.draw.line(surf, (255, 255, 255, 26), (notch + 2, 1), (w - 9, 1))
-    pygame.draw.rect(surf, _mix(PANEL_EDGE, ACCENT, 0.12), body,
-                     width=1, border_radius=7)
+    # inner top sheen (reduced — glass, not gloss) + hairline edge
+    pygame.draw.line(surf, (255, 255, 255, 14), (notch + 2, 1), (w - 9, 1))
+    pygame.draw.rect(surf, PANEL_EDGE, body, width=1, border_radius=7)
     # clipped corner notches (TL / BR); pygame.draw writes alpha directly
     pygame.draw.polygon(surf, (0, 0, 0, 0), [(0, 0), (notch, 0), (0, notch)])
     pygame.draw.polygon(surf, (0, 0, 0, 0),
                         [(w, h), (w - notch - 1, h), (w, h - notch - 1)])
-    pygame.draw.line(surf, _mix(PANEL_EDGE, ACCENT, 0.30), (notch, 0), (0, notch))
+    pygame.draw.line(surf, _mix(PANEL_EDGE, (255, 255, 255), 0.12),
+                     (notch, 0), (0, notch))
     pygame.draw.line(surf, PANEL_EDGE, (w - 1 - notch, h - 1), (w - 1, h - 1 - notch))
     _PANEL_CACHE[key] = surf
     return surf
@@ -210,18 +218,21 @@ def bar(w: int, h: int, frac: float, color: tuple,
 
 
 def chip(text: str, color: tuple, font: pygame.font.Font | None = None) -> pygame.Surface:
-    """Pill-shaped tag: translucent tint, 1px colored border, colored text."""
+    """Pill-shaped tag, §1.3 restraint: dark translucent glass fill, 1px
+    neutral graphite rim, text in the quiet palette (semantic hue pulled
+    toward TEXT — status reads through brightness + context, not neon).
+    Chips recede; the world speaks."""
     key = (text, tuple(color[:3]), None if font is None else id(font))
     cached = _CHIP_CACHE.get(key)
     if cached is not None:
         return cached
     f = font if font is not None else init_fonts()["ui_small"]
-    img = f.render(text, True, color[:3])
+    img = f.render(text, True, _mix(color, TEXT, 0.35))
     w, h = img.get_width() + 12, img.get_height() + 4
     surf = pygame.Surface((w, h), pygame.SRCALPHA)
     r = h // 2
-    pygame.draw.rect(surf, (*color[:3], 46), pygame.Rect(0, 0, w, h), border_radius=r)
-    pygame.draw.rect(surf, color[:3], pygame.Rect(0, 0, w, h), width=1, border_radius=r)
+    pygame.draw.rect(surf, (11, 13, 17, 200), pygame.Rect(0, 0, w, h), border_radius=r)
+    pygame.draw.rect(surf, (58, 61, 68), pygame.Rect(0, 0, w, h), width=1, border_radius=r)
     surf.blit(img, (6, 2))
     _CHIP_CACHE[key] = surf
     return surf
@@ -236,7 +247,7 @@ def _g_oxygen(s: pygame.Surface, n: int) -> None:
 
 
 def _g_water(s: pygame.Surface, n: int) -> None:
-    c = (110, 175, 255)
+    c = (126, 168, 210)                  # desaturated — §1.3 no neon
     cx = n // 2
     pygame.draw.circle(s, c, (cx, int(n * 0.62)), int(n * 0.28))
     pygame.draw.polygon(s, c, [(cx, int(n * 0.08)),
@@ -247,7 +258,7 @@ def _g_water(s: pygame.Surface, n: int) -> None:
 
 
 def _g_hydrogen(s: pygame.Surface, n: int) -> None:
-    c = (215, 228, 255)
+    c = (204, 210, 218)                  # cool pale grey, under white ceiling
     cy = n // 2
     pygame.draw.circle(s, c, (int(n * 0.34), cy), int(n * 0.13))
     pygame.draw.circle(s, c, (int(n * 0.66), cy), int(n * 0.13))
@@ -304,7 +315,7 @@ def _g_radiation(s: pygame.Surface, n: int) -> None:
 
 
 def _g_crew(s: pygame.Surface, n: int) -> None:
-    c = (235, 238, 245)
+    c = (218, 216, 210)                  # warm off-white (#E8E4DA ceiling)
     cx = n // 2
     pygame.draw.circle(s, c, (cx, int(n * 0.34)), int(n * 0.17))
     pygame.draw.ellipse(s, c, pygame.Rect(cx - int(n * 0.30), int(n * 0.55),
@@ -558,18 +569,19 @@ FOOTER_H = 30
 
 
 def keycap(label: str) -> pygame.Surface:
-    """Keyboard-key cap: rounded plate, hairline edge, accent label."""
+    """Keyboard-key cap, §1.3: graphite plate, hairline edge, quiet label
+    with a whisper of amber (keys are interactive — amber's territory)."""
     cached = _KEYCAP_CACHE.get(label)
     if cached is not None:
         return cached
-    img = init_fonts()["ui_small"].render(label, True, _mix(ACCENT, TEXT, 0.35))
+    img = init_fonts()["ui_small"].render(label, True, _mix(GOLD, TEXT, 0.55))
     w, h = img.get_width() + 10, img.get_height() + 4
     surf = pygame.Surface((w, h), pygame.SRCALPHA)
-    pygame.draw.rect(surf, (30, 42, 64, 235), pygame.Rect(0, 0, w, h),
+    pygame.draw.rect(surf, (26, 28, 33, 235), pygame.Rect(0, 0, w, h),
                      border_radius=4)
-    pygame.draw.rect(surf, (82, 104, 138), pygame.Rect(0, 0, w, h),
+    pygame.draw.rect(surf, (72, 75, 82), pygame.Rect(0, 0, w, h),
                      width=1, border_radius=4)
-    pygame.draw.line(surf, (255, 255, 255, 30), (3, 1), (w - 4, 1))
+    pygame.draw.line(surf, (255, 255, 255, 18), (3, 1), (w - 4, 1))
     surf.blit(img, (5, 2))
     _KEYCAP_CACHE[label] = surf
     return surf
@@ -585,11 +597,11 @@ def footer(w: int, hints: str) -> pygame.Surface:
         return cached
     h = FOOTER_H
     surf = pygame.Surface((w, h), pygame.SRCALPHA)
-    for yy in range(h):
+    for yy in range(h):                            # neutral graphite glass
         t = yy / max(1, h - 1)
-        surf.fill((int(10 + 6 * t), int(15 + 8 * t), int(26 + 12 * t),
+        surf.fill((int(9 + 5 * t), int(11 + 5 * t), int(14 + 7 * t),
                    int(205 + 40 * t)), pygame.Rect(0, yy, w, 1))
-    pygame.draw.line(surf, (*_mix(PANEL_EDGE, ACCENT, 0.20), 180),
+    pygame.draw.line(surf, (*_mix(PANEL_EDGE, GOLD, 0.12), 170),
                      (0, 0), (w, 0))
     f = init_fonts()["ui_small"]
     x = 12

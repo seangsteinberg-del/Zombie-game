@@ -22,16 +22,31 @@ def _bytes(s: pygame.Surface) -> bytes:
 
 
 def test_palette_exact():
+    # ART-DIRECTION §1.3 restraint pass: one amber accent family, desaturated
+    # cyan only for nav/orbital, text under the #E8E4DA warm-white ceiling.
     assert theme.COLORS["space_bg"] == (6, 8, 14)
-    assert theme.COLORS["panel_fill"] == (10, 16, 28, 220)
-    assert theme.COLORS["panel_edge"] == (42, 58, 85)
-    assert theme.COLORS["accent"] == (140, 235, 255)
-    assert theme.COLORS["good"] == (120, 255, 170)
-    assert theme.COLORS["warn"] == (255, 200, 90)
-    assert theme.COLORS["danger"] == (255, 110, 110)
-    assert theme.COLORS["gold"] == (255, 215, 130)
-    assert theme.COLORS["text"] == (200, 210, 224)
-    assert theme.COLORS["text_dim"] == (110, 122, 140)
+    assert theme.COLORS["panel_fill"] == (10, 12, 17, 225)
+    assert theme.COLORS["panel_edge"] == (60, 64, 72)
+    assert theme.COLORS["accent"] == (138, 186, 198)
+    assert theme.COLORS["good"] == (142, 192, 156)
+    assert theme.COLORS["warn"] == (216, 158, 92)
+    assert theme.COLORS["danger"] == (212, 122, 110)
+    assert theme.COLORS["gold"] == (226, 168, 80)
+    assert theme.COLORS["text"] == (214, 210, 200)
+    assert theme.COLORS["text_dim"] == (126, 124, 118)
+
+
+def test_palette_restraint_invariants():
+    """§1.3 laws as invariants: no channel at 255 anywhere in the HUD palette
+    (text never pure white, no neon), and every COLORS key survives."""
+    for key in ("space_bg", "panel_fill", "panel_edge", "accent", "good",
+                "warn", "danger", "gold", "text", "text_dim"):
+        rgb = theme.COLORS[key][:3]
+        assert max(rgb) < 255, key
+    assert max(theme.COLORS["text"][:3]) <= 0xE8                # ceiling
+    # amber accent stays amber: R > G > B by a wide margin
+    r, g, b = theme.COLORS["gold"]
+    assert r > g > b
 
 
 def test_fonts_lazy_and_cached():
