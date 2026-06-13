@@ -6656,7 +6656,7 @@ def run(argv: list[str] | None = None) -> int:
                 fy = (44 + 22 * math.sin(ui_t * 0.9 + ri * 1.7)
                       if floating and _pose != "sleep_bag" else 0)
                 _facing = (1 if wb["target_x_m"] >= rx_m else -1)
-                cspr = eva_art.astronaut(
+                cspr = eva_art.crew_indoor(
                     int(ui_t * 5) % 4 if wb["moving"] else 0,
                     _facing, False, h_px=148)
                 if _pose == "sleep_bag":
@@ -6670,7 +6670,7 @@ def run(argv: list[str] | None = None) -> int:
                                    - cspr.get_height() - fy))
             # you
             fy_me = 36 + 16 * math.sin(ui_t * 1.1) if floating else 0
-            aspr = eva_art.astronaut(
+            aspr = eva_art.crew_indoor(
                 0 if floating else int(interior_frame), interior_face,
                 False, h_px=160)
             if floating:

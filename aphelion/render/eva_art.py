@@ -164,6 +164,90 @@ def astronaut(phase: int, facing: int, airborne: bool = False,
     return out
 
 
+_FLIGHT = (92, 112, 138)         # flight-suit blue-grey
+_FLIGHT_HI = (132, 154, 182)
+_FLIGHT_SH = (60, 76, 98)
+_SKIN = (226, 182, 146)
+_SKIN_SH = (190, 144, 112)
+_HAIR = (58, 46, 38)
+
+
+def _flimb(s, a, b, w, back=False):
+    dark = _FLIGHT_SH if back else _FLIGHT_SH
+    main = _FLIGHT_SH if back else _FLIGHT
+    lite = _FLIGHT if back else _FLIGHT_HI
+    pygame.draw.line(s, dark, a, b, w)
+    pygame.draw.line(s, main, (a[0] - 1, a[1] - 1), (b[0] - 1, b[1] - 1),
+                     max(2, w - 3))
+    pygame.draw.line(s, lite, (a[0] - w // 4, a[1] - 1),
+                     (b[0] - w // 4, b[1] - 1), max(1, w // 4))
+
+
+def crew_indoor(phase: int, facing: int, airborne: bool = False,
+                h_px: int = 34) -> pygame.Surface:
+    """Shirtsleeve crew member (no suit) for pressurised interiors: flight
+    suit, bare head with a headset — same walk cycle as the EVA astronaut."""
+    key = ("indoor", phase & 3, facing, h_px)
+    got = _CACHE.get(key)
+    if got is not None:
+        return got
+    w2, h2 = 96, 136
+    s = pygame.Surface((w2, h2), pygame.SRCALPHA)
+    ph = phase & 3
+    swing = [-12, 0, 12, 0][ph]
+    sw_a = [8, 0, -8, 0][ph]
+    hip = (44, 86)
+    ground_y = 126
+    pygame.draw.ellipse(s, (0, 0, 0, 42), (16, 123, 64, 8))
+    pygame.draw.ellipse(s, (0, 0, 0, 78), (24, 122, 48, 9))
+    # far arm
+    sh_b, elb_b = (42, 52), (44 - sw_a * 0.4, 68)
+    hnd_b = (42 - sw_a, 84)
+    _flimb(s, sh_b, elb_b, 8, back=True)
+    _flimb(s, elb_b, hnd_b, 7, back=True)
+    pygame.draw.circle(s, _SKIN_SH, (int(hnd_b[0]), int(hnd_b[1])), 4)
+    # legs
+    for leg, dx in ((0, -swing), (1, swing)):
+        back = leg == 0
+        knee = (hip[0] + dx * 0.45, hip[1] + 20)
+        fy = ground_y - (4 if (ph in (1, 3) and leg == 0) else 0)
+        foot = (hip[0] + dx, fy)
+        _flimb(s, hip, knee, 12, back=back)
+        pygame.draw.circle(s, _FLIGHT_SH if back else _FLIGHT,
+                           (int(knee[0]), int(knee[1])), 5)
+        _flimb(s, knee, foot, 10, back=back)
+        pygame.draw.ellipse(s, (40, 42, 50),
+                            (int(foot[0]) - 8, int(foot[1]) - 4, 20, 8))
+    # torso: flight suit, zipper, mission patch + name tag
+    pygame.draw.rect(s, _FLIGHT_SH, (28, 44, 36, 48), border_radius=10)
+    pygame.draw.rect(s, _FLIGHT, (28, 44, 34, 46), border_radius=9)
+    pygame.draw.rect(s, _FLIGHT_HI, (30, 45, 28, 12), border_radius=8)
+    pygame.draw.line(s, _FLIGHT_SH, (45, 46), (45, 88), 1)
+    pygame.draw.rect(s, _ACCENT, (30, 50, 9, 5))            # mission patch
+    pygame.draw.rect(s, (210, 214, 222), (48, 58, 12, 3))  # name tag
+    # near arm
+    sh_f, elb_f = (52, 52), (56 + sw_a * 0.4, 68)
+    hnd_f = (54 + sw_a, 84)
+    _flimb(s, sh_f, elb_f, 9)
+    _flimb(s, elb_f, hnd_f, 8)
+    pygame.draw.circle(s, _SKIN, (int(hnd_f[0]), int(hnd_f[1])), 4)
+    # head: skin, hair cap, headset, an eye
+    pygame.draw.circle(s, _SKIN_SH, (51, 30), 12)
+    pygame.draw.circle(s, _SKIN, (50, 28), 11)
+    pygame.draw.circle(s, _HAIR, (48, 23), 11)             # hair
+    pygame.draw.circle(s, _SKIN, (53, 30), 9)              # carve the face
+    pygame.draw.circle(s, _SKIN_SH, (60, 30), 1)           # nose
+    pygame.draw.circle(s, _GRAPHITE, (57, 28), 1)          # eye
+    pygame.draw.arc(s, _GRAPHITE, (39, 15, 23, 23), 0.3, math.pi - 0.1, 2)
+    pygame.draw.circle(s, (44, 48, 56), (55, 33), 2)       # earpiece
+    pygame.draw.line(s, _GRAPHITE_HI, (55, 33), (61, 34), 1)  # mic boom
+    out = pygame.transform.smoothscale(s, (int(w2 * h_px / h2), h_px))
+    if facing < 0:
+        out = pygame.transform.flip(out, True, False)
+    _CACHE[key] = out
+    return out
+
+
 def flag(h_px: int = 30) -> pygame.Surface:
     key = ("flag", h_px)
     got = _CACHE.get(key)
