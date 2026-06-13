@@ -1500,14 +1500,14 @@ def run(argv: list[str] | None = None) -> int:
         vessels.append(_fvq)
         eva_av = _fvq
         _secq = SITES["site:peary"].get("sector_id", "site:peary")
-        eva_tiles = tileworld.TileWorld(
-            _secq, 8.0, SITES["site:peary"].get("kind", "psr_ice"),
-            dug=explore.setdefault("dug", {}).get(_secq, []))
-        eva_tr = TileRenderer(eva_tiles,
-                              ground_palette(SITES["site:peary"]["body"]))
+        # ONE WORLD: the QA EVA shares the cached world at the SAME slope
+        # the colony/drive use (no leftover 4-vs-8 hardcode)
+        eva_tiles, eva_tr = tiles_for(
+            _secq, SITES["site:peary"].get("kind", "psr_ice"),
+            SITES["site:peary"]["body"])
         eva_state = eva_sim.EvaState(
-            _secq, 8.0, _bq.mu / _bq.radius ** 2, "V. Ainsworth",
-            tiles=eva_tiles)
+            _secq, site_slope(_secq), _bq.mu / _bq.radius ** 2,
+            "V. Ainsworth", tiles=eva_tiles)
         if want == "mine":              # QA: a shaft + gallery, lamp on
             _mx = 18.0
             for _ in range(16):
@@ -2488,6 +2488,7 @@ def run(argv: list[str] | None = None) -> int:
                             toast_until = t + 5
                             audio.play("warn")
                         else:
+                            dive_gv.park_x_m = dive_x / 10.0   # persist berth
                             toast = (f"{dive_gv.name} MOORED — hull "
                                      f"{100.0 * dive_gv.cond:.0f}%, "
                                      f"{len(dive_painted) * 50} m of "
@@ -4672,7 +4673,7 @@ def run(argv: list[str] | None = None) -> int:
                                   theme.COLORS["warn"] if _hold_cd
                                   else theme.COLORS["text"])
                 screen.blit(_pm, (size[0] // 2 - _pm.get_width() // 2, 152))
-                if (_hold_cd and any("commit" in h.get("id", "")
+                if (_hold_cd and any("commit" in h.get("label", "")
                                      for h in stc["holds"]
                                      if not h.get("released"))):
                     _cm = font.render(
@@ -5673,7 +5674,8 @@ def run(argv: list[str] | None = None) -> int:
                 ok_d = drive_gv.drive(
                     abs(dx_d) / 1000.0, g_d, terr_key,
                     v_kmh=max(abs(drive_v) * 3.6, 0.5),
-                    hotel_kw=0.15 if drive_gv.crewed else 0.06,
+                    hotel_kw=(1.5 if "press" in drive_gv.catalog_id
+                              else 0.15 if drive_gv.crewed else 0.06),
                     dust_body=body_d.rsplit(":", 1)[-1])
                 if not ok_d:
                     drive_v = 0.0
@@ -5777,8 +5779,10 @@ def run(argv: list[str] | None = None) -> int:
                    / max(drive_gv.pack_kwh, 1e-9))
             e_now = drive_gv.e_km(g_d, terr_key,
                                   v_kmh=max(abs(drive_v) * 3.6, 5.0),
-                                  hotel_kw=0.15 if drive_gv.crewed
-                                  else 0.06)
+                                  hotel_kw=(1.5 if "press"
+                                            in drive_gv.catalog_id
+                                            else 0.15 if drive_gv.crewed
+                                            else 0.06))
             rng_km = (float("inf") if drive_gv.rtg_we > 0.0
                       else drive_gv.energy_kwh / max(e_now, 1e-9))
             chips_d = [
@@ -5843,13 +5847,11 @@ def run(argv: list[str] | None = None) -> int:
             site_e = SITES[eva_av.landed_at]
             body_e = site_e["body"]
             if eva_tiles is None:       # safety: any path into the scene
-                eva_tiles = tileworld.TileWorld(
-                    eva_state.sector_id, 4.0,
-                    site_e.get("kind", "regolith"),
-                    dug=explore.setdefault("dug", {}).get(
-                        eva_state.sector_id, []))
+                # ONE WORLD: share the cached world (not a private 4.0 copy)
+                eva_tiles, eva_tr = tiles_for(
+                    eva_state.sector_id,
+                    site_e.get("kind", "regolith"), body_e)
                 eva_state.tiles = eva_tiles
-                eva_tr = TileRenderer(eva_tiles, ground_palette(body_e))
 
             # held-tool digging: X carves the wall ahead, C the floor below
             dig_down = bool(keys[pygame.K_c])

@@ -17,8 +17,14 @@ endurance clocks instead (`skips_km_wear`)."""
 from __future__ import annotations
 
 # ---- multiplier tables (10 §2.9) ---------------------------------------------
+# keys cover BOTH the V-24a wear vocabulary and the drive-scene /
+# locomotion.TERRAIN vocabulary (ice_plain, earth_road, …) so wheel/track
+# wear is not silently overcounted to 1.0 on ice and roads.
 TERRAIN_MULT = {"road": 0.5, "regolith": 1.0, "dune": 1.5,
-                "chaos": 2.0, "ice": 0.8}        # unlisted terrain → 1.0
+                "chaos": 2.0, "ice": 0.8,
+                "ice_plain": 0.8, "ice_plain_studded": 0.8,
+                "earth_road": 0.5, "compacted": 0.5,
+                "duricrust": 1.0, "titan_shore": 1.2}   # unlisted → 1.0
 
 DUST_MULT = {"moon": 1.5, "mercury": 1.5, "mars": 1.0, "titan": 0.7,
              "venus_cloud": 2.0, "icy_moon": 0.8}   # other → 1.0

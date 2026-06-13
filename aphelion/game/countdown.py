@@ -583,6 +583,10 @@ class Countdown:
         self.t0 = self.abs_t - RECYCLE_CLOCK_S
         self.phase = "count"
         self.passed = []
+        # release any parked hold so it doesn't persist (unreleased) into
+        # the new attempt and keep growing the hold list / line-id numbering
+        for _h in self.holds:
+            _h["released"] = True
         self.fired = [e for e in self.fired
                       if e in ("power_up", "lox_load", "fuel_load")]
         self.accepted_risks = []
