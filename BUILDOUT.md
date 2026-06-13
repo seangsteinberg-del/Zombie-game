@@ -68,19 +68,32 @@ sound + flow, verified by crop review):
   MLI habs, ogive fairings, trusses, decoupler rings, solar/reactor/shield/etc.);
   drydock scene = zoom-to-fit lit assembly bay w/ gantry cranes, work lights, stack
   contact shadow, snap-ghost (green/red). Plus MISSION REACH ΔV ladder vs the canon
-  Δv map (01 §1.2). Still TODO: live cutaway prop fill, staging timeline, ROLLOUT.
+  Δv map (01 §1.2) + selected-part spec readout (thrust/Isp/propellant·cap·crew).
+  Still TODO: live cutaway prop fill, staging timeline, ROLLOUT.
 - **Interiors**: TAB live module-systems console (cond/power/resources/occupants) +
   C crew dossier (5 tracks, morale/cond/energy/rad bars, ARS, meds, NOW activity);
   pharma_lab idiom + a real `_utility` fallback (was the machine shop). TODO: ambient
   sound, visible crew task props.
 - **Colony**: celestial sky (parent-world Earthrise + sun via `draw_sky_bodies`),
   parallax ridge silhouettes, surface boulder scatter, FAILED-module smoke + red
-  strobe distress.
+  strobe distress, warm night-glow on crewed habitats.
+- **Surface scenes (shared `draw_sky_bodies`)**: sun rides time of day (low+warm at
+  dawn/dusk, high at noon) across colony/drive/EVA/descent.
 - **Drive/EVA**: celestial sky reused; rover wheel-dust; EVA dig debris (spray +
   break burst, tile-typed).
 - **Docking**: RCS puff particles on thrust + an alignment-reticle docking sight
   (green/red by capture-speed) inside 60 m.
-- **Ascent**: live max-Q gauge vs the structural redline.
+- **Ascent / Descent**: live max-Q gauge vs the structural redline; descent gains
+  Earthrise overhead + a regolith blast (radial dust sheets) on final approach.
+- **Dive**: shallow-sea god-ray light shafts (depth-scaled).
+- **Research board**: prerequisite dependency edges (dim/green/selected-chain accent).
+- **Contracts ledger**: structured rows (act dividers, status dots, payouts, striping).
+- **Flight/map**: TARGET body fact card (gravity/day/radius/radiation/atmo/sites).
+- **Audio**: mood fits the moment (deep dive = tense, walking your hab = warm).
+- QA env hooks added (all off by default, like `APH_QA_CLOCK`): `APH_QA_PANEL/
+  DOSSIER/IX` (interiors), `APH_QA_FAIL` (distress), `APH_QA_NIGHT` (daylight value),
+  `APH_QA_DIG` (dig debris), `APH_QA_BLAST` (regolith blast), `APH_QA_RCS` (puffs),
+  `APH_QA_TARGET` (map target).
 
 ## Build order rationale
 
