@@ -196,6 +196,7 @@ from aphelion.game import eva as eva_sim  # noqa: E402
 from aphelion.game import tileworld  # noqa: E402
 from aphelion.render import eva_art  # noqa: E402
 from aphelion.render import glpost  # noqa: E402
+from aphelion.render import part_art  # noqa: E402
 from aphelion.render import vehicle_art  # noqa: E402
 from aphelion.sim.vehicles import locomotion  # noqa: E402
 from aphelion.sim.vehicles import marine  # noqa: E402
@@ -5229,58 +5230,92 @@ def run(argv: list[str] | None = None) -> int:
                     dd_cursor[1] = max(0, min(50, dd_cursor[1] + dyc))
                     dd_move_cd = 0.09
 
-            screen.fill((6, 8, 14))
-            cs = 11
-            vx0, vy0 = 70, 636            # cell (0,0) bottom-left
-            for gx in range(0, 64):       # the grid bed
-                lx = vx0 + gx * cs
-                pygame.draw.line(screen, (16, 20, 30) if gx % 5 else
-                                 (24, 30, 44), (lx, vy0 - 52 * cs),
-                                 (lx, vy0))
-            for gy in range(0, 53):
-                ly = vy0 - gy * cs
-                pygame.draw.line(screen, (16, 20, 30) if gy % 5 else
-                                 (24, 30, 44), (vx0, ly),
-                                 (vx0 + 63 * cs, ly))
-            cls_col = {"STRUCT": (120, 124, 134), "TANK": (96, 138, 178),
-                       "ENGINE": (196, 122, 60), "HAB": (104, 164, 116),
-                       "ELEC": (188, 172, 80), "MECH": (148, 110, 170),
-                       "SHIELD": (84, 168, 178)}
-            for p_dd in dd_v.parts:
-                rx = vx0 + p_dd.x * cs
-                ry = vy0 - (p_dd.y + p_dd.h) * cs
-                col = cls_col.get(p_dd.spec.get("class", "STRUCT"),
-                                  (120, 124, 134))
-                pygame.draw.rect(screen, col,
-                                 (rx + 1, ry + 1, p_dd.w * cs - 2,
-                                  p_dd.h * cs - 2))
-                pygame.draw.rect(screen, (10, 12, 18),
-                                 (rx, ry, p_dd.w * cs, p_dd.h * cs), 1)
-                if p_dd.w * cs >= 30 and p_dd.h * cs >= 12:
-                    theme.draw_text(screen, rx + 2, ry + 1,
-                                    p_dd.spec.get("catalog_id", "")[:7],
-                                    color=(8, 10, 14), font="small")
-            # the ghost of the selected catalog part rides the cursor
+            screen.fill((10, 12, 18))
+            # ---- the assembly bay: zoom-to-fit camera over the stack ----
             rows_dd = dd_catalog()
             sel_dd = rows_dd[dd_cat_idx % len(rows_dd)] if rows_dd \
                 else None
+            gsw, gsh = (int(v) for v in sel_dd[1].get("size", [1, 1])) \
+                if sel_dd else (1, 1)
+            # bounding box (cells) over placed parts + the cursor ghost
+            cells_x = [0, 6]
+            cells_y = [0, 8]
+            for p_dd in dd_v.parts:
+                cells_x += [p_dd.x, p_dd.x + p_dd.w]
+                cells_y += [p_dd.y, p_dd.y + p_dd.h]
+            cells_x += [dd_cursor[0], dd_cursor[0] + gsw]
+            cells_y += [dd_cursor[1], dd_cursor[1] + gsh]
+            bminx, bmaxx = min(cells_x), max(cells_x)
+            bminy, bmaxy = min(cells_y), max(cells_y)
+            bw_c = max(6, bmaxx - bminx) + 4
+            bh_c = max(8, bmaxy - bminy) + 4
+            area = (40, 64, 716, 612)     # build region (x,y,w,h)
+            floor_y = 660
+            avail_w, avail_h = area[2], floor_y - (area[1] + 24)
+            cs = int(max(10, min(34, min(avail_w / bw_c, avail_h / bh_c))))
+            ccx = (bminx + bmaxx) / 2.0
+            ox = (area[0] + area[2] / 2) - ccx * cs       # screen x of cell 0
+            oy = floor_y + bminy * cs                     # screen y of cell 0
+            # stack pixel extents (for gantry placement)
+            if dd_v.parts:
+                rl = int(ox + min(p.x for p in dd_v.parts) * cs)
+                rr = int(ox + max(p.x + p.w for p in dd_v.parts) * cs)
+                rtop = int(oy - max(p.y + p.h for p in dd_v.parts) * cs)
+            else:
+                rl, rr, rtop = int(ox), int(ox + 6 * cs), int(oy - 8 * cs)
+            part_art.draw_bay(screen, area, floor_y, rl, rr, rtop)
+            # faint placement guide grid, only the local working column
+            gg = pygame.Surface((area[2], area[3]), pygame.SRCALPHA)
+            for gx in range(bminx - 2, bmaxx + 3):
+                lx = int(ox + gx * cs) - area[0]
+                pygame.draw.line(gg, (255, 255, 255, 10), (lx, 0),
+                                 (lx, area[3]))
+            for gy in range(bminy - 2, bmaxy + 3):
+                ly = int(oy - gy * cs) - area[1]
+                pygame.draw.line(gg, (255, 255, 255, 10), (0, ly),
+                                 (area[2], ly))
+            screen.blit(gg, (area[0], area[1]))
+            # soft contact shadow of the whole stack on the floor
+            if dd_v.parts:
+                shw = max(24, rr - rl + 24)
+                csh = pygame.Surface((shw, 22), pygame.SRCALPHA)
+                pygame.draw.ellipse(csh, (0, 0, 0, 150), (0, 0, shw, 22))
+                screen.blit(csh, ((rl + rr) // 2 - shw // 2, floor_y - 9))
+            # the parts, as real hardware
+            for p_dd in dd_v.parts:
+                rx = int(ox + p_dd.x * cs)
+                ry = int(oy - (p_dd.y + p_dd.h) * cs)
+                screen.blit(part_art.part_sprite(p_dd.spec, cs), (rx, ry))
+            # snap-ghost: the selected part's sprite at the cursor, tinted
+            # green if the footprint is free, red if it would collide
             if sel_dd:
-                sw, sh = sel_dd[1].get("size", [1, 1])
-                pygame.draw.rect(
-                    screen, theme.COLORS["gold"],
-                    (vx0 + dd_cursor[0] * cs,
-                     vy0 - (dd_cursor[1] + int(sh)) * cs,
-                     int(sw) * cs, int(sh) * cs), 2)
+                occ = part_art.occupied_cells(dd_v.parts)
+                free = all((dd_cursor[0] + dx, dd_cursor[1] + dy) not in occ
+                           and dd_cursor[0] + dx <= 69
+                           and dd_cursor[1] + dy <= 50
+                           for dx in range(gsw) for dy in range(gsh))
+                gx0 = int(ox + dd_cursor[0] * cs)
+                gy0 = int(oy - (dd_cursor[1] + gsh) * cs)
+                ghost = part_art.part_sprite(sel_dd[1], cs).copy()
+                ghost.set_alpha(150)
+                screen.blit(ghost, (gx0, gy0))
+                tint = (90, 210, 130) if free else (220, 90, 80)
+                pygame.draw.rect(screen, tint,
+                                 (gx0, gy0, gsw * cs, gsh * cs), 1)
+                for cx_m in (gx0, gx0 + gsw * cs):  # corner ticks
+                    pygame.draw.line(screen, tint, (cx_m, gy0 - 4),
+                                     (cx_m, gy0 + 4))
             # COM markers: wet gold dot, dry orange ring (06 §2.2)
             if dd_v.parts:
                 wcx, wcy = dd_stage.wet_com(dd_v)
                 dcx, dcy = dd_v.com()
-                pygame.draw.circle(screen, theme.COLORS["gold"],
-                                   (int(vx0 + wcx * cs),
-                                    int(vy0 - wcy * cs)), 5)
-                pygame.draw.circle(screen, (220, 140, 60),
-                                   (int(vx0 + dcx * cs),
-                                    int(vy0 - dcy * cs)), 7, 2)
+                wx, wy = int(ox + wcx * cs), int(oy - wcy * cs)
+                dx_, dy_ = int(ox + dcx * cs), int(oy - dcy * cs)
+                pygame.draw.circle(screen, theme.COLORS["gold"], (wx, wy), 5)
+                pygame.draw.circle(screen, (10, 12, 18), (wx, wy), 5, 1)
+                pygame.draw.circle(screen, (220, 140, 60), (dx_, dy_), 7, 2)
+                theme.draw_text(screen, wx + 8, wy - 6, "CoM",
+                                color=theme.COLORS["gold"], font="small")
 
             # ---- right panel: catalog + live readouts + validation ----
             px0 = 790
