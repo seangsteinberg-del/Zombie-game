@@ -6985,7 +6985,7 @@ def run(argv: list[str] | None = None) -> int:
             if interior_stores:
                 from aphelion.sim.habitat import stores as stores_sim
                 _crew_n = len(inhabitants) or 1
-                sw, sh = 330, 300
+                sw, sh = 330, 346 if interior_vessel is not None else 300
                 sx, syp = size[0] - sw - 16, 64
                 screen.blit(theme.panel(sw, sh,
                             "SHIP'S STORES  ·  LIFE SUPPORT"
@@ -7037,6 +7037,30 @@ def run(argv: list[str] | None = None) -> int:
                         f"H2O {_dk['Water']:.1f}  food {_dk['Food']:.2f} kg",
                         color=theme.COLORS["text_dim"], font="small")
                     yy += 22
+                    # the LIVE galley pantry — what cook/medical actually draw
+                    if shipb is not None and getattr(shipb, "stores", None):
+                        _sts = shipb.stores
+                        _fk = _sts.get("food_kg", 0.0)
+                        _fdays = _fk / max(1e-6, _dk["Food"])
+                        theme.draw_text(screen, sx + 16, yy,
+                                        "GALLEY PANTRY  (live)",
+                                        color=theme.COLORS["gold"],
+                                        font="small")
+                        yy += 18
+                        _row("food", min(1.0, _fk / 120.0),
+                             f"{_fk:,.0f} kg · {_fdays:,.0f} d"
+                             if _fdays < 999 else f"{_fk:,.0f} kg",
+                             theme.COLORS["good"] if _fk > 20
+                             else theme.COLORS["warn"])
+                        _row("med kit", min(1.0, _sts.get("medsupplies_kg",
+                                                           0.0) / 20.0),
+                             f"{_sts.get('medsupplies_kg', 0.0):,.1f} kg",
+                             theme.COLORS["accent"])
+                        if _sts.get("samples", 0.0) > 0:
+                            _row("samples", None,
+                                 f"{_sts['samples']:,.0f} stowed",
+                                 theme.COLORS["accent"])
+                        yy += 4
                     if man["grow_m2"] > 0:
                         theme.draw_text(
                             screen, sx + 16, yy, "GREENHOUSE",
