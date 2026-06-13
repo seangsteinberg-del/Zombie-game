@@ -9426,11 +9426,32 @@ def run(argv: list[str] | None = None) -> int:
                     color=color, font="small")
                 overlay_rects["base"].append(
                     (pygame.Rect(858, yy2 - 3, 396, 23), i))
-            sel_spec = CATALOG[avail[base_cursor % len(avail)]]
+            _skey = avail[base_cursor % len(avail)]
+            sel_spec = CATALOG[_skey]
+            # WHAT IT DOES: why you'd build this — its output, or its role
+            _outs = sel_spec.get("outputs", {})
+            if _outs:
+                _does = "makes  " + " + ".join(f"{v:g} {k2}" for k2, v in
+                                               _outs.items())
+            elif sel_spec.get("beds"):
+                _does = f"quarters — houses {sel_spec['beds']} crew"
+            elif sel_spec["power_kw"] < 0:
+                _does = f"power — generates {-sel_spec['power_kw']:,.0f} kW"
+            else:
+                _does = {"med_bay": "medical — scans & treatment",
+                         "science_lab": "research — sample science",
+                         "machine_shop": "fabrication — machine parts",
+                         "comms_dish": "comms — the deep-space link",
+                         "radiator": "thermal — rejects waste heat",
+                         "battery_bank": "stores power for the night",
+                         }.get(_skey, "support facility")
+            theme.draw_text(screen, cx, cy + rows_fit_b * 24 + 4,
+                            f"▸ {_does}"[:52],
+                            color=theme.COLORS["gold"], font="small")
             need_line = (" + ".join(f"{v:g} {k2}" for k2, v in
                                     sel_spec.get("inputs", {}).items())
                          or "no feedstock")
-            theme.draw_text(screen, cx, cy + rows_fit_b * 24 + 6,
+            theme.draw_text(screen, cx, cy + rows_fit_b * 24 + 22,
                             f"needs: {need_line}",
                             color=theme.COLORS["text_dim"], font="small")
             screen.blit(theme.footer(
