@@ -593,6 +593,267 @@ def strip_scaled(rooms: tuple[str, ...], scale: float) -> pygame.Surface:
     return got
 
 
+# ---- LIVING-INTERIOR station-state visuals (shipboard layer) ---------------
+# Drawn ON TOP of the cached strip by the aboard scene: the amber
+# highlight ring under the nearest interactable (the ONE accent family,
+# ART-DIRECTION §1.3), crew pose variants for occupied stations, screen
+# content per station type, and small status LEDs. Everything casts a
+# contact shadow (rule zero) and glows only where it emits.
+
+_AMBER = (226, 168, 80)              # ui.theme.GOLD — THE accent
+_LED_COLORS = {"ok": (118, 180, 130), "busy": (226, 168, 80),
+               "alert": (212, 122, 110), "off": (52, 58, 70)}
+_SUIT = (84, 96, 118)
+_SUIT_HI = (108, 122, 146)
+_SKIN = (206, 165, 138)
+_HAIR = (52, 40, 34)
+_ORANGE = (196, 92, 42)              # international-orange crew stripe
+
+
+def status_led(s: pygame.Surface, x: int, y: int,
+               state: str = "ok") -> None:
+    """A small panel LED in a dark housing; lit states glow gently."""
+    color = _LED_COLORS.get(state, _LED_COLORS["off"])
+    pygame.draw.circle(s, (22, 26, 34), (x, y), 5)
+    pygame.draw.circle(s, (58, 64, 78), (x, y), 5, 1)
+    pygame.draw.circle(s, color, (x, y), 3)
+    if state != "off":
+        pygame.draw.circle(
+            s, tuple(min(255, c + 60) for c in color), (x - 1, y - 1), 1)
+        _glow(s, x, y, 11, tuple(c // 2 for c in color), 0.9)
+
+
+def station_ring(s: pygame.Surface, cx: int, floor_y: int = FLOOR_Y,
+                 w: int = 120, pulse: float = 1.0) -> None:
+    """The amber highlight under the NEAREST interactable station: a
+    perspective floor ellipse + a hovering chevron. `pulse` in [0,1]
+    lets the scene breathe it (ease, never blink)."""
+    a = max(0.25, min(1.0, pulse))
+    h = max(10, w // 7)
+    ring = pygame.Surface((w, h), pygame.SRCALPHA)
+    pygame.draw.ellipse(ring, (*_AMBER, int(30 * a)), (0, 0, w, h))
+    pygame.draw.ellipse(ring, (*_AMBER, int(200 * a)), (0, 0, w, h), 3)
+    pygame.draw.ellipse(ring, (255, 226, 170, int(90 * a)),
+                        (3, 2, w - 6, h - 4), 1)
+    s.blit(ring, (cx - w // 2, floor_y - h // 2 + 5))
+    _glow(s, cx, floor_y + 2, w // 2, (120, 88, 40), 0.5 * a)
+    cy = floor_y - 104 + int(4 * (1.0 - a))      # hovering chevron
+    car = pygame.Surface((30, 20), pygame.SRCALPHA)
+    pygame.draw.polygon(car, (*_AMBER, int(230 * a)),
+                        ((2, 2), (15, 13), (28, 2), (28, 8), (15, 19),
+                         (2, 8)))
+    pygame.draw.polygon(car, (255, 232, 180, int(120 * a)),
+                        ((4, 3), (15, 12), (26, 3)), 1)
+    s.blit(car, (cx - 15, cy))
+    _glow(s, cx, cy + 9, 18, (110, 80, 36), 0.8 * a)
+
+
+# -- screen content variants per station type --------------------------------
+
+def _bezel(s, x, y, w, h) -> None:
+    _drop_shadow(s, (x, y, w, h), dy=4, alpha=60)
+    pygame.draw.rect(s, (16, 22, 32), (x - 3, y - 3, w + 6, h + 6),
+                     border_radius=4)
+    pygame.draw.rect(s, (52, 62, 80), (x - 3, y - 3, w + 6, h + 6),
+                     width=1, border_radius=4)
+
+
+def station_screen(s: pygame.Surface, x: int, y: int, w: int, h: int,
+                   kind: str = "plot",
+                   rng: random.Random | None = None) -> None:
+    """A live console face per station type: 'plot' (telemetry line),
+    'schedule' (the day-plan grid), 'medical' (vitals trace), 'comms'
+    (signal bars). Bezel + drop shadow + emitter glow included."""
+    rr = rng or random.Random(zlib.crc32(f"scr|{kind}|{x}|{y}".encode()))
+    _bezel(s, x, y, w, h)
+    if kind == "schedule":
+        base, accent = (40, 32, 18), _AMBER
+    elif kind == "medical":
+        base, accent = (14, 30, 22), (110, 230, 150)
+    elif kind == "comms":
+        base, accent = (16, 26, 38), _SCREEN_BLUE
+    else:
+        base, accent = (16, 26, 38), _SCREEN
+    pygame.draw.rect(s, base, (x, y, w, h), border_radius=2)
+    if kind == "plot":
+        for gy in range(y + 6, y + h - 4, max(5, (h - 10) // 3)):
+            pygame.draw.line(s, tuple(c + 12 for c in base),
+                             (x + 4, gy), (x + w - 4, gy))
+        pts = []
+        n = max(6, w // 7)
+        for i in range(n):
+            f = i / (n - 1)
+            v = 0.5 + 0.34 * math.sin(f * 5.1 + rr.random()) \
+                + 0.12 * (rr.random() - 0.5)
+            pts.append((x + 4 + int(f * (w - 8)),
+                        y + 5 + int((h - 10) * (1.0 - max(0.05,
+                                                          min(0.95, v))))))
+        pygame.draw.lines(s, accent, False, pts, 2)
+        pygame.draw.circle(s, (255, 240, 210), pts[-1], 2)
+    elif kind == "schedule":
+        rows, cols = 3, max(4, (w - 10) // 11)
+        cw = (w - 10) // cols
+        for r in range(rows):
+            for c in range(cols):
+                cellx = x + 5 + c * cw
+                celly = y + 6 + r * ((h - 10) // rows)
+                lit = zlib.crc32(f"cell|{r}|{c}|{x}".encode()) % 5 == 0
+                col = accent if lit else (66, 54, 32)
+                pygame.draw.rect(s, col, (cellx, celly, cw - 2,
+                                          (h - 12) // rows - 2))
+        pygame.draw.line(s, (120, 100, 60), (x + 4, y + 4),
+                         (x + w - 4, y + 4), 1)
+    elif kind == "medical":
+        mid = y + h // 2 + 2
+        pts = [(x + 4, mid)]
+        for bx in range(x + 14, x + w - 12, 26):      # one QRS per beat
+            pts += [(bx, mid), (bx + 2, mid + 3),
+                    (bx + 4, mid - h // 3), (bx + 6, mid + h // 5),
+                    (bx + 8, mid), (bx + 14, mid - 2), (bx + 17, mid)]
+        pts.append((x + w - 4, mid))
+        pygame.draw.lines(s, accent, False, pts, 2)
+        pygame.draw.line(s, (60, 110, 80), (x + 4, y + h - 6),
+                         (x + 4 + int((w - 8) * 0.6), y + h - 6), 2)
+    else:                                        # comms: signal bars
+        n = max(5, (w - 8) // 7)
+        for i in range(n):
+            bh = int((h - 8) * (0.25 + 0.7 * abs(
+                math.sin(i * 0.9 + rr.random() * 2.0))))
+            bx = x + 4 + i * ((w - 8) // n)
+            pygame.draw.rect(s, accent,
+                             (bx, y + h - 4 - bh, (w - 8) // n - 2, bh))
+    _glow(s, x + w // 2, y + h // 2, max(w, 24),
+          tuple(c // 2 for c in accent), 0.6)
+
+
+# -- occupied-station crew poses ----------------------------------------------
+
+def _crew_head(s, cx, cy, r=8) -> None:
+    pygame.draw.circle(s, _SKIN, (cx, cy), r)
+    pygame.draw.circle(s, tuple(int(c * 0.8) for c in _SKIN),
+                       (cx, cy), r, 1)
+    cap = pygame.Rect(cx - r, cy - r, 2 * r, r + 1)
+    pygame.draw.arc(s, _HAIR, cap.inflate(2, 2), 0.35, math.pi - 0.35, 4)
+
+
+def crew_sleeping(s: pygame.Surface, x: int, y: int,
+                  rng: random.Random | None = None) -> None:
+    """Asleep in a bag on a bunk mattress. (x, y) = mattress top-left;
+    fits the 140 px bunk mattresses `_bunks` draws."""
+    sh = pygame.Surface((120, 10), pygame.SRCALPHA)   # weight shade
+    pygame.draw.ellipse(sh, (0, 0, 0, 56), (0, 0, 120, 10))
+    s.blit(sh, (x + 8, y - 2))
+    bag = pygame.Rect(x + 34, y - 16, 100, 18)        # the bag body
+    _vgrad(s, bag, (98, 110, 134), (66, 76, 98))
+    pygame.draw.rect(s, (46, 54, 70), bag, 2, border_radius=9)
+    # body volume inside the bag: a hip/shoulder bulge highlight
+    pygame.draw.ellipse(s, _SUIT_HI, (x + 44, y - 14, 34, 7))
+    pygame.draw.ellipse(s, _SUIT_HI, (x + 92, y - 13, 26, 6))
+    for cx in (x + 64, x + 96):                       # cinch straps
+        pygame.draw.line(s, (40, 46, 60), (cx, y - 16), (cx, y + 2), 2)
+    pygame.draw.rect(s, _ORANGE, (x + 34, y - 16, 7, 18),
+                     border_radius=3)                 # bag collar stripe
+    _crew_head(s, x + 22, y - 8, 8)                   # head on the pillow
+    pygame.draw.line(s, tuple(int(c * 0.75) for c in _SKIN),
+                     (x + 18, y - 4), (x + 25, y - 4), 1)   # closed eyes
+
+
+def crew_exercising(s: pygame.Surface, x: int, floor_y: int = FLOOR_Y,
+                    rng: random.Random | None = None) -> None:
+    """Mid-squat on a compact resistance rack (CS-EXER): rack frame +
+    crew under the bar. x = rack center on the deck."""
+    _shadow(s, x, floor_y + 2, 84, 7, 62)
+    for px in (x - 30, x + 30):                       # rack uprights
+        pygame.draw.line(s, (96, 104, 120), (px, floor_y),
+                         (px, floor_y - 92), 5)
+        pygame.draw.line(s, (130, 140, 158), (px - 2, floor_y - 92),
+                         (px - 2, floor_y - 60), 1)
+        pygame.draw.rect(s, (60, 66, 80), (px - 7, floor_y - 4, 14, 4))
+    pygame.draw.line(s, (140, 148, 164), (x - 30, floor_y - 92),
+                     (x + 30, floor_y - 92), 4)       # top beam
+    bar_y = floor_y - 64
+    pygame.draw.line(s, (170, 178, 192), (x - 26, bar_y),
+                     (x + 26, bar_y), 4)              # the loaded bar
+    for bx in (x - 26, x + 26):
+        pygame.draw.circle(s, (52, 58, 72), (bx, bar_y), 7)
+        pygame.draw.circle(s, (96, 104, 122), (bx, bar_y), 7, 2)
+    # the athlete: squat under the bar, hands gripping it
+    _crew_head(s, x, bar_y - 12, 8)
+    pygame.draw.line(s, _SUIT, (x, bar_y - 4), (x - 3, floor_y - 36), 9)
+    pygame.draw.rect(s, _ORANGE, (x - 6, bar_y + 2, 11, 5))   # chest band
+    for ax in (-1, 1):                                # arms UP to the grip
+        sx_, sy_ = x + ax * 3, bar_y + 12             # shoulder
+        gx = x + ax * 15                              # hand on the bar
+        pygame.draw.line(s, _SUIT_HI, (sx_, sy_), (gx, bar_y + 1), 4)
+        pygame.draw.circle(s, _SKIN, (gx, bar_y), 3)  # the grip
+    for lx in (-9, 5):                                # deep-bent legs
+        pygame.draw.line(s, _SUIT, (x - 3, floor_y - 36),
+                         (x + lx, floor_y - 18), 7)
+        pygame.draw.line(s, _SUIT, (x + lx, floor_y - 18),
+                         (x + lx + 3, floor_y), 6)
+        pygame.draw.rect(s, (40, 46, 60), (x + lx - 2, floor_y - 4,
+                                           11, 4))    # shoes
+    _glow(s, x, bar_y - 8, 20, (60, 54, 40), 0.4)     # effort warmth
+
+
+def crew_seated(s: pygame.Surface, x: int, floor_y: int = FLOOR_Y,
+                face: int = 1,
+                rng: random.Random | None = None) -> None:
+    """Seated at a bench/console, working — stool included, facing
+    `face` (+1 right / -1 left). x = stool center."""
+    f = 1 if face >= 0 else -1
+    _shadow(s, x, floor_y + 2, 46, 6, 58)
+    pygame.draw.line(s, (96, 104, 120), (x, floor_y), (x, floor_y - 26), 5)
+    pygame.draw.ellipse(s, (72, 80, 96), (x - 13, floor_y - 32, 26, 8))
+    pygame.draw.ellipse(s, (104, 114, 134), (x - 13, floor_y - 33, 26, 5))
+    hip_y = floor_y - 34
+    _crew_head(s, x + f * 3, hip_y - 36, 8)
+    pygame.draw.line(s, _SUIT, (x, hip_y), (x + f * 4, hip_y - 28), 9)
+    pygame.draw.rect(s, _ORANGE, (x + f * 1 - 5, hip_y - 24, 10, 5))
+    pygame.draw.line(s, _SUIT_HI, (x + f * 4, hip_y - 22),
+                     (x + f * 22, hip_y - 16), 4)     # forearm to bench
+    pygame.draw.line(s, _SKIN, (x + f * 22, hip_y - 16),
+                     (x + f * 27, hip_y - 15), 3)     # hand
+    pygame.draw.line(s, _SUIT, (x, hip_y), (x + f * 14, hip_y + 6), 7)
+    pygame.draw.line(s, _SUIT, (x + f * 14, hip_y + 6),
+                     (x + f * 14, floor_y), 6)        # shin
+    pygame.draw.rect(s, (40, 46, 60),
+                     (x + f * 14 - 5, floor_y - 4, 11, 4))
+
+
+def crew_standing(s: pygame.Surface, x: int, floor_y: int = FLOOR_Y,
+                  face: int = 1,
+                  rng: random.Random | None = None) -> None:
+    """Idle stance for crew at stations with no special rig."""
+    f = 1 if face >= 0 else -1
+    _shadow(s, x, floor_y + 2, 40, 6, 56)
+    _crew_head(s, x, floor_y - 76, 8)
+    pygame.draw.line(s, _SUIT, (x, floor_y - 68), (x, floor_y - 38), 9)
+    pygame.draw.rect(s, _ORANGE, (x - 5, floor_y - 62, 10, 5))
+    pygame.draw.line(s, _SUIT_HI, (x, floor_y - 60),
+                     (x + f * 10, floor_y - 42), 4)   # relaxed arm
+    for lx in (-5, 5):
+        pygame.draw.line(s, _SUIT, (x, floor_y - 38),
+                         (x + lx, floor_y), 6)
+        pygame.draw.rect(s, (40, 46, 60), (x + lx - 4, floor_y - 4, 9, 4))
+
+
+def crew_at_station(s: pygame.Surface, pose: str, x: int, y: int,
+                    face: int = 1,
+                    rng: random.Random | None = None) -> None:
+    """Dispatcher the aboard scene calls with shipboard's pose key.
+    For 'sleep_bag', (x, y) is the bunk mattress top-left; otherwise
+    x is the station anchor and y the deck line (FLOOR_Y)."""
+    if pose == "sleep_bag":
+        crew_sleeping(s, x, y, rng)
+    elif pose == "exercise":
+        crew_exercising(s, x, y, rng)
+    elif pose == "seated":
+        crew_seated(s, x, y, face=face, rng=rng)
+    else:
+        crew_standing(s, x, y, face=face, rng=rng)
+
+
 def space_backdrop(size: tuple[int, int]) -> pygame.Surface:
     """Deep-space star field behind the hull cutaway (parallax slab,
     1.5x window width)."""
