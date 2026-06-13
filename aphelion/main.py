@@ -5129,6 +5129,35 @@ def run(argv: list[str] | None = None) -> int:
                             color=theme.COLORS["text_dim"], font="small")
             screen.blit(theme.bar(150, 10, min(1.0, ratio), r_col),
                         (hx + 96, hy + 24))
+            # ---- TOUCHDOWN GUIDANCE: landing it, or breaking it? The gear
+            #      takes ~3 m/s of contact; horizontal drift tips you over ----
+            if descent.h < 240.0 and descent.outcome is None:
+                _sink = max(0.0, -descent.v_up)
+                _drift = v_h_d
+                if _sink > 6.0 or _drift > 2.0:
+                    _verd, _vc = "CRASH", theme.COLORS["danger"]
+                elif _sink > 3.0 or _drift > 1.0:
+                    _verd, _vc = "HARD", theme.COLORS["warn"]
+                else:
+                    _verd, _vc = "SAFE", theme.COLORS["good"]
+                _gy = hy + 48
+                theme.draw_text(screen, hx, _gy, "TOUCHDOWN",
+                                color=theme.COLORS["gold"], font="small")
+                theme.draw_text(screen, hx + 150, _gy, _verd, color=_vc,
+                                font="small")
+                _gy += 18
+                theme.draw_text(
+                    screen, hx, _gy,
+                    f"sink {_sink:4.1f}   drift {_drift:4.1f} m/s",
+                    color=theme.COLORS["text"], font="small")
+                # big centered call in the final moments
+                if descent.h < 60.0:
+                    _bigv = font_med.render(
+                        f"TOUCHDOWN — {_verd}", True, _vc)
+                    if _verd == "SAFE" or int(ui_t * 4) % 2 == 0:
+                        screen.blit(_bigv,
+                                    (size[0] // 2 - _bigv.get_width() // 2,
+                                     size[1] - 150))
             if 0.85 <= ratio and descent.outcome is None:
                 burn_now = font_med.render("BURN NOW", True,
                                            theme.COLORS["danger"])
