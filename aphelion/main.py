@@ -4895,6 +4895,13 @@ def run(argv: list[str] | None = None) -> int:
                 screen.blit(dsky, (0, 0))
             else:
                 starfield.draw(screen, cam)
+            # the parent world + sun overhead as you come down to the surface
+            _hb_d2 = next((b for b in bases
+                           if b.site_id == descent.site_id), None)
+            _dl_d2 = _hb_d2.daylight(t) if _hb_d2 is not None else 1.0
+            from aphelion.render.base_art import draw_sky_bodies
+            draw_sky_bodies(screen, size[0], int(size[1] * 0.55),
+                            site_d["body"], tree, _dl_d2, rho0 <= 0.0)
 
             sox = int(7.0 * shake * math.sin(ui_t * 67.0))
             soy = int(6.0 * shake * math.sin(ui_t * 53.0 + 1.7))
