@@ -1371,6 +1371,8 @@ def run(argv: list[str] | None = None) -> int:
     interior_return_x = 0.0           # where on the surface we re-emerge
     interior_face = 1                 # walker sprite facing/animation
     interior_frame = 0.0
+    interior_panel = os.environ.get("APH_QA_PANEL") == "1"   # TAB console
+    interior_dossier = 0 if os.environ.get("APH_QA_DOSSIER") == "1" else -1
     # Drydock 2.0 (06): the grid design room
     dd_v = GridVessel()
     dd_cursor = [4, 0]
@@ -2060,7 +2062,7 @@ def run(argv: list[str] | None = None) -> int:
             interior_vessel = _stn
             interior_rooms = tuple(k for k, _, _ in _rv)
             interior_labels = tuple((n, i2) for _, n, i2 in _rv)
-            interior_x = 10.0
+            interior_x = float(os.environ.get("APH_QA_IX", "18.0"))
             scene = "interior"
 
     def docked_burn_veto(fv) -> str | None:
@@ -2785,9 +2787,26 @@ def run(argv: list[str] | None = None) -> int:
                         toast = "  ·  ".join(_lines_r)[:120] or "no crew"
                         toast_until = t + 8
                         audio.play("tick")
+                    elif event.key == pygame.K_TAB:
+                        # TAB: toggle the live module systems console
+                        interior_panel = not interior_panel
+                        audio.play("blip")
+                    elif event.key == pygame.K_c:
+                        # C: page through full crew dossiers (live vitals)
+                        _present = [n for n in inhabitants if n in crew]
+                        if _present:
+                            interior_dossier = (interior_dossier + 1
+                                                if interior_dossier
+                                                < len(_present) - 1 else -1)
+                            audio.play("blip" if interior_dossier >= 0
+                                       else "tick")
                     elif event.key == pygame.K_ESCAPE:
-                        toast = "exit through the airlock (far left, E)"
-                        toast_until = t + 5
+                        if interior_panel or interior_dossier >= 0:
+                            interior_panel = False
+                            interior_dossier = -1
+                        else:
+                            toast = "exit through the airlock (far left, E)"
+                            toast_until = t + 5
             elif scene == "victory":
                 if event.type == pygame.KEYDOWN and event.key in (
                         pygame.K_RETURN, pygame.K_ESCAPE):
@@ -6382,9 +6401,210 @@ def run(argv: list[str] | None = None) -> int:
                     "  ".join(f"{n}× {a}" for a, n in sorted(
                         _acts.items(), key=lambda kv: -kv[1])),
                     color=theme.COLORS["text_dim"], font="small")
+            # ---- TAB: live module systems console (real ledger state) ----
+            def _room_of(xm):
+                return int(xm * ppm_i // ROOM_W) - 1
+            if interior_panel:
+                pw, ph = 322, 322
+                pxp, pyp = size[0] - pw - 16, 64
+                screen.blit(theme.panel(pw, ph, "MODULE SYSTEMS"), (pxp, pyp))
+                yy = pyp + 46
+                mod = None
+                mkey = (interior_rooms[room_i]
+                        if (interior_home is not None
+                            and 0 <= room_i < len(interior_rooms)) else None)
+                if interior_home is not None and mkey:
+                    interior_home.advance(t)
+                    mod = next((m for m in interior_home.net.modules
+                                if m.module_id.startswith(mkey)), None)
+                if room_i < 0:
+                    title = "AIRLOCK — EVA EGRESS"
+                elif mod is not None:
+                    title = mod.module_id.replace("_", " ").upper()
+                elif (interior_vessel is not None
+                      and 0 <= room_i < len(interior_labels)):
+                    title = interior_labels[room_i][0].upper()
+                elif 0 <= room_i < len(interior_rooms):
+                    title = interior_rooms[room_i].replace("_", " ").upper()
+                else:
+                    title = "PASSAGE"
+                theme.draw_text(screen, pxp + 16, yy, title[:30],
+                                color=theme.COLORS["accent"], font="small")
+                yy += 24
+                if mod is not None:
+                    cond = _mcond.get(mod.module_id, 100.0)
+                    theme.draw_text(
+                        screen, pxp + 16, yy, f"STATUS  {mod.state.upper()}",
+                        color=(theme.COLORS["good"] if mod.state == "running"
+                               else theme.COLORS["warn"]), font="small")
+                    yy += 18
+                    theme.draw_text(screen, pxp + 16, yy, "CONDITION",
+                                    color=theme.COLORS["text_dim"], font="small")
+                    screen.blit(theme.bar(120, 10, cond / 100.0,
+                                          theme.COLORS["good"] if cond > 60
+                                          else theme.COLORS["warn"]),
+                                (pxp + 120, yy))
+                    theme.draw_text(screen, pxp + 252, yy, f"{cond:.0f}%",
+                                    color=theme.COLORS["text"], font="small")
+                    yy += 20
+                    theme.draw_text(
+                        screen, pxp + 16, yy,
+                        f"POWER   {'+' if mod.power_kw >= 0 else ''}"
+                        f"{mod.power_kw:,.1f} kW "
+                        f"({'draw' if mod.power_kw >= 0 else 'gen'})",
+                        color=theme.COLORS["text"], font="small")
+                    yy += 22
+                elif (interior_vessel is not None
+                      and 0 <= room_i < len(interior_labels)):
+                    # vessel module: surface the part's role description
+                    _info = interior_labels[room_i][1]
+                    _words, _line = _info.split(), ""
+                    for _w in _words:
+                        if len(_line) + len(_w) > 40:
+                            theme.draw_text(screen, pxp + 16, yy, _line,
+                                            color=theme.COLORS["text"],
+                                            font="small")
+                            yy += 16
+                            _line = ""
+                        _line += _w + " "
+                    if _line:
+                        theme.draw_text(screen, pxp + 16, yy, _line,
+                                        color=theme.COLORS["text"],
+                                        font="small")
+                        yy += 20
+                if interior_home is not None:
+                    bufs = interior_home.net.buffers
+                    show = [k for k in ("Water", "Oxygen", "O2", "Power",
+                                        "Electricity", "FoodRations",
+                                        "MedSupplies", "Regolith")
+                            if k in bufs][:6]
+                    if show:
+                        theme.draw_text(screen, pxp + 16, yy,
+                                        "STATION RESOURCES",
+                                        color=theme.COLORS["gold"], font="small")
+                        yy += 18
+                        for k in show:
+                            b = bufs[k]
+                            frac = (b.level / b.capacity
+                                    if b.capacity > 0 else 0.0)
+                            theme.draw_text(screen, pxp + 16, yy, k[:11],
+                                            color=theme.COLORS["text_dim"],
+                                            font="small")
+                            screen.blit(theme.bar(96, 8,
+                                        max(0.0, min(1.0, frac)),
+                                        theme.COLORS["accent"]),
+                                        (pxp + 132, yy + 2))
+                            theme.draw_text(screen, pxp + 236, yy,
+                                            f"{b.level:,.0f}",
+                                            color=theme.COLORS["text"],
+                                            font="small")
+                            yy += 16
+                        yy += 6
+                occ = [n for n in inhabitants if n in crew
+                       and _room_of(shipb.whereabouts(n)["x_m"]) == room_i]
+                theme.draw_text(screen, pxp + 16, yy, f"OCCUPANTS  {len(occ)}",
+                                color=theme.COLORS["gold"], font="small")
+                yy += 18
+                for n in occ[:5]:
+                    cm = crew[n]
+                    theme.draw_text(
+                        screen, pxp + 16, yy,
+                        f"{n[:11]}  {shipb.whereabouts(n)['activity']}",
+                        color=theme.COLORS["text"], font="small")
+                    screen.blit(theme.bar(56, 7, cm.morale / 100.0,
+                                theme.COLORS["good"] if cm.morale >= 60
+                                else theme.COLORS["warn"]), (pxp + 250, yy + 2))
+                    yy += 16
+                if not occ:
+                    theme.draw_text(screen, pxp + 16, yy, "— vacant —",
+                                    color=theme.COLORS["text_dim"], font="small")
+
+            # ---- C: full crew dossier (live vitals) ----
+            if interior_dossier >= 0:
+                _present = [n for n in inhabitants if n in crew]
+                if _present:
+                    from aphelion.sim.habitat.food import BODY_RESERVE_KCAL
+                    cm = crew[_present[interior_dossier % len(_present)]]
+                    dw, dh = 360, 326
+                    dx, dyp = 24, 80
+                    screen.blit(theme.panel(dw, dh, "CREW DOSSIER"), (dx, dyp))
+                    yy = dyp + 44
+                    theme.draw_text(screen, dx + 16, yy, cm.name,
+                                    color=theme.COLORS["accent"],
+                                    font="ui_small")
+                    yy += 22
+                    theme.draw_text(
+                        screen, dx + 16, yy,
+                        f"{cm.role.upper()}  ·  Lv {cm.skill}"
+                        + (f"  ·  {', '.join(cm.traits)}" if cm.traits else ""),
+                        color=theme.COLORS["text_dim"], font="small")
+                    yy += 22
+                    for sk in ("pilot", "engineer", "scientist", "medic",
+                               "agronomist"):
+                        lvl = cm.skills.get(sk, 0)
+                        theme.draw_text(screen, dx + 16, yy, sk[:10],
+                                        color=theme.COLORS["text"],
+                                        font="small")
+                        for p in range(5):
+                            pygame.draw.rect(
+                                screen, theme.COLORS["gold"] if p < lvl
+                                else (50, 54, 64),
+                                (dx + 118 + p * 15, yy + 2, 11, 8))
+                        yy += 16
+                    yy += 6
+                    _bars = [("MORALE", cm.morale / 100.0,
+                              theme.COLORS["good"] if cm.morale >= 60
+                              else theme.COLORS["warn"]),
+                             ("CONDITION", cm.cond / 100.0,
+                              theme.COLORS["accent"]),
+                             ("ENERGY", cm.energy_kcal / BODY_RESERVE_KCAL,
+                              theme.COLORS["good"]
+                              if cm.energy_kcal > 0.5 * BODY_RESERVE_KCAL
+                              else theme.COLORS["warn"])]
+                    msv = cm.dose.accumulated_msv
+                    _bars.append((f"RAD {msv:.0f} mSv", msv / 600.0,
+                                  theme.COLORS["good"] if msv < 400
+                                  else theme.COLORS["danger"]))
+                    for lbl, frac, col in _bars:
+                        theme.draw_text(screen, dx + 16, yy, lbl,
+                                        color=theme.COLORS["text_dim"],
+                                        font="small")
+                        screen.blit(theme.bar(150, 9,
+                                    max(0.0, min(1.0, frac)), col),
+                                    (dx + 150, yy + 1))
+                        yy += 17
+                    _band = cm.dose.ars(t)
+                    if _band:
+                        theme.draw_text(screen, dx + 16, yy,
+                                        f"ARS: {_band[0].upper()}",
+                                        color=theme.COLORS["danger"],
+                                        font="small")
+                        yy += 17
+                    yy += 4
+                    theme.draw_text(
+                        screen, dx + 16, yy,
+                        "MEDICAL: " + (", ".join(c["kind"] for c in
+                                                 cm.conditions)
+                                       if cm.conditions else "clear"),
+                        color=(theme.COLORS["danger"] if cm.conditions
+                               else theme.COLORS["good"]), font="small")
+                    yy += 18
+                    _wb = shipb.whereabouts(cm.name)
+                    theme.draw_text(
+                        screen, dx + 16, yy,
+                        f"NOW: {_wb['activity']}"
+                        + (f" → {_wb['station']}" if _wb.get("moving") else ""),
+                        color=theme.COLORS["text"], font="small")
+                    yy += 20
+                    theme.draw_text(
+                        screen, dx + 16, yy,
+                        f"C — next crew  ({interior_dossier + 1}"
+                        f"/{len(_present)})",
+                        color=theme.COLORS["gold"], font="small")
+
             screen.blit(theme.footer(
-                size[0], "A/D walk   E console / run station   "
-                         "T roster   airlock (far left, E)"),
+                size[0], "A/D walk   E station   TAB systems   "
+                         "C crew dossier   T roster   airlock (far left, E)"),
                 (0, size[1] - theme.FOOTER_H))
             screen.blit(vig, (0, 0))
             present_frame()
