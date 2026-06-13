@@ -6082,6 +6082,23 @@ def run(argv: list[str] | None = None) -> int:
             if dive_uv:
                 cs = theme.chip("UV LAMP", theme.COLORS["accent"])
                 screen.blit(cs, (chx_v, 8))
+            # HULL LOADING gauge: external pressure against the crush rating,
+            # redline at 100% — the deep-dive tension made visceral, the same
+            # green→amber→red language as the ascent max-Q gauge
+            _hf = min(1.0, hull_frac)
+            _hcol = (theme.COLORS["good"] if _hf < 0.7
+                     else theme.COLORS["warn"] if _hf < 0.92
+                     else theme.COLORS["danger"])
+            theme.draw_text(screen, 10, 38, "HULL",
+                            color=theme.COLORS["text_dim"], font="small")
+            screen.blit(theme.bar(190, 10, _hf, _hcol), (52, 40))
+            pygame.draw.line(screen, theme.COLORS["danger"],
+                             (52 + 188, 39), (52 + 188, 51), 2)
+            theme.draw_text(
+                screen, 250, 38,
+                "OVER RATING — CLIMB" if hull_frac > 1.0 else "crush ~300 m",
+                color=(theme.COLORS["danger"] if hull_frac > 1.0
+                       else theme.COLORS["text_dim"]), font="small")
             screen.blit(theme.footer(
                 size[0], "A/D thrust   W/S ballast   Q sonar ping   "
                          "U uv lamp   E surface & moor"),
