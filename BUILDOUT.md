@@ -47,7 +47,7 @@ sound + flow, verified by crop review):
 | Map/flight | DONE-ish after F0.6/F0.8 (planet jewel, conic glow, system zoom) — keep polishing per-body |
 | Interiors | F0.7 depth pass landed; next: per-room ambient sound, crew tasks visible (eating/sleeping/working at consoles), damage states |
 | EVA/mine | fleet 1 pass in flight; next: dynamic suit lamp (GL), digging feedback (particles/rumble), sample/flag interactions w/ animations |
-| Colony | fleet 1 pass in flight; next: visible crew/robot activity, vehicles parked + driving between modules, day/night light sweep, dust storms visible |
+| Colony | fleet 1 pass landed; next: **ONE-WORLD UNIFICATION (user 2026-06-13: "bases and EVA should be the same thing")** — F2 becomes a pulled-back command camera over the LIVE tile world (same terrain/art/dug tunnels/module coords as EVA) w/ management overlays; then visible crew/robot activity, vehicles parked + driving between modules, day/night light sweep, dust storms visible |
 | Prox-ops/docking | approach lighting (sun glints off target), RCS puff particles + sound, docking camera overlay w/ alignment cross, port mate animation + clunk |
 | Vehicles (V5, building now) | drive/dive/hop scenes born at the bar: cockpit framing, terrain interaction feedback, headlights, sonar viz |
 | UI everywhere | HUD restraint fleet pass in flight; then consistent iconography, panel motion (slide/ease), alarm grammar (F) |
