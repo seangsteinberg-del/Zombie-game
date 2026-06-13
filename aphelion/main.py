@@ -6215,6 +6215,10 @@ def run(argv: list[str] | None = None) -> int:
                     audio.play("tick")
             else:
                 eva_dig = None
+            if os.environ.get("APH_QA_DIG") == "1":   # QA: force dig debris
+                eva_dig = {"left": 1.0, "total": 2.0, "down": False,
+                           "tt": tileworld.ICE}
+                eva_break = tileworld.ICE if frame_count % 20 == 0 else None
 
             ppm = 16.0
             h_ground = 470
