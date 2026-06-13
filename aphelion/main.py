@@ -6560,6 +6560,16 @@ def run(argv: list[str] | None = None) -> int:
             aspr = eva_art.astronaut(int(eva_state.frame),
                                      eva_state.facing, eva_state.airborne)
             walker_top = _syv(eva_state.y) - aspr.get_height()
+            # contact shadow: the low sun (upper-left via draw_sky_bodies)
+            # throws a pool from the boots to the right; it detaches and fades
+            # as you leap, a free read on how high you actually are
+            _grd_ey = _sy(eva_state.x)
+            _air_px = max(0.0, _grd_ey - (walker_top + aspr.get_height()))
+            _shw = aspr.get_width() * (1.5 + 1.4 * (1.0 - _dl_e))
+            _sha = int(115 * max(0.2, 1.0 - _air_px / 140.0))
+            _shsurf = pygame.Surface((int(_shw), 13), pygame.SRCALPHA)
+            pygame.draw.ellipse(_shsurf, (0, 0, 0, _sha), _shsurf.get_rect())
+            screen.blit(_shsurf, (size[0] / 2 - _shw * 0.32, _grd_ey - 7))
             screen.blit(aspr, (size[0] / 2 - aspr.get_width() / 2,
                                walker_top))
 
