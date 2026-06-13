@@ -95,6 +95,27 @@ sound + flow, verified by crop review):
   `APH_QA_DIG` (dig debris), `APH_QA_BLAST` (regolith blast), `APH_QA_RCS` (puffs),
   `APH_QA_TARGET` (map target).
 
+### DEPTH³ PROGRESS (2026-06-13 "outrageous depth is the USP" run — surface the sim)
+The deep habitat/consumable sims already existed; this run made them player-felt.
+- **EVA suit = full EMU**: O2 + battery (+helmet-lamp load) + sublimator feedwater +
+  CO2 scrubber, each its own endurance; the LIMITING clock governs safe-return.
+  O2/cooling/CO2 are lethal (specific cause), a dead battery kills the lamp (the dark
+  closes in underground). Deep SUIT · LIFE SUPPORT panel.
+- **Ship's stores** (`sim/habitat/stores.py`, tested): provisioned crew-days, m³/crew,
+  berths, greenhouse diet-closure, cargo — rolled from the part catalog. Surfaced in
+  the interior **L** panel (+ live `shipb` galley pantry) AND a builder livability chip.
+- **Interior controls**: base module console gains a live **PROCESS** recipe (real
+  daily in/out off the ledger) + **SPACE** to shut down / bring online (live grid
+  effect). New **`--scene homebase`** founds a crewed colony for headless verification.
+- **Crew dossier**: living-crew needs (rest/food/hygiene/company/exercise) + "AT ODDS
+  WITH X" social tension, off the shipboard sim.
+- **World trails**: EVA boot prints + rover wheel ruts pressed into the regolith
+  (world-anchored, accumulate). **Mining geology** readout (ICE/ORE/ROCK + yield).
+- **Guidance verdicts**: descent TOUCHDOWN (sink+drift → SAFE/HARD/CRASH) and proxops
+  DOCKING (closing vs port limit → SOFT DOCK/TOO FAST) — same go/no-go language.
+- New QA hooks: `APH_QA_STORES` (L panel), `APH_QA_PRINTS` (boot/rut trail),
+  `APH_QA_DEADBATT` (dead lamp). Memory: [[depth3-lifesupport]]. 884 tests green.
+
 ## Build order rationale
 
 R first (user's #1 complaint: "nothing to research"). S unlocks land-anywhere + the
