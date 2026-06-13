@@ -32,6 +32,26 @@ bible doc, implementable without re-reading the bible). DECISIONS.md wins confli
 
 Statuses: PENDING → IN PROGRESS → DONE (commit hash). Update this table every chunk.
 
+## DEPTH² PASS (directive 2026-06-13: "my standards are miles higher")
+
+DONE above = systems + canon physics exist. It does NOT mean the experience meets
+the user's bar ("would a 2026 player call this deep and gorgeous?"). Named gap:
+**assembly + launch "might as well be from the 1980s."** Per-experience uplift queue
+(work through after/alongside the remaining chunks; each item = sim depth + art +
+sound + flow, verified by crop review):
+
+| Experience | Uplift |
+|---|---|
+| Drydock → hangar | lit hangar bay environment, gantry/scaffold + robots, parts w/ real visual identity (turbo-machinery, tank domes, plumbing), snap ghosting + animations, live cutaway propellant fill, staging timeline UI, dv-map per destination, stress heatmap, paint/decals + stencil naming, ROLLOUT sequence to pad |
+| Launch | countdown w/ hold-points + weather + range, radio-chatter call-outs, swing-arm retract, cryo venting + ice shedding, deluge steam + flame-trench smoke, plume v2 (under→over-expanded w/ altitude, mach diamonds), staging/fairing debris physics, camera cuts (tracker/onboard), anomaly chains w/ telemetry review |
+| Map/flight | DONE-ish after F0.6/F0.8 (planet jewel, conic glow, system zoom) — keep polishing per-body |
+| Interiors | F0.7 depth pass landed; next: per-room ambient sound, crew tasks visible (eating/sleeping/working at consoles), damage states |
+| EVA/mine | fleet 1 pass in flight; next: dynamic suit lamp (GL), digging feedback (particles/rumble), sample/flag interactions w/ animations |
+| Colony | fleet 1 pass in flight; next: visible crew/robot activity, vehicles parked + driving between modules, day/night light sweep, dust storms visible |
+| Prox-ops/docking | approach lighting (sun glints off target), RCS puff particles + sound, docking camera overlay w/ alignment cross, port mate animation + clunk |
+| Vehicles (V5, building now) | drive/dive/hop scenes born at the bar: cockpit framing, terrain interaction feedback, headlights, sonar viz |
+| UI everywhere | HUD restraint fleet pass in flight; then consistent iconography, panel motion (slide/ease), alarm grammar (F) |
+
 ## Build order rationale
 
 R first (user's #1 complaint: "nothing to research"). S unlocks land-anywhere + the
