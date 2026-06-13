@@ -1381,6 +1381,7 @@ def run(argv: list[str] | None = None) -> int:
     interior_frame = 0.0
     interior_panel = os.environ.get("APH_QA_PANEL") == "1"   # TAB console
     interior_dossier = 0 if os.environ.get("APH_QA_DOSSIER") == "1" else -1
+    interior_stores = os.environ.get("APH_QA_STORES") == "1"  # L manifest
     # Drydock 2.0 (06): the grid design room
     dd_v = GridVessel()
     dd_cursor = [4, 0]
@@ -2805,6 +2806,10 @@ def run(argv: list[str] | None = None) -> int:
                         # TAB: toggle the live module systems console
                         interior_panel = not interior_panel
                         audio.play("blip")
+                    elif event.key == pygame.K_l:
+                        # L: toggle the LIFE SUPPORT / STORES manifest
+                        interior_stores = not interior_stores
+                        audio.play("blip")
                     elif event.key == pygame.K_c:
                         # C: page through full crew dossiers (live vitals)
                         _present = [n for n in inhabitants if n in crew]
@@ -2815,9 +2820,11 @@ def run(argv: list[str] | None = None) -> int:
                             audio.play("blip" if interior_dossier >= 0
                                        else "tick")
                     elif event.key == pygame.K_ESCAPE:
-                        if interior_panel or interior_dossier >= 0:
+                        if (interior_panel or interior_dossier >= 0
+                                or interior_stores):
                             interior_panel = False
                             interior_dossier = -1
+                            interior_stores = False
                         else:
                             toast = "exit through the airlock (far left, E)"
                             toast_until = t + 5
@@ -6974,9 +6981,154 @@ def run(argv: list[str] | None = None) -> int:
                         f"/{len(_present)})",
                         color=theme.COLORS["gold"], font="small")
 
+            # ---- L: SHIP'S STORES / LIFE SUPPORT manifest ----
+            if interior_stores:
+                from aphelion.sim.habitat import stores as stores_sim
+                _crew_n = len(inhabitants) or 1
+                sw, sh = 330, 300
+                sx, syp = size[0] - sw - 16, 64
+                screen.blit(theme.panel(sw, sh,
+                            "SHIP'S STORES  ·  LIFE SUPPORT"
+                            if interior_vessel is not None
+                            else "STORES  ·  LIFE SUPPORT"), (sx, syp))
+                yy = syp + 46
+
+                def _row(lbl, frac, txt, col, lab_col=None):
+                    nonlocal yy
+                    theme.draw_text(screen, sx + 16, yy, lbl,
+                                    color=lab_col or theme.COLORS["text_dim"],
+                                    font="small")
+                    if frac is not None:
+                        screen.blit(theme.bar(96, 9,
+                                    max(0.0, min(1.0, frac)), col),
+                                    (sx + 120, yy + 1))
+                    theme.draw_text(screen, sx + 224, yy, txt,
+                                    color=theme.COLORS["text"], font="small")
+                    yy += 17
+
+                if interior_vessel is not None:
+                    man = stores_sim.from_vessel(interior_vessel.vessel,
+                                                 _crew_n)
+                    theme.draw_text(
+                        screen, sx + 16, yy,
+                        f"{_crew_n} aboard  ·  {man['seats']} seats  ·  "
+                        f"{man['volume_m3']:,.0f} m³",
+                        color=theme.COLORS["text"], font="small")
+                    yy += 22
+                    theme.draw_text(screen, sx + 16, yy, "PROVISIONS",
+                                    color=theme.COLORS["gold"], font="small")
+                    yy += 18
+                    _d = man["days"]
+                    _dc = (theme.COLORS["danger"] if _d < 21
+                           else theme.COLORS["warn"] if _d < 90
+                           else theme.COLORS["good"])
+                    _row("endurance", min(1.0, _d / 180.0),
+                         (f"{_d / 365:.1f} yr" if _d >= 400
+                          else f"{_d:,.0f} d"), _dc)
+                    theme.draw_text(
+                        screen, sx + 16, yy,
+                        f"  {man['crew_days']:,.0f} crew-days stowed",
+                        color=theme.COLORS["text_dim"], font="small")
+                    yy += 18
+                    _dk = man["daily_kg"]
+                    theme.draw_text(
+                        screen, sx + 16, yy,
+                        f"draw/day  O2 {_dk['O2']:.1f}  "
+                        f"H2O {_dk['Water']:.1f}  food {_dk['Food']:.2f} kg",
+                        color=theme.COLORS["text_dim"], font="small")
+                    yy += 22
+                    if man["grow_m2"] > 0:
+                        theme.draw_text(
+                            screen, sx + 16, yy, "GREENHOUSE",
+                            color=theme.COLORS["good"], font="small")
+                        yy += 18
+                        _row("closes diet", man["food_closure"],
+                             f"{man['food_closure'] * 100:.0f}%",
+                             theme.COLORS["good"])
+                        theme.draw_text(
+                            screen, sx + 16, yy,
+                            f"  {man['grow_m2']:,.0f} m² grow  ·  food line "
+                            f"{man['food_days']:,.0f} d",
+                            color=theme.COLORS["text_dim"], font="small")
+                        yy += 20
+                    # habitability: the long-duration comfort metric
+                    _vpc = man["vol_per_crew"]
+                    theme.draw_text(screen, sx + 16, yy, "HABITAT",
+                                    color=theme.COLORS["gold"], font="small")
+                    yy += 18
+                    _row("space/crew", min(1.0, _vpc / 40.0),
+                         f"{_vpc:.0f} m³",
+                         theme.COLORS["good"] if _vpc >= 20
+                         else theme.COLORS["warn"])
+                    theme.draw_text(
+                        screen, sx + 16, yy,
+                        f"  {man['berths']} bunks  ·  {man['labs']} lab"
+                        + ("s" if man["labs"] != 1 else "")
+                        + f"  ·  {man['seats']} flight seats",
+                        color=theme.COLORS["text_dim"], font="small")
+                    yy += 18
+                    if man["cargo_t"] > 0:
+                        _used = sum(getattr(interior_vessel, "cargo",
+                                            {}).values()) / 1e3
+                        _row("cargo", _used / max(man["cargo_t"], 1e-6),
+                             f"{_used:,.1f}/{man['cargo_t']:,.0f} t",
+                             theme.COLORS["accent"])
+                elif interior_home is not None:
+                    interior_home.advance(t)
+                    net = interior_home.net
+                    _, rates, f_power = net.solve_rates()
+                    sup = sum(-m.power_kw for m in net.modules
+                              if m.power_kw < 0.0
+                              and m.state not in ("OFF", "FAILED"))
+                    dem = sum(m.power_kw for m in net.modules
+                              if m.power_kw > 0.0
+                              and m.state not in ("OFF", "FAILED"))
+                    theme.draw_text(screen, sx + 16, yy, "POWER",
+                                    color=theme.COLORS["gold"], font="small")
+                    yy += 18
+                    _row("grid", f_power,
+                         f"{sup:,.1f} / {dem:,.1f} kW",
+                         theme.COLORS["good"] if f_power > 0.999
+                         else theme.COLORS["danger"])
+                    bat = net.buffers.get("Battery")
+                    if bat is not None:
+                        _br = rates.get("Battery", 0.0) * 3_600.0
+                        _row("battery", bat.level / max(bat.capacity, 1e-6),
+                             f"{bat.level:,.0f} kWh "
+                             f"{'+' if _br >= 0 else ''}{_br:,.0f}/h",
+                             theme.COLORS["accent"])
+                    yy += 6
+                    theme.draw_text(screen, sx + 16, yy, "CONSUMABLES",
+                                    color=theme.COLORS["gold"], font="small")
+                    yy += 18
+                    for res in ("Oxygen", "Water", "FoodRations", "CO2"):
+                        b = net.buffers.get(res)
+                        if b is None:
+                            continue
+                        rate = rates.get(res, 0.0)
+                        if rate < -1e-12 and b.level > 0:
+                            eta_d = b.level / (-rate * 86_400.0)
+                            txt = (f"{eta_d:,.0f} d" if eta_d < 999
+                                   else "stable")
+                            col = (theme.COLORS["danger"] if eta_d < 5
+                                   else theme.COLORS["warn"] if eta_d < 30
+                                   else theme.COLORS["good"])
+                        elif rate > 1e-12:
+                            txt, col = "filling", theme.COLORS["good"]
+                        else:
+                            txt, col = "stable", theme.COLORS["text_dim"]
+                        _row(res[:11], b.level / max(b.capacity, 1e-6),
+                             txt, col)
+                    yy += 6
+                    theme.draw_text(
+                        screen, sx + 16, yy,
+                        f"CREW DEMAND  {_crew_n} × (O2 0.84 · H2O 3.5 · "
+                        f"food 0.62) kg/d",
+                        color=theme.COLORS["text_dim"], font="small")
+
             screen.blit(theme.footer(
-                size[0], "A/D walk   E station   TAB systems   "
-                         "C crew dossier   T roster   airlock (far left, E)"),
+                size[0], "A/D walk   E station   TAB systems   L stores   "
+                         "C crew dossier   airlock (far left, E)"),
                 (0, size[1] - theme.FOOTER_H))
             screen.blit(vig, (0, 0))
             present_frame()
