@@ -1393,6 +1393,9 @@ def run(argv: list[str] | None = None) -> int:
     dive_painted: set = set()         # sonar-mapped 50 m cells (DSC-14)
     dive_ping_t = -1e9
     dive_bg_cache: dict = {}
+    dive_sea: list = []               # live sealife entities (transient)
+    dive_sea_cells: set = set()       # ecology cells already populated
+    dive_uv = False                   # UV lamp (Tier-1 mats fluoresce)
     # V5 drive scene state
     drive_gv = None                   # GroundVehicle at the wheel
     drive_av = None                   # the landed vessel anchoring the site
@@ -2391,6 +2394,13 @@ def run(argv: list[str] | None = None) -> int:
                                      f"(+{2 * len(new_q)} sci, DSC-14 "
                                      f"bathymetry)")
                             toast_until = t + 5
+                    elif event.key == pygame.K_u:
+                        dive_uv = not dive_uv
+                        toast = ("UV LAMP ON — biology fluoresces, if "
+                                 "there is any" if dive_uv
+                                 else "UV LAMP OFF")
+                        toast_until = t + 4
+                        audio.play("tick")
             elif scene == "drive":
                 if event.type == pygame.KEYDOWN and drive_gv is not None:
                     if event.key in (pygame.K_e, pygame.K_ESCAPE):
@@ -2869,6 +2879,8 @@ def run(argv: list[str] | None = None) -> int:
                             dive_depth, dive_vx, dive_vz = 0.0, 0.0, 0.0
                             dive_face = 1
                             dive_painted = set()
+                            dive_sea, dive_sea_cells = [], set()
+                            dive_uv = False
                             surface_open = False
                             scene = "dive"
                             toast = (f"{gv_d.name} CASTS OFF — A/D thrust, "
@@ -5042,6 +5054,67 @@ def run(argv: list[str] | None = None) -> int:
             dive_gv.cond = max(0.0, dive_gv.cond
                                - vwear.dc_hull(dt_sim / 3600.0))
 
+            # ---- THE LIVING SEA: deterministic ecology per 80 m cell ----
+            from aphelion.game import sealife
+            from aphelion.render import marine_art
+            body_v = SITES[dive_av.landed_at]["body"]
+            _cell_v = sealife.cell_of(dive_x)
+            for _c in (_cell_v - 1, _cell_v, _cell_v + 1):
+                if _c not in dive_sea_cells:
+                    dive_sea_cells.add(_c)
+                    _cx_m = (_c + 0.5) * sealife.CELL_W_M
+                    dive_sea.extend(sealife.populate(
+                        body_v, sid_v, _floor_m(_cx_m), _cx_m))
+            if len(dive_sea_cells) > 7:     # cull far cells; they respawn
+                _near_c = {c for c in dive_sea_cells
+                           if abs(c - _cell_v) <= 2}
+                dive_sea = [en for en in dive_sea
+                            if sealife.cell_of(en.get("x", dive_x))
+                            in _near_c]
+                dive_sea_cells = _near_c
+            # Tier 3: once per campaign, deep water only — THE CONTACT
+            if ("sea_contact_seen" not in milestones
+                    and dive_depth >= sealife.CONTACT_MIN_DEPTH_M):
+                _ct = sealife.maybe_contact(
+                    body_v, sid_v, dive_depth, dive_x, dive_face,
+                    campaign_rng.campaign_seed, False)
+                if _ct is not None:
+                    dive_sea.append(_ct)
+                    milestones.add("sea_contact_seen")
+            for _ev_s in sealife.step(dive_sea, dt_sim, dive_x,
+                                      dive_depth, True, dive_gv.rtg_we,
+                                      uv_on=dive_uv):
+                if _ev_s[0] == "sonar_contact":
+                    if t - dive_warn_t > 3.0:
+                        dive_warn_t = t
+                        toast = f"SONAR: {str(_ev_s[1]).upper()} CONTACT"
+                        toast_until = t + 5
+                        audio.play("tick")
+                elif _ev_s[0] == "discovery":
+                    _, _tier_s, _sci_s, _dsc_s, _eid_s = _ev_s
+                    _ikey = f"sea|{_eid_s}"
+                    if _ikey not in explore["investigated"]:
+                        explore["investigated"].add(_ikey)
+                        research.earn_science(_sci_s)
+                        _ent_s = next((en for en in dive_sea
+                                       if en.get("id") == _eid_s), None)
+                        if _ent_s is not None and sealife.is_first(_ent_s):
+                            chron.add(t, "FIRST_CONTACT",
+                                      sealife.chronicle_text(_ent_s),
+                                      cls=2)
+                            toast = ("CONTACT. Something large is pacing "
+                                     "the boat — it will not close. "
+                                     f"+{_sci_s:,.0f} sci")
+                            toast_until = t + 16
+                            audio.play("alarm")
+                        else:
+                            _lbl_s = (sealife.label(_ent_s)
+                                      if _ent_s else "phenomenon")
+                            toast = (f"DISCOVERY: {_lbl_s}  "
+                                     f"+{_sci_s:,.0f} sci")
+                            toast_until = t + 10
+                            audio.play("paid")
+
             # ---- draw: methane gloom by depth ----
             bkt = int(dive_depth // 8)
             bgd = dive_bg_cache.get(bkt)
@@ -5101,8 +5174,16 @@ def run(argv: list[str] | None = None) -> int:
                     screen, (90, 200, 180),
                     (int(size[0] / 2), int(cy_px)),
                     int(30 + ping_age * 220), 2)
-            # headlight + the boat
+            # the living sea, lit only by what light there is
             beam = vehicle_art.headlight_beam(20.0, dive_face)
+            _cam_m = {"x0": dive_x, "depth": dive_depth, "ppm": ppm_v,
+                      "cx": size[0] / 2, "cy": cy_px}
+            _beam_g = {"x": size[0] / 2, "y": cy_px, "dir": dive_face,
+                       "reach": beam.get_width(),
+                       "half": beam.get_height() / 2}
+            marine_art.draw_backscatter(screen, _beam_g, t)
+            marine_art.draw_entities(screen, dive_sea, _cam_m, _beam_g, t)
+            # headlight + the boat
             bx_v = (size[0] / 2 if dive_face > 0
                     else size[0] / 2 - beam.get_width())
             screen.blit(beam, (bx_v, cy_px - beam.get_height() / 2),
@@ -5162,9 +5243,12 @@ def run(argv: list[str] | None = None) -> int:
                 cs = theme.chip(chip_txt, chip_col)
                 screen.blit(cs, (chx_v, 8))
                 chx_v += cs.get_width() + 8
+            if dive_uv:
+                cs = theme.chip("UV LAMP", theme.COLORS["accent"])
+                screen.blit(cs, (chx_v, 8))
             screen.blit(theme.footer(
                 size[0], "A/D thrust   W/S ballast   Q sonar ping   "
-                         "E surface & moor"),
+                         "U uv lamp   E surface & moor"),
                 (0, size[1] - theme.FOOTER_H))
             screen.blit(vig, (0, 0))
             apply_flash()
