@@ -987,7 +987,7 @@ def run(argv: list[str] | None = None) -> int:
                                  "drive", "dive",
                                  "drydock", "proxops", "aboard", "help",
                                  "contracts", "crew", "pause", "planner",
-                                 "comms"])
+                                 "comms", "countdown"])
     args = parser.parse_args(argv)
     if args.headless:
         os.environ["SDL_VIDEODRIVER"] = "dummy"
@@ -1023,6 +1023,8 @@ def run(argv: list[str] | None = None) -> int:
     from aphelion.core.rng import RngRegistry
     from aphelion.game import acts as acts_mod
     from aphelion.game import alerts as alerts_mod
+    from aphelion.game import countdown as cd_mod
+    from aphelion.render import launch_art
     from aphelion.game.crew import (
         CrewMember, apply_crew_bonuses, best_skill, candidates,
         morale_target, reap_over_limit, science_multiplier)
@@ -1864,6 +1866,10 @@ def run(argv: list[str] | None = None) -> int:
     live: LiveAscent | None = None
     live_stack: list[list[str]] = []
     launch_cost = 0.0
+    cdown = None                   # the launch campaign (pad launches)
+    cd_warp = 16.0                 # countdown clock rate (./, adjust)
+    cd_lines: list = []            # comm-loop caption bar
+    cd_ignited_fx = -1e9           # ui_t of ignition (ice-shed window)
     pending_crew: list[str] = []
     pending_assigned = False
     ascent_av = None               # FleetVessel being RELAUNCHED (None = pad)
@@ -1917,7 +1923,7 @@ def run(argv: list[str] | None = None) -> int:
         pygame.draw.line(haze, (235, 240, 248, int(54 * (1.0 - _hy / 70.0))),
                          (0, 69 - _hy), (size[0], 69 - _hy))
 
-    if boot_ascent:                      # --scene ascent: QA flight
+    if boot_ascent or want == "countdown":   # QA: flight / pad campaign
         from aphelion.sim.vessels.vessel import Vessel
         _rows, _plan = [], []
         for _stage in (["core:engine_m733", "core:engine_m733",
@@ -1929,15 +1935,22 @@ def run(argv: list[str] | None = None) -> int:
                 _idxs.append(len(_rows))
                 _rows.append(Vessel.fueled_row(db, _pid))
             _plan.append(_idxs)
+        _vq = Vessel(db, _rows, stage_plan=_plan, cd_a_m2=3.2)
         live = LiveAscent.from_pad(
-            Vessel(db, _rows, stage_plan=_plan, cd_a_m2=3.2), "core:earth",
+            _vq, "core:earth",
             tree.body("core:earth").mu, tree.body("core:earth").radius,
             86_164.1)
         live_stack = [["core:engine_m733", "core:engine_m733",
                        "core:tank_ml_xl"],
                       ["core:engine_mv815", "core:tank_ml_m",
                        "core:payload_2t"]]
-        live.ignite()
+        if want == "countdown":          # the pad at T-35 s, count running
+            cdown = cd_mod.Countdown(
+                cd_mod.summarize_vessel(_vq, "QA-1"), "site:canaveral",
+                0.0, "launch:qa:0", clock_s=-35.0)
+            cd_warp = 1.0
+        else:
+            live.ignite()
         scene = "ascent"
     if want == "descent":               # --scene descent: QA moon landing
         from aphelion.sim.vessels.vessel import Vessel
@@ -2112,7 +2125,54 @@ def run(argv: list[str] | None = None) -> int:
                             _menu_pick(items[i])
                             break
             elif scene == "ascent":
-                if event.type == pygame.KEYDOWN and live is not None:
+                _cd_live = (cdown is not None and live is not None
+                            and not live.ignited
+                            and cdown.phase in ("count", "hold",
+                                                "terminal", "abort"))
+                if event.type == pygame.KEYDOWN and _cd_live:
+                    # the count owns the keys until the vehicle flies
+                    if event.key == pygame.K_SPACE:
+                        if cdown.phase == "hold":
+                            if cdown.request_resume():
+                                audio.play("blip")
+                            else:
+                                toast = ("HOLD STANDS: " + "; ".join(
+                                    cdown.state["hold_reasons"])[:96]
+                                    + " — ENTER accepts the risk")
+                                toast_until = t + 7
+                                audio.play("warn")
+                    elif event.key == pygame.K_RETURN:
+                        if cdown.phase == "hold":
+                            if cdown.request_resume(accept_risk=True):
+                                toast = ("RISK ACCEPTED — count resumes "
+                                         "(it is on your head)")
+                                toast_until = t + 6
+                                audio.play("warn")
+                        elif cdown.phase == "abort":
+                            if cdown.recycle():
+                                toast = ("RECYCLED to T-20:00 — fresh "
+                                         "vehicle checks")
+                                toast_until = t + 6
+                                audio.play("tick")
+                    elif event.key == pygame.K_h:
+                        if cdown.request_hold():
+                            toast = "HOLD HOLD HOLD — count frozen"
+                            toast_until = t + 5
+                            audio.play("warn")
+                    elif event.key == pygame.K_PERIOD:
+                        cd_warp = min(cd_warp * 2.0, 64.0)
+                    elif event.key == pygame.K_COMMA:
+                        cd_warp = max(cd_warp / 2.0, 1.0)
+                    elif event.key == pygame.K_ESCAPE:
+                        _nxt_cd = cdown.scrub()
+                        _nx_txt = (f" — next clean window in "
+                                   f"{(_nxt_cd['next_t0'] - t) / 86400.0:,.0f} d"
+                                   if _nxt_cd.get("next_t0") else "")
+                        toast = "SCRUBBED" + _nx_txt
+                        toast_until = t + 8
+                        ascent_abort = True
+                        audio.play("warn")
+                elif event.type == pygame.KEYDOWN and live is not None:
                     if event.key == pygame.K_SPACE:
                         if not live.ignited:
                             live.ignite()
@@ -3500,6 +3560,15 @@ def run(argv: list[str] | None = None) -> int:
                             builder_open = False
                             scene = "ascent"
                             milestones.add("launched")   # E-13 first First
+                            # the launch CAMPAIGN: a real countdown with
+                            # holds, weather, chatter and anomaly chains
+                            cdown = cd_mod.Countdown(
+                                cd_mod.summarize_vessel(
+                                    vessel, f"Vessel-{next_vid}",
+                                    pending_crew),
+                                "site:canaveral", t,
+                                f"launch:{next_vid}:{int(t // 86400)}")
+                            cd_warp, cd_lines = 16.0, []
                             audio.play("blip")
             elif event.type == pygame.KEYDOWN:
                 shift = event.mod & pygame.KMOD_SHIFT
@@ -4014,6 +4083,7 @@ def run(argv: list[str] | None = None) -> int:
         if ascent_abort and live is not None:
             program.earn(t, launch_cost, "launch revert")
             live = None
+            cdown, cd_lines = None, []
             scene = "flight"
             builder_open = True
             builder.message = "launch reverted — funds refunded"
@@ -4085,6 +4155,7 @@ def run(argv: list[str] | None = None) -> int:
                 toast_until = t + 8.0
                 audio.play("alarm")
             live = None
+            cdown, cd_lines = None, []
             ascent_av = None
             ascent_body_id = "core:earth"
             scene = "flight"
@@ -4192,6 +4263,44 @@ def run(argv: list[str] | None = None) -> int:
                                                 live.pitch_manual_deg - rate)
             if live.q > 1.0 and ascent_warp > 4.0:
                 ascent_warp = 4.0          # physics warp only out of atmo
+            # ---- THE COUNT: the launch campaign runs the pad ----
+            if cdown is not None and not live.ignited \
+                    and cdown.phase in ("count", "hold", "terminal"):
+                if cdown.phase in ("count", "terminal"):
+                    if cdown.clock_s > -75.0:      # cinematic auto-slow
+                        cd_warp = min(cd_warp, 4.0)
+                    if cdown.clock_s > -16.0:
+                        cd_warp = min(cd_warp, 1.0)
+                for _e_cd in cdown.step(real_dt * cd_warp):
+                    if _e_cd.get("cls", 4) <= 3:
+                        toast = _e_cd["text"]
+                        toast_until = t + 6
+                        audio.play("alarm" if _e_cd["cls"] <= 2
+                                   else "warn")
+                cd_lines.extend(cdown.pop_chatter())
+                del cd_lines[:-6]
+                clock.advance_analytic(clock.t + real_dt * cd_warp)
+                t = clock.t
+                if cdown.phase == "flight":        # T0: she flies
+                    live.ignite()
+                    shake = 1.0
+                    cd_ignited_fx = ui_t
+                    audio.play("ignition")
+                    for fam in _stage_engine_families(live.vessel):
+                        research.accrue_ignition(
+                            db, fam,
+                            env_class=_ascent_env(ascent_body_id))
+            elif (cdown is not None and cdown.phase == "flight"
+                  and live.ignited and live.outcome is None):
+                # the loop keeps talking: Mach 1 / Max Q / engine callouts
+                cdown.feed_flight(live.h, live.v_air, live.q)
+                for _e_cd in cdown.step(real_dt * ascent_warp):
+                    if _e_cd.get("cls", 4) <= 2:
+                        toast = _e_cd["text"]
+                        toast_until = t + 6
+                        audio.play("alarm")
+                cd_lines.extend(cdown.pop_chatter())
+                del cd_lines[:-6]
             if live.ignited and live.outcome is None:
                 ascent_acc += real_dt * ascent_warp
                 n_steps = min(int(ascent_acc / 0.02), 6000)
@@ -4292,11 +4401,64 @@ def run(argv: list[str] | None = None) -> int:
                     haze.set_alpha(int(140 * sky_a / 255))
                     screen.blit(haze, (0, ground_y - 70))
                 if ascent_av is None and -300 < pad_x < size[0] + 300:
-                    screen.blit(pad_complex(),
-                                (pad_x - PAD_W // 2,
-                                 ground_y - PAD_GROUND_Y - 12))
+                    if cdown is not None:
+                        # launch_art animates its own arms/clamps
+                        _pgeom = launch_art.PadGeom(pad_x, ground_y)
+                        launch_art.draw_pad_base(screen, _pgeom)
+                    else:
+                        screen.blit(pad_complex(),
+                                    (pad_x - PAD_W // 2,
+                                     ground_y - PAD_GROUND_Y - 12))
             if not (live.outcome == "lost" and ascent_boomed):
                 screen.blit(rspr, (rx, ry))
+            # ---- the pad campaign, drawn (launch_art over the count) ----
+            if (cdown is not None and ascent_av is None
+                    and -300 < pad_x < size[0] + 300
+                    and ground_y < size[1] + 600):
+                _pgeom = launch_art.PadGeom(pad_x, ground_y)
+                _thr_pad = (live.throttle_eff if live.ignited
+                            else max(0.0, min(1.0,
+                                              (cdown.clock_s
+                                               - cd_mod.IGNITION_T) / 2.5))
+                            if cdown.phase in ("terminal", "flight")
+                            else 0.0)
+                if cdown.deluge_on():
+                    launch_art.draw_trench_glow(screen, _pgeom, _thr_pad,
+                                                ui_t)
+                    launch_art.draw_deluge(
+                        screen, _pgeom,
+                        max(0.0, cdown.clock_s - cd_mod.DELUGE_T),
+                        throttle=max(_thr_pad, 0.35))
+                launch_art.draw_swing_arms(screen, _pgeom,
+                                           cdown.arm_frac())
+                launch_art.draw_hold_downs(screen, _pgeom,
+                                           cdown.clamp_frac())
+                _vs_cd = cdown.vent_strength()
+                if _vs_cd > 0.0 and live.h < 100.0:
+                    launch_art.draw_cryo_vents(
+                        screen,
+                        [(size[0] // 2 + sox - 5,
+                          ry + int(rspr.get_height() * 0.22)),
+                         (size[0] // 2 + sox + 5,
+                          ry + int(rspr.get_height() * 0.42))],
+                        ui_t,
+                        wind_kt=cdown.telemetry.get("gnd_wind_kt", 6.0),
+                        strength=_vs_cd)
+                if (cdown.telemetry.get("lox_pct", 0.0) > 12.0
+                        and live.h < 400.0):
+                    launch_art.draw_frost(
+                        screen,
+                        pygame.Rect(rx + int(rspr.get_width() * 0.32),
+                                    ry + int(rspr.get_height() * 0.30),
+                                    max(6, int(rspr.get_width() * 0.36)),
+                                    int(rspr.get_height() * 0.34)),
+                        min(1.0, cdown.telemetry["lox_pct"] / 100.0))
+                if 0.0 < ui_t - cd_ignited_fx < 6.0 and live.h < 300.0:
+                    launch_art.draw_ice_shed(
+                        screen,
+                        pygame.Rect(rx, ry, rspr.get_width(),
+                                    rspr.get_height()),
+                        ui_t - cd_ignited_fx)
             if live.throttle_eff > 0.0 and live.outcome is None:
                 ang = math.radians(live.gamma_deg)
                 ex = -math.cos(ang)
@@ -4304,6 +4466,20 @@ def run(argv: list[str] | None = None) -> int:
                 ccx = size[0] // 2 + sox
                 ccy = ry + rspr.get_height() // 2
                 hh = rspr.get_height() / 2.0 - 4.0
+                # PLUME V2: mach diamonds at sea level, feathering with
+                # altitude, vacuum bell on upper stages (launch_art)
+                _rho_h = (atmo_density(live.body_id, max(live.h, 0.0))
+                          if rho0 > 0.0 else 0.0)
+                if live.h < 2_000.0:           # don't paint the trench
+                    screen.set_clip(pygame.Rect(0, 0, size[0],
+                                                min(size[1],
+                                                    ground_y + 10)))
+                launch_art.draw_plume(
+                    screen, (ccx + ex * hh, ccy + ey * hh),
+                    math.degrees(math.atan2(-ey, ex)),
+                    live.throttle_eff, _rho_h / 1.225,
+                    vac=live.stages_spent > 0, t=ui_t)
+                screen.set_clip(None)
                 n_fl = int(2 + 10 * live.throttle_eff)
                 particles.emit_burn(ccx + ex * hh, ccy + ey * hh, ex, ey,
                                     n=n_fl)
@@ -4367,7 +4543,78 @@ def run(argv: list[str] | None = None) -> int:
             for i, ev_txt in enumerate(live.events[-3:]):
                 theme.draw_text(screen, 16, size[1] - 96 + i * 20, ev_txt,
                                 color=theme.COLORS["accent"], font="small")
-            if not live.ignited:
+            # the comm loop: LD/GC/PROP/FTS call-and-response captions
+            if cd_lines:
+                for i_cd, ln_cd in enumerate(cd_lines[-3:]):
+                    theme.draw_text(
+                        screen, 16, size[1] - 162 + i_cd * 20,
+                        ln_cd.get("text", ""),
+                        color=(theme.COLORS["warn"]
+                               if ln_cd.get("kind") == "anomaly"
+                               else (138, 162, 168)), font="small")
+            if not live.ignited and cdown is not None:
+                stc = cdown.state
+                _hold_cd = cdown.phase == "hold"
+                big = font_big.render(
+                    stc["clock"], True,
+                    theme.COLORS["warn"] if _hold_cd
+                    else theme.COLORS["danger"] if cdown.phase == "abort"
+                    else theme.COLORS["gold"])
+                screen.blit(big, (size[0] // 2 - big.get_width() // 2, 92))
+                _ph_txt = {
+                    "count": f"COUNT RUNNING  ·  {cd_warp:.0f}x",
+                    "hold": ("HOLDING — "
+                             + ("; ".join(stc["hold_reasons"])[:74]
+                                or "station poll")
+                             + "   (SPACE resumes when clear)"),
+                    "terminal": "TERMINAL COUNT — AUTO SEQUENCE",
+                    "abort": "PAD ABORT — safing; ENTER recycles",
+                    "scrub": "SCRUBBED",
+                }.get(cdown.phase, "")
+                _pm = font.render(_ph_txt, True,
+                                  theme.COLORS["warn"] if _hold_cd
+                                  else theme.COLORS["text"])
+                screen.blit(_pm, (size[0] // 2 - _pm.get_width() // 2, 152))
+                if (_hold_cd and any("commit" in h.get("id", "")
+                                     for h in stc["holds"]
+                                     if not h.get("released"))):
+                    _cm = font.render(
+                        "SPACE — COMMIT TO LAUNCH (the forecast is on "
+                        "the right)", True, theme.COLORS["gold"])
+                    screen.blit(_cm, (size[0] // 2 - _cm.get_width() // 2,
+                                      176))
+                # pad telemetry: the numbers go wrong BEFORE the callout
+                screen.blit(theme.panel(252, 246, "PAD"),
+                            (size[0] - 268, 16))
+                _ty_cd = 52
+                for _k_cd, _f_cd in (
+                        ("lox_pct", "LOX LOAD  {v:7.1f} %"),
+                        ("fuel_pct", "FUEL LOAD {v:7.1f} %"),
+                        ("he_psi", "HELIUM    {v:7.0f} psi"),
+                        ("gnd_wind_kt", "WIND      {v:7.1f} kt"),
+                        ("shear_kt", "SHEAR     {v:7.1f} kt"),
+                        ("cell_nmi", "LTG CELL  {v:7.1f} nmi"),
+                        ("nav_delta_deg", "NAV DEV   {v:7.2f} deg")):
+                    if _k_cd in cdown.telemetry:
+                        theme.draw_text(
+                            screen, size[0] - 252, _ty_cd,
+                            _f_cd.format(v=cdown.telemetry[_k_cd]),
+                            color=(theme.COLORS["warn"]
+                                   if _k_cd in cdown.cautions
+                                   else theme.COLORS["text"]),
+                            font="small")
+                        _ty_cd += 20
+                for _k_cd in sorted(cdown.telemetry):
+                    if _k_cd.startswith("chill_k_") and _ty_cd < 240:
+                        theme.draw_text(
+                            screen, size[0] - 252, _ty_cd,
+                            f"CHILL E{_k_cd[-1]}  {cdown.telemetry[_k_cd]:6.1f} K",
+                            color=(theme.COLORS["warn"]
+                                   if _k_cd in cdown.cautions
+                                   else theme.COLORS["text_dim"]),
+                            font="small")
+                        _ty_cd += 20
+            elif not live.ignited:
                 msg = font_med.render("SPACE — IGNITION", True,
                                       theme.COLORS["gold"])
                 screen.blit(msg, (size[0] // 2 - msg.get_width() // 2, 140))
@@ -4385,12 +4632,19 @@ def run(argv: list[str] | None = None) -> int:
                 theme.draw_text(screen, size[0] // 2 - 110, 286,
                                 "ENTER to continue",
                                 color=theme.COLORS["gold"])
-            screen.blit(theme.footer(
-                size[0],
-                "SPACE ignite/stage   SHIFT/CTRL throttle   X/Z max/cut   "
-                "arrows pitch (manual)   P autopilot   C circularize   "
-                "./, warp   ESC revert (T+20s)"),
-                (0, size[1] - theme.FOOTER_H))
+            if cdown is not None and not live.ignited:
+                screen.blit(theme.footer(
+                    size[0],
+                    "SPACE resume/commit   ENTER accept-risk / recycle   "
+                    "H hold   ./, count speed   ESC scrub & stand down"),
+                    (0, size[1] - theme.FOOTER_H))
+            else:
+                screen.blit(theme.footer(
+                    size[0],
+                    "SPACE ignite/stage   SHIFT/CTRL throttle   X/Z max/cut   "
+                    "arrows pitch (manual)   P autopilot   C circularize   "
+                    "./, warp   ESC revert (T+20s)"),
+                    (0, size[1] - theme.FOOTER_H))
             screen.blit(vig, (0, 0))
             apply_flash()
             present_frame()
