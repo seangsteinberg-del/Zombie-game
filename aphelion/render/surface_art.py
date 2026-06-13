@@ -63,7 +63,7 @@ SKY_PALS: dict[str, SkyPal] = {
 }
 
 GROUND_PALS: dict[str, GroundPal] = {
-    "earth":   GroundPal((52, 92, 46), (24, 44, 22), (120, 150, 96), True),
+    "earth":   GroundPal((74, 86, 58), (38, 46, 32), (148, 150, 116), True),
     "moon":    GroundPal((108, 110, 114), (54, 56, 60), (168, 170, 176), False),
     "mars":    GroundPal((158, 92, 52), (86, 46, 26), (214, 150, 100), True),
     "titan":   GroundPal((104, 80, 46), (54, 40, 22), (150, 120, 72), True),

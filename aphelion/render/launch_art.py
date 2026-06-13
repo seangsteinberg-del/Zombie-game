@@ -74,25 +74,28 @@ def _smooth(u: float) -> float:
 @dataclass(frozen=True, slots=True)
 class PadGeom:
     """Screen-space pad anchor: pad_x = vehicle centerline x,
-    ground_y = terrain line the vehicle base sits on (main.py)."""
+    ground_y = terrain line the vehicle base sits on (main.py). `scale`
+    zooms the WHOLE pad cluster (sprite + every animated attachment) as a
+    unit so the launch can frame as a hero shot without de-anchoring."""
     pad_x: int
     ground_y: int
+    scale: float = 1.0
 
     @property
     def blit_xy(self) -> tuple[int, int]:
-        return (self.pad_x - PAD_W // 2,
-                self.ground_y - PAD_GROUND_Y - 12)
+        return (int(self.pad_x - self.scale * PAD_W / 2.0),
+                int(self.ground_y - self.scale * (PAD_GROUND_Y + 12)))
 
     @property
     def deck_y(self) -> int:
-        return self.ground_y - 12       # apron top row on screen
+        return int(self.ground_y - self.scale * 12)   # apron top on screen
 
     @property
     def tower_x(self) -> int:
-        return self.pad_x + (_TOWER_XL - _PAD_CX)
+        return int(self.pad_x + self.scale * (_TOWER_XL - _PAD_CX))
 
     def arm_y(self, i: int) -> int:
-        return self.blit_xy[1] + _ARM_LEVELS[i]
+        return int(self.blit_xy[1] + self.scale * _ARM_LEVELS[i])
 
 
 # ---- pad base (static arms erased; launch_art animates its own) -----------
@@ -110,8 +113,21 @@ def pad_base() -> pygame.Surface:
     return _PAD_BASE[0]
 
 
+_PAD_SCALED: dict[int, pygame.Surface] = {}
+
+
 def draw_pad_base(surf: pygame.Surface, geom: PadGeom) -> None:
-    surf.blit(pad_base(), geom.blit_xy)
+    spr = pad_base()
+    if abs(geom.scale - 1.0) > 1e-3:
+        qk = max(1, int(round(geom.scale * 20)))      # quantize for cache
+        hit = _PAD_SCALED.get(qk)
+        if hit is None:
+            hit = pygame.transform.rotozoom(spr, 0.0, qk / 20.0)
+            if len(_PAD_SCALED) > 24:
+                _PAD_SCALED.clear()
+            _PAD_SCALED[qk] = hit
+        spr = hit
+    surf.blit(spr, geom.blit_xy)
 
 
 # ---- soft sprites ----------------------------------------------------------
@@ -204,13 +220,14 @@ def _add_sprite(r: int, rgb: _RGB, inten: float) -> pygame.Surface:
 def arm_tip(geom: PadGeom, level: int, frac: float) -> tuple[int, int]:
     """Screen tip position of arm `level` (0 = crew, 1 = umbilical) at
     retract fraction frac (0 attached .. 1 stowed at the tower)."""
+    k = geom.scale
     y = geom.arm_y(level)
-    x_on = geom.pad_x + 9
-    x_off = geom.tower_x - 4
+    x_on = geom.pad_x + int(9 * k)
+    x_off = geom.tower_x - int(4 * k)
     u = _smooth(frac)
     # the swing reads as an arc: the tip sags then lifts as it comes home
     return (int(x_on + (x_off - x_on) * u),
-            int(y + 5.0 * math.sin(math.pi * u)))
+            int(y + 5.0 * k * math.sin(math.pi * u)))
 
 
 def draw_swing_arms(surf: pygame.Surface, geom: PadGeom,
@@ -276,26 +293,29 @@ def draw_hold_downs(surf: pygame.Surface, geom: PadGeom,
     """Hold-down clamps at the vehicle base; frac 0 closed -> 1 thrown
     open at release. Contact-shadowed onto the apron."""
     y = geom.deck_y
+    k = geom.scale
     u = _smooth(frac)
+    _w4 = max(2, int(round(4 * k)))
     for side in (-1, 1):
-        bx = geom.pad_x + side * 13
-        sh = _glow_sprite(7, _SHADOW)
+        bx = geom.pad_x + int(side * 13 * k)
+        sh = _glow_sprite(max(5, int(7 * k)), _SHADOW)
         sh.set_alpha(90)
-        surf.blit(sh, (bx - 7, y - 3))
+        surf.blit(sh, (bx - sh.get_width() // 2, y - 3))
         ang = u * 1.05
-        dx = math.sin(ang) * 9 * side
-        dy = -math.cos(ang) * 9
-        base = (bx, y + 1)
-        tip = (int(bx - side * 4 + dx), int(y - 8 + dy + 9 * u))
-        pygame.draw.line(surf, _STEEL_DK, base, tip, 4)
+        dx = math.sin(ang) * 9 * k * side
+        dy = -math.cos(ang) * 9 * k
+        base = (bx, int(y + 1))
+        tip = (int(bx - side * 4 * k + dx), int(y - 8 * k + dy + 9 * k * u))
+        pygame.draw.line(surf, _STEEL_DK, base, tip, _w4)
         pygame.draw.line(surf, _STEEL_LIT,
                          (base[0] + 1, base[1] - 1),
                          (tip[0] + 1, tip[1]), 1)
         pygame.draw.line(surf, _ORANGE, tip,
                          (tip[0] + side * 2, tip[1] + 2), 2)
-        pygame.draw.rect(surf, _STEEL, (bx - 3, y - 1, 6, 4))
-        pygame.draw.line(surf, (30, 32, 38), (bx - 3, y + 2),
-                         (bx + 2, y + 2), 1)
+        _cw = max(4, int(round(6 * k)))
+        pygame.draw.rect(surf, _STEEL, (bx - _cw // 2, y - 1, _cw, _w4))
+        pygame.draw.line(surf, (30, 32, 38), (bx - _cw // 2, y + 2),
+                         (bx + _cw // 2 - 1, y + 2), 1)
 
 
 # ---- cryo behavior ----------------------------------------------------------
@@ -436,37 +456,41 @@ def draw_trench_glow(surf: pygame.Surface, geom: PadGeom,
     if throttle <= 0.0:
         return
     x, y = geom.pad_x, geom.deck_y
+    k = geom.scale
     ADD = pygame.BLEND_RGB_ADD
     flick = 0.80 + 0.13 * math.sin(t * 47.0) + 0.07 * math.sin(t * 23.0)
     base = throttle * flick
     # white-hot heart at the engine bells (blooms hardest)
-    surf.blit(_add_sprite(24, (255, 250, 236), 1.15 * base),
-              (x - 24, y - 22), special_flags=ADD)
-    surf.blit(_add_sprite(48, (255, 224, 162), 1.0 * base),
-              (x - 48, y - 32), special_flags=ADD)
+    _h0 = _add_sprite(int(24 * k), (255, 250, 236), 1.15 * base)
+    surf.blit(_h0, (x - _h0.get_width() // 2, int(y - 22 * k)),
+              special_flags=ADD)
+    _h1 = _add_sprite(int(48 * k), (255, 224, 162), 1.0 * base)
+    surf.blit(_h1, (x - _h1.get_width() // 2, int(y - 32 * k)),
+              special_flags=ADD)
     # broad warm dome of bounce light up the vehicle skirt
-    surf.blit(_add_sprite(120, (255, 170, 94), 0.46 * base),
-              (x - 120, y - 76), special_flags=ADD)
+    _dm = _add_sprite(int(120 * k), (255, 170, 94), 0.46 * base)
+    surf.blit(_dm, (x - _dm.get_width() // 2, int(y - 76 * k)),
+              special_flags=ADD)
     # flame tongues licking OUT of the trench low along the deck, both
     # ways, each flickering its own length so it reads as live fire
     for side in (-1, 1):
         for j in range(4):
             fl = 0.5 + 0.5 * math.sin(t * (29.0 + 8.0 * j)
                                       + side * 1.7 + j)
-            reach = (26 + 27 * j) * (0.45 + 0.55 * fl)
-            r = int(17 + 8 * j)
+            reach = (26 + 27 * j) * k * (0.45 + 0.55 * fl)
+            r = int((17 + 8 * j) * k)
             col = ((255, 240, 200), (255, 214, 150), (255, 178, 104),
                    (250, 142, 78))[j]
             surf.blit(_add_sprite(r, col,
                                   (0.74 - 0.13 * j) * base
                                   * (0.55 + 0.45 * fl)),
-                      (int(x + side * reach) - r, y - 12 - j * 3),
+                      (int(x + side * reach) - r, int(y - (12 + j * 3) * k)),
                       special_flags=ADD)
     # warm spill pooled on the apron either side of the trench
-    spill = _add_sprite(58, (255, 188, 118), 0.24 * base)
+    spill = _add_sprite(int(58 * k), (255, 188, 118), 0.24 * base)
     for side in (-1, 1):
-        surf.blit(spill, (x + side * 74 - 58, y - 18),
-                  special_flags=ADD)
+        surf.blit(spill, (int(x + side * 74 * k) - spill.get_width() // 2,
+                          int(y - 18 * k)), special_flags=ADD)
 
 
 def draw_deluge(surf: pygame.Surface, geom: PadGeom, t_since: float,
@@ -477,6 +501,7 @@ def draw_deluge(surf: pygame.Surface, geom: PadGeom, t_since: float,
     if t_since < 0.0:
         return
     y = geom.deck_y
+    k = geom.scale
     grow = min(1.0, t_since / 2.2)            # cloud establishes ~2 s
     warm = 1.0 * throttle                     # flame underlights the base
     # translucent rolling smoke: a soft high backdrop, then lower billows
@@ -493,12 +518,12 @@ def draw_deluge(surf: pygame.Surface, geom: PadGeom, t_since: float,
                 phase = period * _r01(f"stp|{layer}|{side}|{slot}")
                 age = (t_since * 0.9 + phase) % period
                 u = age / period
-                reach = (32 + 172 * grow) * (0.12 + 0.88 * u)
-                x = geom.pad_x + side * (12 + reach
+                reach = (32 + 172 * grow) * k * (0.12 + 0.88 * u)
+                x = geom.pad_x + side * (12 * k + reach
                                          + 7 * math.sin(slot * 2.2))
-                rise = (8 + 38 * grow * h_up) * (u ** 1.3) \
-                    + 7 * math.sin(slot * 1.7)
-                r = int((9 + 27 * u + 12 * grow) * (0.8 + 0.25 * h_up))
+                rise = ((8 + 38 * grow * h_up) * (u ** 1.3)
+                        + 7 * math.sin(slot * 1.7)) * k
+                r = int((9 + 27 * u + 12 * grow) * (0.8 + 0.25 * h_up) * k)
                 spr = _puff_sprite(
                     max(3, r), tint,
                     warm_side=warm * max(0.0, 1.0 - u * 1.15),
@@ -514,34 +539,36 @@ def draw_deluge(surf: pygame.Surface, geom: PadGeom, t_since: float,
     # they sit in front of the steam wall): tapered ribbons with a
     # bright spine, wobbling, with spray bursts where they land
     ov = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
+    _jw = max(2, int(round(3 * k)))
     for side in (-1, 1):
-        x0 = geom.pad_x + side * 46
+        x0 = geom.pad_x + side * 46 * k
         for j in range(3):
             jr = _r01(f"jet|{side}|{j}")
-            arc = 17.0 + 5.0 * jr
-            run = 30.0 + 7.0 * jr
+            arc = (17.0 + 5.0 * jr) * k
+            run = (30.0 + 7.0 * jr) * k
             pts, pts_hi = [], []
-            for k in range(11):
-                u = k / 10.0
-                wob = math.sin(t_since * 15.0 + k * 0.9 + j * 2.1) \
-                    * 0.8 * u
+            for kp in range(11):
+                u = kp / 10.0
+                wob = math.sin(t_since * 15.0 + kp * 0.9 + j * 2.1) \
+                    * 0.8 * u * k
                 jx = x0 - side * (u * run) + wob
-                jy = y - 5 - arc * math.sin(math.pi * min(u, 0.99)
-                                            ) - j * 2
+                jy = y - 5 * k - arc * math.sin(math.pi * min(u, 0.99)
+                                                ) - j * 2 * k
                 pts.append((jx, jy))
                 pts_hi.append((jx, jy - 1))
             for seg in range(10):
                 a = int(165 * (1.0 - 0.45 * seg / 10.0))
                 pygame.draw.line(ov, (208, 224, 240, a),
-                                 pts[seg], pts[seg + 1], 3)
+                                 pts[seg], pts[seg + 1], _jw)
                 pygame.draw.line(ov, (244, 250, 255, a),
                                  pts_hi[seg], pts_hi[seg + 1], 1)
         # spray burst where the curtain lands in the trench
-        bx = x0 - side * 32
+        bx = x0 - side * 32 * k
         pulse = 0.8 + 0.2 * math.sin(t_since * 11.0 + side)
-        spr = _puff_sprite(7, (236, 244, 252), key="spray")
+        _spr_r = max(5, int(7 * k))
+        spr = _puff_sprite(_spr_r, (236, 244, 252), key="spray")
         spr.set_alpha(int(140 * pulse))
-        ov.blit(spr, (int(bx) - 7, y - 14))
+        ov.blit(spr, (int(bx) - _spr_r, int(y - 14 * k)))
     surf.blit(ov, (0, 0))
 
 

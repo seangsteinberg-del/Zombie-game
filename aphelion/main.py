@@ -1960,6 +1960,22 @@ def run(argv: list[str] | None = None) -> int:
         pygame.draw.line(haze, (235, 240, 248, int(54 * (1.0 - _hy / 70.0))),
                          (0, 69 - _hy), (size[0], 69 - _hy))
 
+    # launch blast-scorch: a soft, mottled charred zone that grounds the
+    # pad on the terrain (the blackened blast area under any pad)
+    _sc_w = int(PAD_W * 1.3)
+    scorch_spr = pygame.Surface((_sc_w, 58), pygame.SRCALPHA)
+    _sx = (np.arange(_sc_w, dtype=float) - _sc_w / 2.0) / (_sc_w / 2.0)
+    _sy = (np.arange(58, dtype=float) - 29.0) / 29.0
+    _sg = np.exp(-(_sx[:, None] ** 2 * 1.5 + _sy[None, :] ** 2 * 2.6))
+    _smott = np.random.default_rng(7).random((_sc_w, 58))
+    _sa = np.clip(_sg * (0.82 + 0.34 * _smott), 0.0, 1.0)
+    _srgb = pygame.surfarray.pixels3d(scorch_spr)
+    _srgb[...] = (30, 27, 28)
+    del _srgb
+    _sal = pygame.surfarray.pixels_alpha(scorch_spr)
+    _sal[...] = (_sa * 125.0).astype(np.uint8)
+    del _sal
+
     if boot_ascent or want == "countdown":   # QA: flight / pad campaign
         from aphelion.sim.vessels.vessel import Vessel
         _rows, _plan = [], []
@@ -4468,9 +4484,13 @@ def run(argv: list[str] | None = None) -> int:
 
             stack_now = live_stack[live.stages_spent:]
             tilt = -(90.0 - live.gamma_deg)
+            # hero framing: the whole pad cluster (pad sprite + vehicle +
+            # arms + fire) zooms up near the deck so the launch FILLS the
+            # frame, easing back to the tuned ascent scale by ~1.2 km.
+            pad_scale = 1.0 + 0.34 * max(0.0, 1.0 - live.h / 1200.0)
             # the VEHICLE stays readable: shrink only through the first
             # ~2 km of climb, then lock at 60% — never a 12% speck again
-            rs = max(0.60, 2600.0 / (2600.0 + 0.9 * live.h))
+            rs = max(0.60, 2600.0 / (2600.0 + 0.9 * live.h)) * pad_scale
             rkey = (live.stages_spent, int(tilt // 4), round(rs, 2))
             if rkey not in rot_cache:
                 if len(rot_cache) > 160:
@@ -4519,14 +4539,26 @@ def run(argv: list[str] | None = None) -> int:
                     haze.set_alpha(int(140 * sky_a / 255))
                     screen.blit(haze, (0, ground_y - 70))
                 if ascent_av is None and -300 < pad_x < size[0] + 300:
+                    if live.h < 700.0:           # charred ground under pad
+                        _scw = int(scorch_spr.get_width() * pad_scale)
+                        _sch = int(scorch_spr.get_height() * pad_scale)
+                        _scs = pygame.transform.scale(scorch_spr,
+                                                      (_scw, _sch))
+                        screen.blit(_scs, (pad_x - _scw // 2,
+                                           ground_y - int(30 * pad_scale)))
                     if cdown is not None:
                         # launch_art animates its own arms/clamps
-                        _pgeom = launch_art.PadGeom(pad_x, ground_y)
+                        _pgeom = launch_art.PadGeom(pad_x, ground_y, pad_scale)
                         launch_art.draw_pad_base(screen, _pgeom)
                     else:
-                        screen.blit(pad_complex(),
-                                    (pad_x - PAD_W // 2,
-                                     ground_y - PAD_GROUND_Y - 12))
+                        _pc = pad_complex()
+                        if abs(pad_scale - 1.0) > 1e-3:
+                            _pc = pygame.transform.rotozoom(
+                                _pc, 0.0, pad_scale)
+                        screen.blit(_pc,
+                                    (int(pad_x - pad_scale * PAD_W / 2.0),
+                                     int(ground_y - pad_scale
+                                         * (PAD_GROUND_Y + 12))))
             if not (live.outcome == "lost" and ascent_boomed):
                 screen.blit(rspr, (rx, ry))
             # ---- the pad campaign, drawn (launch_art over the count) ----
