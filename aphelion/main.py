@@ -1359,6 +1359,7 @@ def run(argv: list[str] | None = None) -> int:
     eva_tiles = None                  # the sector's TileWorld (S-7c)
     eva_tr = None                     # its chunk renderer
     eva_dig = None                    # held-dig progress {tile, left, total}
+    eva_debris: list = []            # dig spray particles (screen space)
     eva_camy = 0.0                    # vertical camera follow, metres
     EVA_TIME_FACTOR = 30.0            # EVA ops run at 30x sim time
     interior_x = 2.0                  # walker x inside the hab strip, m
@@ -6050,6 +6051,7 @@ def run(argv: list[str] | None = None) -> int:
 
             # held-tool digging: X carves the wall ahead, C the floor below
             dig_down = bool(keys[pygame.K_c])
+            eva_break = None            # tile type broken THIS frame (burst)
             tgt_d = (eva_state.dig_target(dig_down)
                      if (keys[pygame.K_x] or dig_down) else None)
             if tgt_d is not None and eva_tiles.tile_at(
@@ -6059,9 +6061,11 @@ def run(argv: list[str] | None = None) -> int:
                 if eva_dig is None or eva_dig["tile"] != (c_t, r_t):
                     eva_dig = {"tile": (c_t, r_t),
                                "left": tileworld.DIG_S[tt_d],
-                               "total": tileworld.DIG_S[tt_d]}
+                               "total": tileworld.DIG_S[tt_d],
+                               "down": dig_down, "tt": tt_d}
                 eva_dig["left"] -= real_dt
                 if eva_dig["left"] <= 0.0:
+                    eva_break = tt_d
                     got_t, _secs = eva_tiles.dig(*tgt_d)
                     eva_tr.invalidate(c_t, r_t)
                     explore.setdefault("dug", {})[
@@ -6201,6 +6205,52 @@ def run(argv: list[str] | None = None) -> int:
                 pygame.draw.rect(screen, theme.COLORS["gold"],
                                  (size[0] / 2 - 24, walker_top - 12,
                                   int(48 * min(1.0, frac_d)), 6))
+            # dig debris: chips spall off the tool bite — a steady spray
+            # while cutting, a burst when the tile lets go (deterministic
+            # jitter keyed on frame so headless stays reproducible)
+            def _dcol_t(tt):
+                if tt == tileworld.ICE:
+                    return (206, 226, 240)
+                if tt == tileworld.ORE:
+                    return (176, 124, 84)
+                return (122, 118, 110)
+
+            def _hash01(a, b):
+                hh = (a * 2654435761 + b * 40503) & 0xffff
+                return (hh & 0xff) / 255.0, ((hh >> 8) & 0xff) / 255.0
+            if eva_dig is not None or eva_break is not None:
+                _down_d = (eva_dig or {}).get("down", False)
+                _facd = eva_state.facing
+                _bx0 = size[0] / 2 + (0 if _down_d else _facd * 16)
+                _by0 = (walker_top + aspr.get_height() + 2 if _down_d
+                        else walker_top + aspr.get_height() * 0.5)
+                _nsp = 14 if eva_break is not None else 2
+                _csp = _dcol_t(eva_break if eva_break is not None
+                               else eva_dig.get("tt"))
+                for _k in range(_nsp):
+                    _r1, _r2 = _hash01(frame_count, _k * 7 + 1)
+                    if _down_d:
+                        _vx, _vy = (_r1 - 0.5) * 150, -(40 + _r2 * 110)
+                    else:
+                        _vx, _vy = -_facd * (30 + _r1 * 90), -(20 + _r2 * 110)
+                    eva_debris.append([_bx0, _by0, _vx, _vy, 0.0, _csp])
+                if len(eva_debris) > 90:
+                    eva_debris = eva_debris[-90:]
+            _kept_db = []
+            for _db in eva_debris:
+                _db[4] += real_dt
+                if _db[4] > 0.55:
+                    continue
+                _db[3] += 360.0 * real_dt          # gravity on the chips
+                _db[0] += _db[2] * real_dt
+                _db[1] += _db[3] * real_dt
+                _kept_db.append(_db)
+                _aa = int(220 * (1 - _db[4] / 0.55))
+                _sz = 2 if _db[4] < 0.3 else 1
+                _ds2 = pygame.Surface((_sz * 2, _sz * 2), pygame.SRCALPHA)
+                pygame.draw.rect(_ds2, (*_db[5], _aa), (0, 0, _sz * 2, _sz * 2))
+                screen.blit(_ds2, (int(_db[0]), int(_db[1])))
+            eva_debris = _kept_db
 
             # interaction prompt above the helmet
             prompt = ""
