@@ -1021,6 +1021,8 @@ def run(argv: list[str] | None = None) -> int:
                                       restore_rail)
 
     from aphelion.core.rng import RngRegistry
+    from aphelion.game import acts as acts_mod
+    from aphelion.game import alerts as alerts_mod
     from aphelion.game.crew import (
         CrewMember, apply_crew_bonuses, best_skill, candidates,
         morale_target, reap_over_limit, science_multiplier)
@@ -1154,6 +1156,7 @@ def run(argv: list[str] | None = None) -> int:
                     builder_stack=got.get("builder_stack", []),
                     yard_designs=got.get("yard_designs", []),
                     ground_vehicles=got.get("ground_vehicles", []),
+                    acts2=got.get("acts2") or {},
                     difficulty=got.get("difficulty", "DIRECTOR"))
 
     def campaign_tuple(st: dict):
@@ -1183,6 +1186,58 @@ def run(argv: list[str] | None = None) -> int:
      crew_warned, last_dose_t, toast, toast_until) = \
         campaign_tuple(fresh_campaign())
 
+    # E wiring: the campaign meta-layer — Prestige, the Firsts ladder,
+    # the Chronicle, and the program-wide alert bus (12 §1.5/§4, A-1..6)
+    def restore_acts2(a2: dict | None):
+        a2 = a2 or {}
+        pr = (acts_mod.Prestige.from_dict(a2["prestige"])
+              if a2.get("prestige") else acts_mod.Prestige())
+        earned = set(a2.get("firsts", []))
+        ch = (alerts_mod.Chronicle.from_dict(a2["chronicle"])
+              if a2.get("chronicle") else alerts_mod.Chronicle())
+        bus = (alerts_mod.AlertBus.from_dict(a2["alerts"], ch)
+               if a2.get("alerts") else alerts_mod.AlertBus(ch))
+        hwm = dict(a2.get("prod_hwm", {}))
+        return pr, earned, ch, bus, hwm
+
+    prestige, firsts_earned, chron, abus, prod_hwm = restore_acts2(None)
+
+    def acts2_dict() -> dict:
+        return {"prestige": prestige.to_dict(),
+                "firsts": sorted(firsts_earned),
+                "chronicle": chron.to_dict(),
+                "alerts": abus.to_dict(),
+                "prod_hwm": dict(prod_hwm)}
+
+    def acts_snapshot() -> dict:
+        """The live campaign distilled into the Firsts-ladder snapshot
+        (12 §1.5). Every field derives from systems that already exist —
+        nothing here is bookkept twice."""
+        landed_b = {SITES[s]["body"] for s in visited_surface
+                    if s in SITES}
+        crewed_b = {m.split("|", 1)[1] for m in research.milestones
+                    if m.startswith("crewed_landing|")}
+        colonized = {SITES[b.site_id]["body"] for b in bases if b.crew}
+        tier = 0
+        for u in research.unlocked:
+            tr_s = str(db.tech.get(u, {}).get("tier", "T0"))
+            if tr_s.startswith("T") and tr_s[1:].isdigit():
+                tier = max(tier, int(tr_s[1:]))
+        industry = {m.module_id.rsplit("_", 1)[0]
+                    for b in bases for m in b.net.modules
+                    if m.state == "RUNNING"}
+        vehicles = set()
+        for gv in ground_vehicles:
+            if gv.odo_km > 0.0 or gv.bricked_events:
+                vehicles.add("submarine" if "sub" in gv.catalog_id
+                             else "rover")
+        return acts_mod.snapshot(
+            milestones=milestones, visited=visited,
+            visited_surface=visited_surface, landed=landed_b,
+            crewed_landed=crewed_b, colonized=colonized, tech_tier=tier,
+            industry_online=industry, vehicles_operated=vehicles,
+            extracted_t=dict(prod_hwm), refined_t=dict(prod_hwm))
+
     def env_models(rng):
         """SPE storms + Mars weather: pure functions of the campaign seed,
         so they rebuild identically after save/load with no extra state."""
@@ -1191,6 +1246,8 @@ def run(argv: list[str] | None = None) -> int:
 
     spe_sched, mars_wx = env_models(campaign_rng)
     env_state = {"spe_warned": -1.0, "spe_capped": False, "storm_was": False}
+    alerts_seen: set[int] = set()     # E wiring: alert aids already toasted
+    runway_state = {"cls": 0}         # G-9 runway alert posts on worsening
 
     def crew_refit(fv) -> None:
         """Crew bonuses + the closed-loop ECLSS retrofit when researched
@@ -1229,6 +1286,7 @@ def run(argv: list[str] | None = None) -> int:
             tutorial_done=tutorial.completed, rng=campaign_rng,
             builder_stack=builder.stack, difficulty=difficulty,
             yard_designs=yard_designs, ground_vehicles=ground_vehicles,
+            acts2=acts2_dict(),
             tutorial_state={"rail": tutorial.rail, "index": tutorial.index,
                             "visible": tutorial.visible,
                             "done": sorted(tutorial.done_rails)},
@@ -3429,6 +3487,7 @@ def run(argv: list[str] | None = None) -> int:
                             node = None
                             builder_open = False
                             scene = "ascent"
+                            milestones.add("launched")   # E-13 first First
                             audio.play("blip")
             elif event.type == pygame.KEYDOWN:
                 shift = event.mod & pygame.KMOD_SHIFT
@@ -3464,6 +3523,21 @@ def run(argv: list[str] | None = None) -> int:
                             "COMMS NETWORK — every node's route home, "
                             "rate-colored; J closes", t + 6)
                     audio.play("tick")
+                elif event.key == pygame.K_BACKSPACE:
+                    # A-6 master alarm + acknowledge: releases warp caps
+                    # (live Class 1 latches until the condition resolves)
+                    abus.master_alarm(t)
+                    _n_ack = 0
+                    for _al in abus.active(t):
+                        if not _al.acked:
+                            abus.acknowledge(_al.aid)
+                            _n_ack += 1
+                    if _n_ack:
+                        toast = (f"{_n_ack} alert"
+                                 f"{'s' if _n_ack > 1 else ''} "
+                                 f"acknowledged — warp caps released")
+                        toast_until = t + 5
+                        audio.play("blip")
                 elif node is not None and not node["armed"] and event.key in (
                         pygame.K_UP, pygame.K_DOWN, pygame.K_LEFT, pygame.K_RIGHT,
                         pygame.K_LEFTBRACKET, pygame.K_RIGHTBRACKET,
@@ -3892,6 +3966,8 @@ def run(argv: list[str] | None = None) -> int:
              last_dose_t, toast,
              toast_until) = campaign_tuple(fresh_campaign(
                  start_new if start_new in _DIFFICULTIES else "DIRECTOR"))
+            prestige, firsts_earned, chron, abus, prod_hwm = \
+                restore_acts2(None)
             spe_sched, mars_wx = env_models(campaign_rng)
             env_state = {"spe_warned": -1.0, "spe_capped": False,
                          "storm_was": False}
@@ -3900,6 +3976,7 @@ def run(argv: list[str] | None = None) -> int:
         if load_save:
             if latest_save() is not None:
                 try:
+                    _st_l = loaded_campaign()
                     (clock, vessels, active_idx, next_vid, program,
                      campaign_rng, bases, crew, research, visited,
                      visited_surface, milestones, tutorial, builder,
@@ -3907,7 +3984,9 @@ def run(argv: list[str] | None = None) -> int:
                      node,
                      warp_idx, paused, base_screen, builder_open,
                      research_open, crew_warned, last_dose_t, toast,
-                     toast_until) = campaign_tuple(loaded_campaign())
+                     toast_until) = campaign_tuple(_st_l)
+                    prestige, firsts_earned, chron, abus, prod_hwm = \
+                        restore_acts2(_st_l.get("acts2"))
                     spe_sched, mars_wx = env_models(campaign_rng)
                     env_state = {"spe_warned": -1.0, "spe_capped": False,
                                  "storm_was": False}
@@ -3964,6 +4043,8 @@ def run(argv: list[str] | None = None) -> int:
                     vessels.append(fv)
                     active_idx = len(vessels) - 1
                     milestones.add("orbited")
+                    if fv.crew:
+                        milestones.add("crewed_orbit")
                     research.award_milestone("orbit", ascent_body_id, t)
                     # burn-time ED for the stack that flew (0.05 ED/s)
                     for fam in _stage_engine_families(live.vessel):
@@ -5663,7 +5744,10 @@ def run(argv: list[str] | None = None) -> int:
                    and node["t_node"] - t < _WARP_LADDER[warp_idx] * 5.0):
                 warp_idx -= 1
         if not paused and not pause_open:
-            clock.advance_analytic(clock.t + _WARP_LADDER[warp_idx] * real_dt)
+            # A-2 warp law: live unacknowledged alerts cap the ladder
+            # (Class 2 pins real-time, Class 1 freezes until handled)
+            _wrate = abus.warp_max_effective(_WARP_LADDER[warp_idx], t)
+            clock.advance_analytic(clock.t + max(_wrate, 0.0) * real_dt)
             autosave_acc += real_dt
             if autosave_acc >= 300.0:        # five real minutes
                 autosave_acc = 0.0
@@ -6153,6 +6237,48 @@ def run(argv: list[str] | None = None) -> int:
             if burn > 0.0:
                 program.spend(t, min(burn, program.funds),
                               "program overhead")
+            # E wiring: production high-water marks feed the extraction
+            # Firsts (the best shelf level ever seen per resource — a
+            # monotone, save-persistent proxy for cumulative output)
+            for b in bases:
+                for res, buf in b.net.buffers.items():
+                    lvl_t = buf.level / 1000.0
+                    if lvl_t > prod_hwm.get(res, 0.0):
+                        prod_hwm[res] = lvl_t
+            # the Firsts ladder + Prestige (12 §1.5): one-shot, paid
+            # through the existing Program ledger, logged forever
+            S_acts = acts_snapshot()
+            _new_f = acts_mod.check_firsts(S_acts, firsts_earned)
+            if _new_f:
+                for _tl in acts_mod.award_firsts(
+                        program, prestige, t, S_acts, firsts_earned,
+                        funding_mult=_DIFFICULTIES[difficulty]["payout"]):
+                    toast, toast_until = _tl, t + 12
+                audio.play("paid")
+                for _fid in _new_f:
+                    chron.add(t, f"FIRST_{_fid.upper()}",
+                              acts_mod.FIRST_BY_ID[_fid].name,
+                              numbers={"prestige": acts_mod.first_prestige(
+                                  _fid, S_acts)})
+            # alert taxonomy sweeps: contract deadlines (E-9 T-90/30/7)
+            # and the G-9 runway death-spiral ladder
+            alerts_mod.deadline_sweep(abus, program.contracts, t)
+            _burn_day = ((_OVERHEAD_FIXED_M
+                          + _OVERHEAD_PER_CREW_M * len(crew)
+                          + _OVERHEAD_PER_BASE_M * len(bases)) * 1e6
+                         / 30.0 * _DIFFICULTIES[difficulty]["overhead"])
+            if _burn_day > 0.0:
+                _rw_d = program.funds / _burn_day
+                _rw_cls = 2 if _rw_d < 14 else 3 if _rw_d < 60 else 0
+                if _rw_cls and _rw_cls != runway_state["cls"]:
+                    alerts_mod.runway_sweep(abus, t, _rw_d)
+                runway_state["cls"] = _rw_cls
+            for _al in abus.toasts(t):
+                if _al.aid not in alerts_seen:
+                    alerts_seen.add(_al.aid)
+                    toast = f"{_al.text}   (BACKSPACE acks alerts)"
+                    toast_until = t + 8
+                    audio.play("alarm" if _al.cls <= 2 else "warn")
             last_dose_t = t
             for fv in vessels:
                 for ev_txt in fv.tick_lss(t):
@@ -6579,11 +6705,15 @@ def run(argv: list[str] | None = None) -> int:
                          default=0.0)
         screen.blit(theme.panel(size[0], 76), (0, 0))
         chx = 10                            # status row: chips, not a string
+        _wcap = abus.highest_warp_cap(t)
+        _wcapped = _wcap < _WARP_LADDER[warp_idx]
         for chip_txt, chip_col in (
                 (f"T+ {t / SECONDS_PER_DAY:,.2f} d", theme.COLORS["text"]),
                 (f"warp {_WARP_LADDER[warp_idx]:,.0f}x"
-                 + ("  ·  PAUSED" if paused else ""),
-                 theme.COLORS["warn"] if paused else theme.COLORS["accent"]),
+                 + ("  ·  PAUSED" if paused else
+                    f"  ·  ALERT-CAPPED {_wcap:,.0f}x" if _wcapped else ""),
+                 theme.COLORS["warn"] if paused or _wcapped
+                 else theme.COLORS["accent"]),
                 (f"focus  {focus.split(':')[-1]}", theme.COLORS["text_dim"]),
                 (f"fleet  {len(vessels)}", theme.COLORS["text_dim"])):
             cs = theme.chip(chip_txt, chip_col)
@@ -6594,6 +6724,7 @@ def run(argv: list[str] | None = None) -> int:
         chx = 10                            # program row
         for chip_txt, chip_col in (
                 (f"$ {program.funds / 1e6:,.0f}M", theme.COLORS["gold"]),
+                (f"P {prestige.value:,.0f}", theme.COLORS["gold"]),
                 (f"sci {research.science:,.0f}", theme.COLORS["accent"]),
                 (f"tech {len(research.unlocked)}/{len(db.tech)}",
                  theme.COLORS["accent"]),

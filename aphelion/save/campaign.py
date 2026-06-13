@@ -57,7 +57,8 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
                       tutorial_state: dict | None = None,
                       explore: dict | None = None,
                       yard_designs: list | None = None,
-                      ground_vehicles: list | None = None) -> dict:
+                      ground_vehicles: list | None = None,
+                      acts2: dict | None = None) -> dict:
     """bases: objects with .name .last_t .pending_repairs .net (BaseSite)."""
     save = {
         "schema_version": SCHEMA_VERSION,
@@ -133,6 +134,9 @@ def snapshot_campaign(*, t: float, vessels: list[FleetVessel],
             "ground_vehicles": [gv.to_dict() if hasattr(gv, "to_dict")
                                 else dict(gv)
                                 for gv in (ground_vehicles or [])],
+            # E: prestige/firsts/chronicle/alerts ride as one additive
+            # section (absent in old saves — restore defaults them)
+            "acts2": acts2 or {},
             "bases": [{
                 "name": b.name,
                 "site_id": getattr(b, "site_id", "site:peary"),
@@ -264,6 +268,7 @@ def restore_campaign(save: dict, db, tree):
         "builder_stack": c.get("builder_stack", []),
         "yard_designs": c.get("yard_designs", []),
         "ground_vehicles": c.get("ground_vehicles", []),
+        "acts2": c.get("acts2") or {},
         "difficulty": c.get("difficulty", "DIRECTOR"),
         "tutorial_state": c.get("tutorial_state"),
         "explore": c.get("explore", {}),
