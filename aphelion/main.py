@@ -1367,6 +1367,8 @@ def run(argv: list[str] | None = None) -> int:
     eva_tr = None                     # its chunk renderer
     eva_dig = None                    # held-dig progress {tile, left, total}
     eva_debris: list = []            # dig spray particles (screen space)
+    eva_prints: list = []            # (x_m, foot ±1) boot prints in regolith
+    eva_print_d = 0.0                # dist_walked at the last print laid
     eva_camy = 0.0                    # vertical camera follow, metres
     EVA_TIME_FACTOR = 30.0            # EVA ops run at 30x sim time
     interior_x = 2.0                  # walker x inside the hab strip, m
@@ -1533,6 +1535,9 @@ def run(argv: list[str] | None = None) -> int:
             eva_state.x = _mx + 2.5     # inside the gallery: lamp on
             eva_state.y = eva_tiles.ground_below(_mx + 2.5, _fy + 1.0)
             eva_camy = eva_state.y
+        if os.environ.get("APH_QA_PRINTS") == "1":   # QA: a trail to read
+            for _pi in range(26):
+                eva_prints.append((eva_state.x - _pi * 0.52, _pi & 1))
         scene = "eva"
     elif want == "drive":               # QA: an LRV parked at Peary
         from aphelion.sim.vessels.vessel import Vessel as _V
@@ -3033,6 +3038,8 @@ def run(argv: list[str] | None = None) -> int:
                         eva_av = av0
                         eva_camy = eva_state.y
                         eva_dig = None
+                        eva_prints.clear()
+                        eva_print_d = 0.0
                         surface_open = False
                         scene = "eva"
                         toast = (f"{av0.crew[0]} ON EVA — E interact, "
@@ -6227,6 +6234,14 @@ def run(argv: list[str] | None = None) -> int:
                 move += 1
             run = bool(keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT])
             eva_state.step(real_dt, move, run, False)
+            # boot prints: a fresh pair of soles in the regolith every stride
+            # while grounded and moving (they persist the whole walk)
+            if (move and not eva_state.airborne
+                    and eva_state.dist_walked - eva_print_d >= 0.52):
+                eva_prints.append((eva_state.x, len(eva_prints) & 1))
+                eva_print_d = eva_state.dist_walked
+                if len(eva_prints) > 400:        # bounded trail
+                    del eva_prints[:120]
             # the suit clock runs at sim rate (step burned 1x already)
             _extra_s = (EVA_TIME_FACTOR - 1.0) * real_dt
             eva_state.o2_s = max(0.0, eva_state.o2_s - _extra_s)
@@ -6355,6 +6370,26 @@ def run(argv: list[str] | None = None) -> int:
 
             # the site cross-section: strata, lenses, veins, your tunnels
             eva_tr.draw(screen, camx, camy, size, ppm, h_ground)
+            # boot prints pressed into the regolith — a shadowed depression
+            # with a low-sun-lit rim, alternating L/R as you stride; the
+            # trail you actually left this walk (airless worlds hold it)
+            _pw = max(4, int(0.30 * ppm))
+            _ph = max(2, int(0.15 * ppm))
+            _plat = max(2, int(0.16 * ppm))      # L/R stride offset
+            for _px, _foot in eva_prints:
+                _psx = _sx(_px)
+                if -8 < _psx < size[0] + 8:
+                    _psy = _sy(_px)
+                    _po = _plat if _foot else -_plat
+                    # sink the dimple just below the lit surface edge, into
+                    # the regolith face, so it reads as a pressed hollow
+                    _pr = pygame.Rect(int(_psx + _po - _pw / 2),
+                                      int(_psy + 1), _pw, _ph + 2)
+                    pygame.draw.ellipse(screen, gp.dark, _pr)
+                    # the sun-facing upper rim lifts a thin lit crescent
+                    pygame.draw.ellipse(
+                        screen, gp.speck,
+                        (_pr.x, _pr.y - 1, _pw, max(2, _ph)), 1)
             for rwx, rr in eva_state.rocks:
                 rsx = _sx(rwx)
                 if -20 < rsx < size[0] + 20:
